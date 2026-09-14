@@ -1,22 +1,30 @@
 #!/usr/bin/env node
 // backup-page: backup 1 Thai local-gov page via Chrome CDP. Implements SPEC.md.
 // Usage: node backup-page.mjs <url> [--out ./out] [--port 9444] [--timeout 60]
+//        node backup-page.mjs --finalize <outdir>   (prune images per review/selection.json)
 // Needs: Node 18+, Chrome (uses running instance on --port, else launches headless).
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const VERSION = "1.0.0";
+const VERSION = "1.1.0";
 const IMG_DENY = /(cleardot|blank\.gif|j1\.gif|rblue\.gif|spacer|pixel)/i;
 const TEXT_DENY_EXACT = new Set(["เลือกภาษา"]);
 const MIN_PX = 12, RETRY = 2;
+const CAND_MIN_W = 130, CAND_MIN_H = 100; // review candidates: photo-size (catches portraits ~140x180, drops menu strips)
 
 function usage() {
   console.log("Usage: node backup-page.mjs <url> [--out ./out] [--port 9444] [--timeout 60]");
+  console.log("       node backup-page.mjs --finalize <outdir>");
   process.exit(2);
 }
 const argv = process.argv.slice(2);
 if (!argv.length || argv.includes("-h") || argv.includes("--help")) usage();
+if (argv[0] === "--finalize") {
+  if (!argv[1]) fail("usage: node backup-page.mjs --finalize <outdir>");
+  finalize(argv[1]);
+  process.exit(0);
+}
 const url = argv[0].startsWith("http") ? argv[0] : `https://${argv[0]}`;
 const opt = (name, def) => {
   const i = argv.indexOf(name);
@@ -251,8 +259,58 @@ try {
       `dedupe by absolute URL`, `min size ${MIN_PX}px`, "cross-origin iframes -> placeholder",
       "UTF-8 JSON output", `image retry x${RETRY}`] };
   writeFileSync(join(dir, "content.json"), JSON.stringify({ manifest, nodes: kept }, null, 1), "utf8");
+  const nCands = writeReview(dir, kept);
   console.log(dir);
+  console.log(`review: ${nCands} candidates in review/ — open review/index.html, tick people photos, save selection.json, then: node backup-page.mjs --finalize ${dir}`);
 } finally {
   c.close();
   await cdp(`/json/close/${target.id}`, "PUT").catch(() => null);
+}
+
+// --- people shortlist: human picks which candidate photos to keep ---
+function writeReview(dir, nodes) {
+  const cands = nodes.filter((n) => n.type === "image" && n.file && n.width >= CAND_MIN_W && n.height >= CAND_MIN_H);
+  const sel = cands.map((n) => ({ seq: n.seq, file: n.file, keep: true }));
+  mkdirSync(join(dir, "review"), { recursive: true });
+  writeFileSync(join(dir, "review", "selection.json"), JSON.stringify(sel, null, 1), "utf8");
+  writeFileSync(join(dir, "review", "index.html"), reviewHTML(sel), "utf8");
+  return cands.length;
+}
+
+function reviewHTML(sel) {
+  const cards = sel.map((s, i) =>
+    `<figure><img src="../${s.file}" loading="lazy"><figcaption>#${i} seq=${s.seq} ${s.file.split("/").pop()}<br><label><input type="checkbox" data-i="${i}" checked> เก็บ (รูปคนชัด)</label></figcaption></figure>`).join("\n");
+  return `<!doctype html><html lang="th"><meta charset="utf-8"><title>เลือกรูปคน — ติ๊กเฉพาะรูปที่เอา</title>
+<style>body{font-family:system-ui;margin:16px}figure{display:inline-block;width:220px;vertical-align:top;margin:8px}img{width:100%}button{font-size:18px;padding:8px 16px}</style>
+<h2>ติ๊กเฉพาะรูปคนชัดที่ต้องการเก็บ (${sel.length} รูป)</h2>
+<button id="save">บันทึก selection.json</button>
+<p>แล้วเอาไฟล์ที่โหลดได้ไปทับ <code>review/selection.json</code> จากนั้นรัน <code>node backup-page.mjs --finalize &lt;โฟลเดอร์&gt;</code></p>
+<div>${cards}</div>
+<script>document.getElementById("save").onclick=()=>{
+  const out=[...document.querySelectorAll("input[data-i]")].map(c=>({seq:+c.closest("figure").textContent.match(/seq=(\\d+)/)[1],file:c.closest("figure").querySelector("img").getAttribute("src").replace("../",""),keep:c.checked}));
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,1)],{type:"application/json"}));a.download="selection.json";a.click();
+};</script>`;
+}
+
+function finalize(dir) {
+  const cjPath = join(dir, "content.json"), selPath = join(dir, "review", "selection.json");
+  if (!existsSync(cjPath) || !existsSync(selPath)) fail(`missing content.json or review/selection.json in ${dir}`);
+  const cj = JSON.parse(readFileSync(cjPath, "utf8"));
+  const sel = JSON.parse(readFileSync(selPath, "utf8"));
+  const keep = new Set(sel.filter((s) => s.keep).map((s) => s.seq));
+  let removed = 0;
+  cj.nodes = cj.nodes.filter((n) => {
+    if (n.type === "image" && n.file && !keep.has(n.seq)) {
+      try { unlinkSync(join(dir, n.file)); } catch { /* already gone */ }
+      removed++;
+      return false;
+    }
+    return true;
+  });
+  cj.manifest.counts.image = cj.nodes.filter((n) => n.type === "image").length;
+  cj.manifest.counts.cut += removed;
+  cj.manifest.reviewed = true;
+  cj.manifest.reviewed_at = new Date().toISOString();
+  writeFileSync(cjPath, JSON.stringify(cj, null, 1), "utf8");
+  console.log(`finalized ${dir}: kept ${cj.manifest.counts.image} images, removed ${removed}`);
 }

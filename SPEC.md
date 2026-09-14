@@ -75,7 +75,16 @@ Status: draft for review · ที่มา: [Wayfinder map](https://github.com/
 ```text
 backup-page <url> [--out ./out] [--port 9444] [--timeout 60]
 # exit 0 + พิมพ์ path โฟลเดอร์ผลลัพธ์; exit != 0 พร้อมเหตุผลเมื่อ navigate/evaluate ล้มเหลว
+node backup-page.mjs --finalize <outdir>   # ตัดรูปตาม review/selection.json (ดูข้อ 8)
 ```
+
+## 8. People shortlist (เลือกรูปคน — คนนั่งจิ้มเอง)
+
+เอาเฉพาะรูปคนชัด: โปรแกรมไม่ detect คนเอง แต่คัด candidate ภาพถ่าย (รูปที่โหลดได้และ `width>=130 && height>=100`) มาให้คนเลือก
+
+1. หลังดึงเสร็จ โปรแกรมเขียน `review/selection.json` (`[{seq, file, keep:true}]`) + `review/index.html` (contact sheet เปิดด้วยเบราว์เซอร์)
+2. คนเปิด `review/index.html` ติ๊กเฉพาะรูปคนชัด → กดบันทึก → เอาไฟล์ทับ `review/selection.json`
+3. รัน `--finalize`: ลบไฟล์รูป + node ที่ไม่ถูกเลือก, อัปเดต counts, `manifest.reviewed=true`
 
 ## 7. Acceptance (ตรวจกับ 5 หน้าตัวอย่างใน CDP :9444)
 
