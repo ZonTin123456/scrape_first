@@ -26,6 +26,7 @@ Status: draft for review · ที่มา: [Wayfinder map](https://github.com/
 4. `Runtime.evaluate` ด้วย TreeWalker (`SHOW_ELEMENT|SHOW_TEXT`) เดิน `document.body` **ครั้งเดียว**: text node ไม่ว่าง (ข้าม `SCRIPT/STYLE/NOSCRIPT/TEMPLATE`) + `IMG` + `IFRAME` → ได้ interleave ตาม DOM ถูกต้อง
 5. รูปเต็ม: `img.currentSrc` (ผ่าน srcset แล้ว) → absolute URL + `naturalWidth/Height`; parent `a[href]` ที่เป็นไฟล์รูป = `fullres_candidate`
 6. Encoding: **ห้าม decode bytes เอง** — CDP คืน string ไทยถูกแล้ว (ทุกเว็บคือ windows-874, header ส่วนใหญ่ไม่ประกาศ)
+7. ดาวน์โหลดรูป: direct fetch ด้วย browser UA + Referer ก่อน; ถ้าโดนบล็อก (เช่น 403) และรูปอยู่ same-origin ให้ดึงผ่านหน้าเว็บเองด้วย `Runtime.evaluate` fetch→dataURL (ใช้ cookies/TLS ของ render)
 
 ## 4. โครง output (ล็อกจาก ticket #4, v2)
 
@@ -83,4 +84,4 @@ backup-page <url> [--out ./out] [--port 9444] [--timeout 60]
 - [ ] ไม่มีรูป denylist / ไอคอนซ้ำ / tracking ใน `images/`
 - [ ] iframe ภายนอกทุกตัวกลายเป็น placeholder (เช็ค maps/sharethis/hotmenu)
 - [ ] raikaocity (บล็อก fetch ธรรมดา 403) ดึงผ่าน
-- [ ] รูปทุกรูปเปิดได้, ขนาดรวม <2MB/หน้า, งานไม่ล้มเมื่อรูปบางรูปโหลดเสีย
+- [ ] รูปทุกรูปเปิดได้ (sniff magic bytes: png/jpg/gif/webp/svg), ขนาดรวมรายงานใน manifest (หน้าตัวอย่าง 0.2–5.5MB), งานไม่ล้มเมื่อรูปบางรูปโหลดเสีย
