@@ -1,0 +1,196 @@
+{
+ "at": "2026-09-14T18:50:00.490Z",
+ "results": [
+  {
+   "url": "https://www.raikaocity.go.th/house.php#gsc.tab=0",
+   "dom": {
+    "charset": "windows-874",
+    "title": "เทศบาลตำบลไร่เก่า อำเภอสามร้อยยอด จังหวัดประจวบคีรีขันธ์ :: WWW.RAIKAOCITY.GO.TH",
+    "textNodes": 766,
+    "frames": [
+     "(blank)",
+     "(blank)"
+    ]
+   },
+   "http": {
+    "status": 403,
+    "contentType": "text/html; charset=UTF-8"
+   },
+   "images": {
+    "total": 40,
+    "unique": 38,
+    "junk_noiseName": 3,
+    "junk_1px": 0,
+    "content_candidates": 37,
+    "dup_urls": 1,
+    "top_dups": [
+     {
+      "times": 3,
+      "src": "https://www.google.com/images/cleardot.gif"
+     }
+    ]
+   }
+  },
+  {
+   "url": "https://www.talingchanlocal.go.th/manage.php",
+   "dom": {
+    "charset": "windows-874",
+    "title": "องค์การบริหารส่วนตำบลตลิ่งชัน 169 ต.ตลิ่งชัน อ.เหนือคลอง จ.กระบี่ 81130 : www.ta",
+    "textNodes": 911,
+    "frames": [
+     "//t.sharethis.com/a/t_.htm?ver=1.2115.23434&cid=c010&cls=B#cid=c010&cls=B&dmn=www.talingchanlocal.go.th&rnd=1789409659585&tt=t.dhj&dhjLcy=117&lbl=pxcel&flbl=pxcel&ll=d&ver=1.2115.23434&ell=d&cck=__stid&pn=%2Fmanage.php&qs=na&rdn=www.talingchanlocal.go.th&rpn=%2Findex.php&rqs=na&ipaddr=MTcxLjYuMjUwLjI0Nw%3D%3D&cc=TH&cont=AS&rc=84",
+     "/title_head.html",
+     "/wave-an.html",
+     "(blank)",
+     "(blank)"
+    ]
+   },
+   "http": {
+    "status": 200,
+    "contentType": "text/html"
+   },
+   "images": {
+    "total": 118,
+    "unique": 22,
+    "junk_noiseName": 4,
+    "junk_1px": 0,
+    "content_candidates": 114,
+    "dup_urls": 3,
+    "top_dups": [
+     {
+      "times": 91,
+      "src": "https://www.talingchanlocal.go.th/images/icon3.gif"
+     },
+     {
+      "times": 5,
+      "src": "https://www.talingchanlocal.go.th/images/eo1.gif"
+     },
+     {
+      "times": 3,
+      "src": "https://www.google.com/images/cleardot.gif"
+     }
+    ]
+   }
+  },
+  {
+   "url": "https://www.wangang.go.th/manage.php",
+   "dom": {
+    "charset": "windows-874",
+    "title": "องค์การบริหารส่วนตำบลวังอ่าง อำเภอชะอวด จังหวัดนครศรีธรรมราช :: WWW.WANGANG.GO.T",
+    "textNodes": 896,
+    "frames": [
+     "/css_shine.html",
+     "https://www.google.com/maps/embed?pb=!1m14!1m8!1m3!1d7903.036059308436!2d99.909117!3d7.945296999999999!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x30528a0c3ed10cb1%3A0xa0898ba45bcb83b6!2z4Lit4LiH4LiE4LmM4LiB4Liy4Lij4Lia4Lij4Li04Lir4Liy4Lij4Liq4LmI4Lin4LiZ4LiV4Liz4Lia4Lil4Lin4Lix4LiH4Lit4LmI4Liy4LiH!5e0!3m2!1sth!2sth!4v1723088771945!5m2!1sth!2sth"
+    ]
+   },
+   "http": {
+    "status": 200,
+    "contentType": "text/html; charset=windows-874"
+   },
+   "images": {
+    "total": 154,
+    "unique": 26,
+    "junk_noiseName": 0,
+    "junk_1px": 0,
+    "content_candidates": 154,
+    "dup_urls": 3,
+    "top_dups": [
+     {
+      "times": 82,
+      "src": "https://www.wangang.go.th/images/icc6.png"
+     },
+     {
+      "times": 47,
+      "src": "https://www.wangang.go.th/images/ic_fd.png"
+     },
+     {
+      "times": 2,
+      "src": "https://www.wangang.go.th/images/nophoto.gif"
+     }
+    ]
+   }
+  },
+  {
+   "url": "https://www.klongchelom.go.th/manage.php",
+   "dom": {
+    "charset": "windows-874",
+    "title": "องค์การบริหารส่วนตำบลคลองชีล้อม : อำเภอกันตัง : จังหวัดตรัง www.klongchelom.go.t",
+    "textNodes": 1666,
+    "frames": [
+     "https://www.cjworld.co.th/publics/hotmenu_trang.php"
+    ]
+   },
+   "http": {
+    "status": 200,
+    "contentType": "text/html"
+   },
+   "images": {
+    "total": 102,
+    "unique": 15,
+    "junk_noiseName": 25,
+    "junk_1px": 0,
+    "content_candidates": 77,
+    "dup_urls": 4,
+    "top_dups": [
+     {
+      "times": 52,
+      "src": "https://www.klongchelom.go.th/j1.gif"
+     },
+     {
+      "times": 23,
+      "src": "https://www.klongchelom.go.th/blank.gif"
+     },
+     {
+      "times": 14,
+      "src": "https://www.klongchelom.go.th/RBLUE.GIF"
+     },
+     {
+      "times": 2,
+      "src": "https://www.klongchelom.go.th/images/blank.gif"
+     }
+    ]
+   }
+  },
+  {
+   "url": "https://www.kumpuan.go.th/house.php",
+   "dom": {
+    "charset": "windows-874",
+    "title": "เทศบาลตำบลกำพวน อำเภอสุขสำราญ จ.ระนอง :: WWW.KUMPUAN.GO.TH",
+    "textNodes": 1775,
+    "frames": [
+     "https://www.cjworld.co.th/publics/hotmenu_ranong.php"
+    ]
+   },
+   "http": {
+    "status": 200,
+    "contentType": "text/html"
+   },
+   "images": {
+    "total": 88,
+    "unique": 25,
+    "junk_noiseName": 20,
+    "junk_1px": 0,
+    "content_candidates": 68,
+    "dup_urls": 4,
+    "top_dups": [
+     {
+      "times": 42,
+      "src": "https://www.kumpuan.go.th/icon.gif"
+     },
+     {
+      "times": 13,
+      "src": "https://www.kumpuan.go.th/blank.gif"
+     },
+     {
+      "times": 7,
+      "src": "https://www.kumpuan.go.th/images/blank.gif"
+     },
+     {
+      "times": 5,
+      "src": "https://www.kumpuan.go.th/icon2.gif"
+     }
+    ]
+   }
+  }
+ ]
+}
