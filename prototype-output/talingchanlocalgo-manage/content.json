@@ -1,0 +1,1002 @@
+{
+ "manifest": {
+  "source_url": "https://www.talingchanlocal.go.th/manage.php",
+  "captured_at": "2026-09-14T18:36:55.885Z",
+  "origin": "https://www.talingchanlocal.go.th",
+  "stats": {
+   "text": 134,
+   "img": 17,
+   "placeholder": 0,
+   "cutChromeImg": 97,
+   "cutNoise": 4,
+   "cutBlankFrame": 2,
+   "imgErrors": 0
+  },
+  "frames_seen": "4 child frames",
+  "rules": [
+   "text-only chrome (header/nav/footer images dropped)",
+   "noise denylist + <=70B tracking filter",
+   "cross-origin iframes -> placeholder",
+   "output UTF-8 JSON",
+   "fullres_candidate from parent link"
+  ]
+ },
+ "nodes": [
+  {
+   "seq": 0,
+   "type": "iframe-sameorigin",
+   "region": "body",
+   "src": "https://www.talingchanlocal.go.th/title_head.html"
+  },
+  {
+   "seq": 1,
+   "type": "iframe-sameorigin",
+   "region": "body",
+   "src": "https://www.talingchanlocal.go.th/wave-an.html"
+  },
+  {
+   "seq": 2,
+   "type": "image",
+   "region": "body",
+   "file": "images/001.png",
+   "width": 16,
+   "height": 26,
+   "bytes": 1542
+  },
+  {
+   "seq": 3,
+   "type": "text",
+   "region": "body",
+   "text": "ประชาสัมพันธ์ เชิญชวนประชาชนตำบลตลิ่งชัน"
+  },
+  {
+   "seq": 4,
+   "type": "text",
+   "region": "body",
+   "text": ":อ่าน 11 คน"
+  },
+  {
+   "seq": 6,
+   "type": "text",
+   "region": "body",
+   "text": "เลือกภาษา"
+  },
+  {
+   "seq": 8,
+   "type": "text",
+   "region": "body",
+   "text": "​"
+  },
+  {
+   "seq": 10,
+   "type": "text",
+   "region": "body",
+   "text": "▼"
+  },
+  {
+   "seq": 11,
+   "type": "image",
+   "region": "body",
+   "file": "images/002.png",
+   "width": 280,
+   "height": 100,
+   "bytes": 26375
+  },
+  {
+   "seq": 12,
+   "type": "text",
+   "region": "nav",
+   "text": "ข้อมูลพื้นฐาน"
+  },
+  {
+   "seq": 14,
+   "type": "text",
+   "region": "nav",
+   "text": "หน้าแรก"
+  },
+  {
+   "seq": 16,
+   "type": "text",
+   "region": "nav",
+   "text": "ประวัติความเป็นมา"
+  },
+  {
+   "seq": 18,
+   "type": "text",
+   "region": "nav",
+   "text": "วิสัยทัศน์/พันธกิจ"
+  },
+  {
+   "seq": 20,
+   "type": "text",
+   "region": "nav",
+   "text": "สภาพและข้อมูลพื้นฐาน"
+  },
+  {
+   "seq": 22,
+   "type": "text",
+   "region": "nav",
+   "text": "สภาพทั่วไป"
+  },
+  {
+   "seq": 24,
+   "type": "text",
+   "region": "nav",
+   "text": "สภาพทางเศรษฐกิจ"
+  },
+  {
+   "seq": 26,
+   "type": "text",
+   "region": "nav",
+   "text": "สภาพทางสังคม"
+  },
+  {
+   "seq": 28,
+   "type": "text",
+   "region": "nav",
+   "text": "ด้านการบริหารงานทั่วไป"
+  },
+  {
+   "seq": 30,
+   "type": "text",
+   "region": "nav",
+   "text": "โครงสร้างองค์กร"
+  },
+  {
+   "seq": 32,
+   "type": "text",
+   "region": "nav",
+   "text": "อำนาจหน้าที่"
+  },
+  {
+   "seq": 34,
+   "type": "text",
+   "region": "nav",
+   "text": "นโยบายการบริหาร"
+  },
+  {
+   "seq": 36,
+   "type": "text",
+   "region": "nav",
+   "text": "เจตจำนงของผู้บริหาร"
+  },
+  {
+   "seq": 38,
+   "type": "text",
+   "region": "nav",
+   "text": "ติดต่อสำนักงาน"
+  },
+  {
+   "seq": 39,
+   "type": "text",
+   "region": "nav",
+   "text": "ข้อมูลบุคลากร"
+  },
+  {
+   "seq": 41,
+   "type": "text",
+   "region": "nav",
+   "text": "คณะผู้บริหาร"
+  },
+  {
+   "seq": 43,
+   "type": "text",
+   "region": "nav",
+   "text": "สภา อบต."
+  },
+  {
+   "seq": 45,
+   "type": "text",
+   "region": "nav",
+   "text": "หัวหน้าส่วนราชการ"
+  },
+  {
+   "seq": 47,
+   "type": "text",
+   "region": "nav",
+   "text": "พนักงานส่วนตำบล"
+  },
+  {
+   "seq": 49,
+   "type": "text",
+   "region": "nav",
+   "text": "สำนักงานปลัด"
+  },
+  {
+   "seq": 51,
+   "type": "text",
+   "region": "nav",
+   "text": "กองคลัง"
+  },
+  {
+   "seq": 53,
+   "type": "text",
+   "region": "nav",
+   "text": "กองช่าง"
+  },
+  {
+   "seq": 55,
+   "type": "text",
+   "region": "nav",
+   "text": "กองการศึกษาฯ"
+  },
+  {
+   "seq": 57,
+   "type": "text",
+   "region": "nav",
+   "text": "กองสวัสดิการสังคม"
+  },
+  {
+   "seq": 59,
+   "type": "text",
+   "region": "nav",
+   "text": "หน่วยตรวจสอบภายใน"
+  },
+  {
+   "seq": 60,
+   "type": "text",
+   "region": "nav",
+   "text": "ข้อมูลการดำเนินงาน"
+  },
+  {
+   "seq": 62,
+   "type": "text",
+   "region": "nav",
+   "text": "แผนพัฒนา"
+  },
+  {
+   "seq": 64,
+   "type": "text",
+   "region": "nav",
+   "text": "แผนพัฒนาท้องถิ่น"
+  },
+  {
+   "seq": 66,
+   "type": "text",
+   "region": "nav",
+   "text": "แผนยุทธศาสตร์"
+  },
+  {
+   "seq": 68,
+   "type": "text",
+   "region": "nav",
+   "text": "การประเมินผลแผนพัฒนา"
+  },
+  {
+   "seq": 70,
+   "type": "text",
+   "region": "nav",
+   "text": "แผนดำเนินงานประจำปี"
+  },
+  {
+   "seq": 72,
+   "type": "text",
+   "region": "nav",
+   "text": "รายงานแผนดำเนินงาน"
+  },
+  {
+   "seq": 74,
+   "type": "text",
+   "region": "nav",
+   "text": "แผนอัตรากำลัง"
+  },
+  {
+   "seq": 76,
+   "type": "text",
+   "region": "nav",
+   "text": "แผนพัฒนาบุคลากร"
+  },
+  {
+   "seq": 78,
+   "type": "text",
+   "region": "nav",
+   "text": "แผนการจัดหาพัสดุ"
+  },
+  {
+   "seq": 80,
+   "type": "text",
+   "region": "nav",
+   "text": "แผนพัฒนาการศึกษา"
+  },
+  {
+   "seq": 81,
+   "type": "text",
+   "region": "nav",
+   "text": "แผนปฏิบัติการป้องกันการทุจริต"
+  },
+  {
+   "seq": 83,
+   "type": "text",
+   "region": "nav",
+   "text": "แผนส่งเสริมการท่องเที่ยว"
+  },
+  {
+   "seq": 85,
+   "type": "text",
+   "region": "nav",
+   "text": "ข้อบัญญัติ"
+  },
+  {
+   "seq": 87,
+   "type": "text",
+   "region": "nav",
+   "text": "งบประมาณรายจ่ายประจำปี"
+  },
+  {
+   "seq": 90,
+   "type": "text",
+   "region": "nav",
+   "text": "โอนงบประมาณรายจ่ายประจำปี"
+  },
+  {
+   "seq": 92,
+   "type": "text",
+   "region": "nav",
+   "text": "รายงานกำกับการติดตาม การใช้จ่ายงบประมาณ รอบ 6 เดือน"
+  },
+  {
+   "seq": 94,
+   "type": "text",
+   "region": "nav",
+   "text": "รายงานผลการใช้จ่าย งบประมาณประจำปี"
+  },
+  {
+   "seq": 96,
+   "type": "text",
+   "region": "nav",
+   "text": "เรื่องอื่นๆ"
+  },
+  {
+   "seq": 98,
+   "type": "text",
+   "region": "nav",
+   "text": "ข้อบัญญัติการควบคุมการเลี้ยงสัตว์หรือปล่อยสัตว์"
+  },
+  {
+   "seq": 100,
+   "type": "text",
+   "region": "nav",
+   "text": "รายงาน"
+  },
+  {
+   "seq": 102,
+   "type": "text",
+   "region": "nav",
+   "text": "รายงานการคลัง"
+  },
+  {
+   "seq": 104,
+   "type": "text",
+   "region": "nav",
+   "text": "รายงานผลการดำเนินงาน"
+  },
+  {
+   "seq": 106,
+   "type": "text",
+   "region": "nav",
+   "text": "รายงานการประชุม"
+  },
+  {
+   "seq": 108,
+   "type": "text",
+   "region": "nav",
+   "text": "สถิติการให้บริการ"
+  },
+  {
+   "seq": 110,
+   "type": "text",
+   "region": "nav",
+   "text": "งานของกิจการสภา"
+  },
+  {
+   "seq": 112,
+   "type": "text",
+   "region": "nav",
+   "text": "จัดซื้อจัดจ้าง"
+  },
+  {
+   "seq": 114,
+   "type": "text",
+   "region": "nav",
+   "text": "ประกาศต่าง ๆ เกี่ยวกับการจัดซื้อจัดจ้างหรือการจัดหาพัสดุ"
+  },
+  {
+   "seq": 116,
+   "type": "text",
+   "region": "nav",
+   "text": "สรุปผลการจัดซื้อจัดจ้าง หรือการจัดหาพัสดุรายเดือน"
+  },
+  {
+   "seq": 118,
+   "type": "text",
+   "region": "nav",
+   "text": "รายงานผลการจัดซื้อจัดจ้าง หรือจัดหาพัสดุประจำปี"
+  },
+  {
+   "seq": 119,
+   "type": "text",
+   "region": "nav",
+   "text": "ข้อมูลประชาสัมพันธ์"
+  },
+  {
+   "seq": 121,
+   "type": "text",
+   "region": "nav",
+   "text": "นโยบายการบริหารและพัฒนาทรัพยากรบุคคล"
+  },
+  {
+   "seq": 123,
+   "type": "text",
+   "region": "nav",
+   "text": "หลักเกณฑ์การบริหารและพัฒนาทรัพยากรบุคคล"
+  },
+  {
+   "seq": 125,
+   "type": "text",
+   "region": "nav",
+   "text": "การส่งเสริมความโปร่งใส"
+  },
+  {
+   "seq": 127,
+   "type": "text",
+   "region": "nav",
+   "text": "มาตรการด้านความโปร่งใส"
+  },
+  {
+   "seq": 129,
+   "type": "text",
+   "region": "nav",
+   "text": "ประกาศรายงานผลการติดตามและประเมินผล"
+  },
+  {
+   "seq": 131,
+   "type": "text",
+   "region": "nav",
+   "text": "SAR ศพด."
+  },
+  {
+   "seq": 133,
+   "type": "text",
+   "region": "nav",
+   "text": "งานป้องกันและบรรเทาสาธารณภัย"
+  },
+  {
+   "seq": 135,
+   "type": "text",
+   "region": "nav",
+   "text": "ลานกีฬา/สนามกีฬา"
+  },
+  {
+   "seq": 137,
+   "type": "text",
+   "region": "nav",
+   "text": "ฐานข้อมูลภูมิปัญญาท้องถิ่น ตำบลตลิ่งชัน"
+  },
+  {
+   "seq": 140,
+   "type": "text",
+   "region": "nav",
+   "text": "กองทุนหลักประกันสุขภาพ อบต.ตลิ่งชัน"
+  },
+  {
+   "seq": 142,
+   "type": "text",
+   "region": "nav",
+   "text": "กฎหมายที่เกี่ยวข้อง"
+  },
+  {
+   "seq": 145,
+   "type": "text",
+   "region": "nav",
+   "text": "ควบคุมภายใน"
+  },
+  {
+   "seq": 148,
+   "type": "text",
+   "region": "nav",
+   "text": "การตรวจสอบภายใน"
+  },
+  {
+   "seq": 150,
+   "type": "text",
+   "region": "nav",
+   "text": "การประเมินความพึงพอใจ"
+  },
+  {
+   "seq": 152,
+   "type": "text",
+   "region": "nav",
+   "text": "ข่าวประชาสัมพันธ์"
+  },
+  {
+   "seq": 154,
+   "type": "text",
+   "region": "nav",
+   "text": "ข้อมูลข่าวสารเกี่ยวกับสิ่งแวดล้อม"
+  },
+  {
+   "seq": 156,
+   "type": "text",
+   "region": "nav",
+   "text": "ข้อมูลข่าวสาร"
+  },
+  {
+   "seq": 158,
+   "type": "text",
+   "region": "nav",
+   "text": "การบริหารจัดการความเสี่ยง"
+  },
+  {
+   "seq": 161,
+   "type": "text",
+   "region": "nav",
+   "text": "โครงการอนุรักษ์พันธุกรรมพืชอันเนื่องมาจากพระราชดำริฯ(อพ.สธ)"
+  },
+  {
+   "seq": 164,
+   "type": "text",
+   "region": "nav",
+   "text": "ประกาศองค์การบริหารส่วนตำบลตลิ่งชัน"
+  },
+  {
+   "seq": 165,
+   "type": "text",
+   "region": "nav",
+   "text": "บริการประชาชน"
+  },
+  {
+   "seq": 167,
+   "type": "text",
+   "region": "nav",
+   "text": "คู่มือประชนชน"
+  },
+  {
+   "seq": 169,
+   "type": "text",
+   "region": "nav",
+   "text": "คู่มือมาตรฐานการปฏิบัติงาน"
+  },
+  {
+   "seq": 171,
+   "type": "text",
+   "region": "nav",
+   "text": "ศูนย์เรียนรู้เรือหัวโทง ตำบลตลิ่งชัน"
+  },
+  {
+   "seq": 173,
+   "type": "text",
+   "region": "nav",
+   "text": "ศูนย์เรียนรู้โคกหนองนาโมเดล ตำบลตลิ่งชัน"
+  },
+  {
+   "seq": 175,
+   "type": "text",
+   "region": "nav",
+   "text": "สินค้าชุมชน"
+  },
+  {
+   "seq": 177,
+   "type": "text",
+   "region": "nav",
+   "text": "สถานที่ท่องเที่ยว"
+  },
+  {
+   "seq": 179,
+   "type": "text",
+   "region": "nav",
+   "text": "งานส่งเสริมการท่องเที่ยว"
+  },
+  {
+   "seq": 181,
+   "type": "text",
+   "region": "nav",
+   "text": "อาชีพหลักของชาวบ้านตำบลตลิ่งชัน"
+  },
+  {
+   "seq": 183,
+   "type": "text",
+   "region": "nav",
+   "text": "ประมวลภาพกิจกรรม"
+  },
+  {
+   "seq": 185,
+   "type": "text",
+   "region": "nav",
+   "text": "แผนที่ดาวเทียม"
+  },
+  {
+   "seq": 187,
+   "type": "text",
+   "region": "nav",
+   "text": "การลดขั้นตอน"
+  },
+  {
+   "seq": 189,
+   "type": "text",
+   "region": "nav",
+   "text": "ดาวน์โหลดเอกสาร"
+  },
+  {
+   "seq": 191,
+   "type": "text",
+   "region": "nav",
+   "text": "สายตรง อบต."
+  },
+  {
+   "seq": 193,
+   "type": "text",
+   "region": "nav",
+   "text": "ติดต่อสำนักงาน"
+  },
+  {
+   "seq": 195,
+   "type": "text",
+   "region": "nav",
+   "text": "แบบฟอร์มต่างๆ"
+  },
+  {
+   "seq": 197,
+   "type": "text",
+   "region": "nav",
+   "text": "สอบถามข้อมูลข่าวสาร"
+  },
+  {
+   "seq": 199,
+   "type": "text",
+   "region": "nav",
+   "text": "สายตรงนายก"
+  },
+  {
+   "seq": 201,
+   "type": "text",
+   "region": "nav",
+   "text": "ศูนย์รับเรื่องร้องทุกข์"
+  },
+  {
+   "seq": 203,
+   "type": "text",
+   "region": "nav",
+   "text": "ศูนย์ข้อมูลข่าวสาร"
+  },
+  {
+   "seq": 205,
+   "type": "text",
+   "region": "nav",
+   "text": "กระดานเสวนา"
+  },
+  {
+   "seq": 207,
+   "type": "image",
+   "region": "body",
+   "file": "images/003.png",
+   "width": 263,
+   "height": 41,
+   "bytes": 6983
+  },
+  {
+   "seq": 208,
+   "type": "image",
+   "region": "body",
+   "file": "images/004.jpg",
+   "width": 140,
+   "height": 180,
+   "bytes": 22592
+  },
+  {
+   "seq": 209,
+   "type": "text",
+   "region": "body",
+   "text": "นายวรัตถ์ มาศโอสถ"
+  },
+  {
+   "seq": 210,
+   "type": "text",
+   "region": "body",
+   "text": "นายกองค์การบริหารส่วนตำบลตลิ่งชัน"
+  },
+  {
+   "seq": 211,
+   "type": "text",
+   "region": "body",
+   "text": "086-2995780"
+  },
+  {
+   "seq": 212,
+   "type": "image",
+   "region": "body",
+   "file": "images/005.jpg",
+   "width": 140,
+   "height": 180,
+   "bytes": 23981
+  },
+  {
+   "seq": 213,
+   "type": "text",
+   "region": "body",
+   "text": "นายวรวิทย์ คลองรั้ว"
+  },
+  {
+   "seq": 214,
+   "type": "text",
+   "region": "body",
+   "text": "รองนายกองค์การบริหารส่วนตำบลตลิ่งชัน"
+  },
+  {
+   "seq": 215,
+   "type": "text",
+   "region": "body",
+   "text": "รับผิดชอบกองศึกษา ศาสนาและวัฒนธรรม กองคลัง"
+  },
+  {
+   "seq": 216,
+   "type": "text",
+   "region": "body",
+   "text": "089-1952392"
+  },
+  {
+   "seq": 217,
+   "type": "image",
+   "region": "body",
+   "file": "images/006.jpg",
+   "width": 140,
+   "height": 180,
+   "bytes": 49970
+  },
+  {
+   "seq": 218,
+   "type": "text",
+   "region": "body",
+   "text": "นายสุเมธา คลองยวน"
+  },
+  {
+   "seq": 219,
+   "type": "text",
+   "region": "body",
+   "text": "รองนายกองค์การบริหารส่วนตำบลตลิ่งชัน"
+  },
+  {
+   "seq": 220,
+   "type": "text",
+   "region": "body",
+   "text": "รับผิดชอบสำนักปลัด กองช่าง กองสวัสดิการสังคม"
+  },
+  {
+   "seq": 221,
+   "type": "text",
+   "region": "body",
+   "text": "087-6264411"
+  },
+  {
+   "seq": 222,
+   "type": "image",
+   "region": "body",
+   "file": "images/007.jpg",
+   "width": 140,
+   "height": 180,
+   "bytes": 49300
+  },
+  {
+   "seq": 223,
+   "type": "text",
+   "region": "body",
+   "text": "นายสวัสดิ์ สาโรจน์"
+  },
+  {
+   "seq": 224,
+   "type": "text",
+   "region": "body",
+   "text": "เลขานุการนายกองค์การบริหารส่วนตำบลตลิ่งชัน"
+  },
+  {
+   "seq": 225,
+   "type": "text",
+   "region": "body",
+   "text": "085-7832634"
+  },
+  {
+   "seq": 226,
+   "type": "text",
+   "region": "body",
+   "text": "องค์การบริหารส่วนตำบลตลิ่งชัน 169 ต.ตลิ่งชัน อ.เหนือคลอง จ.กระบี่ 81130 : www.talingchanlocal.go.th"
+  },
+  {
+   "seq": 227,
+   "type": "text",
+   "region": "body",
+   "text": "Tell. 075-656-056/ Fax. 075-656-056"
+  },
+  {
+   "seq": 228,
+   "type": "text",
+   "region": "body",
+   "text": "เว็บไซต์เปิดใช้ : 31/03/2015"
+  },
+  {
+   "seq": 229,
+   "type": "text",
+   "region": "body",
+   "text": "Powered By ::"
+  },
+  {
+   "seq": 230,
+   "type": "image",
+   "region": "body",
+   "file": "images/008.jpg",
+   "width": 36,
+   "height": 15,
+   "bytes": 973
+  },
+  {
+   "seq": 231,
+   "type": "text",
+   "region": "body",
+   "text": "PAS World Communitcation.,ltd"
+  },
+  {
+   "seq": 232,
+   "type": "text",
+   "region": "body",
+   "text": ". AND"
+  },
+  {
+   "seq": 233,
+   "type": "text",
+   "region": "body",
+   "text": "nakhonkorat.com"
+  },
+  {
+   "seq": 234,
+   "type": "text",
+   "region": "body",
+   "text": "."
+  },
+  {
+   "seq": 235,
+   "type": "image",
+   "region": "body",
+   "file": "images/009.png",
+   "width": 60,
+   "height": 60,
+   "bytes": 4609
+  },
+  {
+   "seq": 236,
+   "type": "text",
+   "region": "body",
+   "text": "PG Slot"
+  },
+  {
+   "seq": 237,
+   "type": "image",
+   "region": "body",
+   "file": "images/010.jpg",
+   "width": 24,
+   "height": 24,
+   "bytes": 6225
+  },
+  {
+   "seq": 238,
+   "type": "text",
+   "region": "body",
+   "text": "ข้อความต้นฉบับ"
+  },
+  {
+   "seq": 239,
+   "type": "text",
+   "region": "body",
+   "text": "ให้คะแนนคำแปลนี้"
+  },
+  {
+   "seq": 240,
+   "type": "text",
+   "region": "body",
+   "text": "เราจะใช้ความคิดเห็นของคุณเพื่อปรับปรุง Google แปลภาษา"
+  },
+  {
+   "seq": 243,
+   "type": "text",
+   "region": "body",
+   "text": "Shares"
+  },
+  {
+   "seq": 244,
+   "type": "image",
+   "region": "body",
+   "file": "images/011.jpg",
+   "width": 16,
+   "height": 28,
+   "alt": "facebook-white sharing button",
+   "bytes": 357
+  },
+  {
+   "seq": 245,
+   "type": "text",
+   "region": "body",
+   "text": "Share"
+  },
+  {
+   "seq": 246,
+   "type": "image",
+   "region": "body",
+   "file": "images/012.jpg",
+   "width": 150,
+   "height": 150,
+   "alt": "twitter-white sharing button",
+   "bytes": 641
+  },
+  {
+   "seq": 247,
+   "type": "text",
+   "region": "body",
+   "text": "Post"
+  },
+  {
+   "seq": 248,
+   "type": "image",
+   "region": "body",
+   "file": "images/013.jpg",
+   "width": 34,
+   "height": 28,
+   "alt": "email-white sharing button",
+   "bytes": 599
+  },
+  {
+   "seq": 249,
+   "type": "text",
+   "region": "body",
+   "text": "Email"
+  },
+  {
+   "seq": 250,
+   "type": "image",
+   "region": "body",
+   "file": "images/014.jpg",
+   "width": 30,
+   "height": 34,
+   "alt": "sharethis-white sharing button",
+   "bytes": 625
+  },
+  {
+   "seq": 251,
+   "type": "text",
+   "region": "body",
+   "text": "Share"
+  },
+  {
+   "seq": 252,
+   "type": "image",
+   "region": "body",
+   "file": "images/015.jpg",
+   "width": 34,
+   "height": 30,
+   "alt": "print-white sharing button",
+   "bytes": 470
+  },
+  {
+   "seq": 253,
+   "type": "text",
+   "region": "body",
+   "text": "Print"
+  },
+  {
+   "seq": 254,
+   "type": "image",
+   "region": "body",
+   "file": "images/016.jpg",
+   "width": 16,
+   "height": 16,
+   "alt": "arrow_left sharing button",
+   "bytes": 565
+  },
+  {
+   "seq": 255,
+   "type": "image",
+   "region": "body",
+   "file": "images/017.jpg",
+   "width": 16,
+   "height": 16,
+   "alt": "arrow_right sharing button",
+   "bytes": 565
+  }
+ ]
+}

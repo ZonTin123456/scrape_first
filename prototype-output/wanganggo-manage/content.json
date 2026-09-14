@@ -1,0 +1,2398 @@
+{
+ "manifest": {
+  "source_url": "https://www.wangang.go.th/manage.php",
+  "captured_at": "2026-09-14T18:37:19.043Z",
+  "origin": "https://www.wangang.go.th",
+  "stats": {
+   "text": 162,
+   "img": 154,
+   "placeholder": 1,
+   "cutChromeImg": 0,
+   "cutNoise": 0,
+   "cutBlankFrame": 0,
+   "imgErrors": 0
+  },
+  "frames_seen": "1 child frames",
+  "rules": [
+   "text-only chrome (header/nav/footer images dropped)",
+   "noise denylist + <=70B tracking filter",
+   "cross-origin iframes -> placeholder",
+   "output UTF-8 JSON",
+   "fullres_candidate from parent link"
+  ]
+ },
+ "nodes": [
+  {
+   "seq": 0,
+   "type": "iframe-sameorigin",
+   "region": "body",
+   "src": "https://www.wangang.go.th/css_shine.html"
+  },
+  {
+   "seq": 1,
+   "type": "image",
+   "region": "body",
+   "file": "images/001.png",
+   "width": 87,
+   "height": 62,
+   "bytes": 1701
+  },
+  {
+   "seq": 2,
+   "type": "image",
+   "region": "body",
+   "file": "images/002.png",
+   "width": 147,
+   "height": 62,
+   "bytes": 2411
+  },
+  {
+   "seq": 3,
+   "type": "image",
+   "region": "body",
+   "file": "images/003.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 4,
+   "type": "text",
+   "region": "body",
+   "text": "ประวัติความเป็นมา"
+  },
+  {
+   "seq": 5,
+   "type": "image",
+   "region": "body",
+   "file": "images/004.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 6,
+   "type": "text",
+   "region": "body",
+   "text": "วิสัยทัศน์ / พันธกิจ"
+  },
+  {
+   "seq": 7,
+   "type": "image",
+   "region": "body",
+   "file": "images/005.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 8,
+   "type": "text",
+   "region": "body",
+   "text": "สภาพและข้อมูลพื้นฐาน"
+  },
+  {
+   "seq": 9,
+   "type": "image",
+   "region": "body",
+   "file": "images/006.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 10,
+   "type": "text",
+   "region": "body",
+   "text": "สภาพและข้อมูลพื้นฐาน"
+  },
+  {
+   "seq": 11,
+   "type": "image",
+   "region": "body",
+   "file": "images/007.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 12,
+   "type": "text",
+   "region": "body",
+   "text": "สภาพทางเศรษฐกิจ"
+  },
+  {
+   "seq": 13,
+   "type": "image",
+   "region": "body",
+   "file": "images/008.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 14,
+   "type": "text",
+   "region": "body",
+   "text": "สภาพทางสังคม"
+  },
+  {
+   "seq": 15,
+   "type": "image",
+   "region": "body",
+   "file": "images/009.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 16,
+   "type": "text",
+   "region": "body",
+   "text": "การบริการพื้นฐาน"
+  },
+  {
+   "seq": 17,
+   "type": "image",
+   "region": "body",
+   "file": "images/010.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 18,
+   "type": "text",
+   "region": "body",
+   "text": "โครงสร้างองค์กร"
+  },
+  {
+   "seq": 19,
+   "type": "image",
+   "region": "body",
+   "file": "images/011.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 20,
+   "type": "text",
+   "region": "body",
+   "text": "อำนาจหน้าที่"
+  },
+  {
+   "seq": 21,
+   "type": "image",
+   "region": "body",
+   "file": "images/012.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 22,
+   "type": "text",
+   "region": "body",
+   "text": "นโยบายการบริหาร"
+  },
+  {
+   "seq": 23,
+   "type": "image",
+   "region": "body",
+   "file": "images/013.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 24,
+   "type": "text",
+   "region": "body",
+   "text": "สำนักงาน"
+  },
+  {
+   "seq": 25,
+   "type": "image",
+   "region": "body",
+   "file": "images/014.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 26,
+   "type": "text",
+   "region": "body",
+   "text": "กฎหมายจัดตั้ง"
+  },
+  {
+   "seq": 27,
+   "type": "image",
+   "region": "body",
+   "file": "images/015.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 28,
+   "type": "text",
+   "region": "body",
+   "text": "รวมกฎหมาย ระเบียบข้อบังคับ"
+  },
+  {
+   "seq": 29,
+   "type": "image",
+   "region": "body",
+   "file": "images/016.png",
+   "width": 150,
+   "height": 62,
+   "bytes": 2303
+  },
+  {
+   "seq": 30,
+   "type": "image",
+   "region": "body",
+   "file": "images/017.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 31,
+   "type": "text",
+   "region": "body",
+   "text": "คณะผู้บริหาร"
+  },
+  {
+   "seq": 32,
+   "type": "image",
+   "region": "body",
+   "file": "images/018.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 33,
+   "type": "text",
+   "region": "body",
+   "text": "สมาชิกสภา อบต."
+  },
+  {
+   "seq": 34,
+   "type": "image",
+   "region": "body",
+   "file": "images/019.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 35,
+   "type": "text",
+   "region": "body",
+   "text": "หัวหน้าส่วนราชการ"
+  },
+  {
+   "seq": 36,
+   "type": "image",
+   "region": "body",
+   "file": "images/020.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 37,
+   "type": "text",
+   "region": "body",
+   "text": "กำนัน / ผู้ใหญ่บ้าน"
+  },
+  {
+   "seq": 38,
+   "type": "image",
+   "region": "body",
+   "file": "images/021.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 39,
+   "type": "text",
+   "region": "body",
+   "text": "พนักงานส่วนตำบล"
+  },
+  {
+   "seq": 40,
+   "type": "image",
+   "region": "body",
+   "file": "images/022.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 41,
+   "type": "text",
+   "region": "body",
+   "text": "สำนักปลัด"
+  },
+  {
+   "seq": 42,
+   "type": "image",
+   "region": "body",
+   "file": "images/023.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 43,
+   "type": "text",
+   "region": "body",
+   "text": "กองคลัง"
+  },
+  {
+   "seq": 44,
+   "type": "image",
+   "region": "body",
+   "file": "images/024.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 45,
+   "type": "text",
+   "region": "body",
+   "text": "กองช่าง"
+  },
+  {
+   "seq": 46,
+   "type": "image",
+   "region": "body",
+   "file": "images/025.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 47,
+   "type": "text",
+   "region": "body",
+   "text": "กองการศึกษา ศาสนาและวัฒนธรรม"
+  },
+  {
+   "seq": 48,
+   "type": "image",
+   "region": "body",
+   "file": "images/026.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 49,
+   "type": "text",
+   "region": "body",
+   "text": "หน่วยตรวจสอบภายใน"
+  },
+  {
+   "seq": 50,
+   "type": "image",
+   "region": "body",
+   "file": "images/027.png",
+   "width": 144,
+   "height": 62,
+   "bytes": 2085
+  },
+  {
+   "seq": 51,
+   "type": "image",
+   "region": "body",
+   "file": "images/028.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 52,
+   "type": "text",
+   "region": "body",
+   "text": "แผนพัฒนาท้องถิ่น"
+  },
+  {
+   "seq": 53,
+   "type": "image",
+   "region": "body",
+   "file": "images/029.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 54,
+   "type": "text",
+   "region": "body",
+   "text": "แผนพัฒนาท้องถิ่น 5 ปี"
+  },
+  {
+   "seq": 55,
+   "type": "image",
+   "region": "body",
+   "file": "images/030.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 56,
+   "type": "text",
+   "region": "body",
+   "text": "แผนพัฒนาท้องถิ่น"
+  },
+  {
+   "seq": 57,
+   "type": "image",
+   "region": "body",
+   "file": "images/031.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 58,
+   "type": "text",
+   "region": "body",
+   "text": "แผนยุทธศาสตร์การพัฒนา"
+  },
+  {
+   "seq": 59,
+   "type": "image",
+   "region": "body",
+   "file": "images/032.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 60,
+   "type": "text",
+   "region": "body",
+   "text": "การประเมินผลแผนพัฒนา"
+  },
+  {
+   "seq": 61,
+   "type": "image",
+   "region": "body",
+   "file": "images/033.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 62,
+   "type": "text",
+   "region": "body",
+   "text": "แผนดำเนินการประจำปี"
+  },
+  {
+   "seq": 63,
+   "type": "image",
+   "region": "body",
+   "file": "images/034.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 64,
+   "type": "text",
+   "region": "body",
+   "text": "แผนปฏิบัติการป้องกันการทุจริต"
+  },
+  {
+   "seq": 65,
+   "type": "image",
+   "region": "body",
+   "file": "images/035.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 66,
+   "type": "text",
+   "region": "body",
+   "text": "การจัดการเรื่องร้องเรียน การทุจริตและประพฤติมิชอบ"
+  },
+  {
+   "seq": 67,
+   "type": "image",
+   "region": "body",
+   "file": "images/036.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 68,
+   "type": "text",
+   "region": "body",
+   "text": "ผลปฏิบัติงาน"
+  },
+  {
+   "seq": 69,
+   "type": "image",
+   "region": "body",
+   "file": "images/037.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 70,
+   "type": "text",
+   "region": "body",
+   "text": "แผนอัตรากำลัง"
+  },
+  {
+   "seq": 71,
+   "type": "image",
+   "region": "body",
+   "file": "images/038.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 72,
+   "type": "text",
+   "region": "body",
+   "text": "คู่มือการปฏิบัติงาน"
+  },
+  {
+   "seq": 73,
+   "type": "image",
+   "region": "body",
+   "file": "images/039.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 74,
+   "type": "text",
+   "region": "body",
+   "text": "การเปิดโอกาสให้เกิดการมีส่วนร่วม"
+  },
+  {
+   "seq": 75,
+   "type": "image",
+   "region": "body",
+   "file": "images/040.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 76,
+   "type": "text",
+   "region": "body",
+   "text": "การบริหารและพัฒนาทรัพยากรบุคคล"
+  },
+  {
+   "seq": 77,
+   "type": "image",
+   "region": "body",
+   "file": "images/041.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 78,
+   "type": "text",
+   "region": "body",
+   "text": "นโยบายการบริหารทรัพยากรบุคคล"
+  },
+  {
+   "seq": 79,
+   "type": "image",
+   "region": "body",
+   "file": "images/042.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 80,
+   "type": "text",
+   "region": "body",
+   "text": "การดำเนินการตามนโยบายการบริหารทรัพยากรบุคคล"
+  },
+  {
+   "seq": 81,
+   "type": "image",
+   "region": "body",
+   "file": "images/043.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 82,
+   "type": "text",
+   "region": "body",
+   "text": "หลักเกณฑ์การบริหารและพัฒนาทรัพยากรบุคคล"
+  },
+  {
+   "seq": 83,
+   "type": "image",
+   "region": "body",
+   "file": "images/044.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 84,
+   "type": "text",
+   "region": "body",
+   "text": "รายงานผลการบริหารและการพัฒนาทรัพยากรบุคคลประจำปี"
+  },
+  {
+   "seq": 85,
+   "type": "image",
+   "region": "body",
+   "file": "images/045.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 86,
+   "type": "text",
+   "region": "body",
+   "text": "แผนพัฒนาบุคลากร"
+  },
+  {
+   "seq": 87,
+   "type": "image",
+   "region": "body",
+   "file": "images/046.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 88,
+   "type": "text",
+   "region": "body",
+   "text": "เจตจำนงสุจริตของผู้บริหาร"
+  },
+  {
+   "seq": 89,
+   "type": "image",
+   "region": "body",
+   "file": "images/047.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 90,
+   "type": "text",
+   "region": "body",
+   "text": "การตรวจสอบภายใน"
+  },
+  {
+   "seq": 91,
+   "type": "image",
+   "region": "body",
+   "file": "images/048.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 92,
+   "type": "text",
+   "region": "body",
+   "text": "ITA"
+  },
+  {
+   "seq": 93,
+   "type": "image",
+   "region": "body",
+   "file": "images/049.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 94,
+   "type": "text",
+   "region": "body",
+   "text": "ข้อมูลสถิติ"
+  },
+  {
+   "seq": 95,
+   "type": "image",
+   "region": "body",
+   "file": "images/050.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 96,
+   "type": "text",
+   "region": "body",
+   "text": "มุมงานการเจ้าหน้าที่"
+  },
+  {
+   "seq": 97,
+   "type": "image",
+   "region": "body",
+   "file": "images/051.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 98,
+   "type": "text",
+   "region": "body",
+   "text": "ข้อบัญญัติ"
+  },
+  {
+   "seq": 99,
+   "type": "image",
+   "region": "body",
+   "file": "images/052.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 100,
+   "type": "text",
+   "region": "body",
+   "text": "ข้อบัญญัติงบประมาณ"
+  },
+  {
+   "seq": 101,
+   "type": "image",
+   "region": "body",
+   "file": "images/053.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 102,
+   "type": "text",
+   "region": "body",
+   "text": "รายรับรายจ่ายประจำปี"
+  },
+  {
+   "seq": 103,
+   "type": "image",
+   "region": "body",
+   "file": "images/054.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 104,
+   "type": "text",
+   "region": "body",
+   "text": "เรื่องอื่นๆ"
+  },
+  {
+   "seq": 105,
+   "type": "image",
+   "region": "body",
+   "file": "images/055.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 106,
+   "type": "text",
+   "region": "body",
+   "text": "ข้อบัญญัติเกี่ยวกับกิจการที่เป็นอันตรายต่อสุขภาพ"
+  },
+  {
+   "seq": 107,
+   "type": "image",
+   "region": "body",
+   "file": "images/056.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 108,
+   "type": "text",
+   "region": "body",
+   "text": "กิจการสภาฯ"
+  },
+  {
+   "seq": 109,
+   "type": "image",
+   "region": "body",
+   "file": "images/057.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 110,
+   "type": "text",
+   "region": "body",
+   "text": "รายงานการประชุมสภา"
+  },
+  {
+   "seq": 111,
+   "type": "image",
+   "region": "body",
+   "file": "images/058.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 112,
+   "type": "text",
+   "region": "body",
+   "text": "รายงานการประชุมสภา"
+  },
+  {
+   "seq": 113,
+   "type": "image",
+   "region": "body",
+   "file": "images/059.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 114,
+   "type": "text",
+   "region": "body",
+   "text": "ประกาศกำหนดสมัยประชุม"
+  },
+  {
+   "seq": 115,
+   "type": "image",
+   "region": "body",
+   "file": "images/060.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 116,
+   "type": "text",
+   "region": "body",
+   "text": "ประกาศเรียกประชุมสภา"
+  },
+  {
+   "seq": 117,
+   "type": "image",
+   "region": "body",
+   "file": "images/061.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 118,
+   "type": "text",
+   "region": "body",
+   "text": "นัดประชุมสภา"
+  },
+  {
+   "seq": 119,
+   "type": "image",
+   "region": "body",
+   "file": "images/062.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 120,
+   "type": "text",
+   "region": "body",
+   "text": "หนังสือเชิญประชุม"
+  },
+  {
+   "seq": 121,
+   "type": "image",
+   "region": "body",
+   "file": "images/063.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 122,
+   "type": "text",
+   "region": "body",
+   "text": "ประกาศ"
+  },
+  {
+   "seq": 123,
+   "type": "image",
+   "region": "body",
+   "file": "images/064.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 124,
+   "type": "text",
+   "region": "body",
+   "text": "กองทุนหลักประกันสุขภาพ"
+  },
+  {
+   "seq": 125,
+   "type": "image",
+   "region": "body",
+   "file": "images/065.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 126,
+   "type": "text",
+   "region": "body",
+   "text": "ข้อมูลพื้นฐาน"
+  },
+  {
+   "seq": 127,
+   "type": "image",
+   "region": "body",
+   "file": "images/066.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 128,
+   "type": "text",
+   "region": "body",
+   "text": "ข้อมูลด้านกิจกรรม"
+  },
+  {
+   "seq": 129,
+   "type": "image",
+   "region": "body",
+   "file": "images/067.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 130,
+   "type": "text",
+   "region": "body",
+   "text": "ข้อมูลด้านการเงิน"
+  },
+  {
+   "seq": 131,
+   "type": "image",
+   "region": "body",
+   "file": "images/068.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 132,
+   "type": "text",
+   "region": "body",
+   "text": "รายงานทางการเงิน"
+  },
+  {
+   "seq": 133,
+   "type": "image",
+   "region": "body",
+   "file": "images/069.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 134,
+   "type": "text",
+   "region": "body",
+   "text": "รายงานการกำกับติดตามการใช้จ่ายงบประมาณประจำปี รอบ 6 เดือน"
+  },
+  {
+   "seq": 135,
+   "type": "image",
+   "region": "body",
+   "file": "images/070.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 136,
+   "type": "text",
+   "region": "body",
+   "text": "รายงานผลการใช้จ่ายงบประมาณประจำปี"
+  },
+  {
+   "seq": 137,
+   "type": "image",
+   "region": "body",
+   "file": "images/071.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 138,
+   "type": "text",
+   "region": "body",
+   "text": "รายงานการเงินประจำเดือน"
+  },
+  {
+   "seq": 139,
+   "type": "image",
+   "region": "body",
+   "file": "images/072.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 140,
+   "type": "text",
+   "region": "body",
+   "text": "รายงานรายรับ-รายจ่ายจริง"
+  },
+  {
+   "seq": 141,
+   "type": "image",
+   "region": "body",
+   "file": "images/073.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 142,
+   "type": "text",
+   "region": "body",
+   "text": "งบแสดงฐานะทางการเงิน"
+  },
+  {
+   "seq": 143,
+   "type": "image",
+   "region": "body",
+   "file": "images/074.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 144,
+   "type": "text",
+   "region": "body",
+   "text": "จัดซื้อจัดจ้าง"
+  },
+  {
+   "seq": 145,
+   "type": "image",
+   "region": "body",
+   "file": "images/075.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 146,
+   "type": "text",
+   "region": "body",
+   "text": "ประกาศจัดซื้อจัดจ้าง"
+  },
+  {
+   "seq": 147,
+   "type": "image",
+   "region": "body",
+   "file": "images/076.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 148,
+   "type": "text",
+   "region": "body",
+   "text": "ประกาศกำหนดราคากลาง"
+  },
+  {
+   "seq": 149,
+   "type": "image",
+   "region": "body",
+   "file": "images/077.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 150,
+   "type": "text",
+   "region": "body",
+   "text": "สรุปผลการจัดซื้อจัดจ้าง"
+  },
+  {
+   "seq": 151,
+   "type": "image",
+   "region": "body",
+   "file": "images/078.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 152,
+   "type": "text",
+   "region": "body",
+   "text": "แผนการจัดซื้อจัดจ้างหรือแผนการจัดหาพัสดุ"
+  },
+  {
+   "seq": 153,
+   "type": "image",
+   "region": "body",
+   "file": "images/079.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 154,
+   "type": "text",
+   "region": "body",
+   "text": "รายงานผลการจัดซื้อจัดจ้าง"
+  },
+  {
+   "seq": 155,
+   "type": "image",
+   "region": "body",
+   "file": "images/080.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 156,
+   "type": "text",
+   "region": "body",
+   "text": "ศูนย์ข้อมูลข่าวสาร"
+  },
+  {
+   "seq": 157,
+   "type": "image",
+   "region": "body",
+   "file": "images/081.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 158,
+   "type": "text",
+   "region": "body",
+   "text": "ข่าวประชาสัมพันธ์"
+  },
+  {
+   "seq": 159,
+   "type": "image",
+   "region": "body",
+   "file": "images/082.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 160,
+   "type": "text",
+   "region": "body",
+   "text": "ประกาศองค์การบริหารส่วนตำบลวังอ่าง"
+  },
+  {
+   "seq": 161,
+   "type": "image",
+   "region": "body",
+   "file": "images/083.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 162,
+   "type": "text",
+   "region": "body",
+   "text": "แผนพับ อบต.วังอ่าง"
+  },
+  {
+   "seq": 163,
+   "type": "image",
+   "region": "body",
+   "file": "images/084.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 164,
+   "type": "text",
+   "region": "body",
+   "text": "ระเบียบการรับบริการต่าง ๆ"
+  },
+  {
+   "seq": 165,
+   "type": "image",
+   "region": "body",
+   "file": "images/085.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 166,
+   "type": "text",
+   "region": "body",
+   "text": "รายงานผลการติดตามและประเมินผลแผนประจำปี"
+  },
+  {
+   "seq": 167,
+   "type": "image",
+   "region": "body",
+   "file": "images/086.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 168,
+   "type": "text",
+   "region": "body",
+   "text": "ประมวลจริยธรรมสำหรับเจ้าหน้าที่ของรัฐ"
+  },
+  {
+   "seq": 169,
+   "type": "image",
+   "region": "body",
+   "file": "images/087.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 170,
+   "type": "text",
+   "region": "body",
+   "text": "ประชุมคณะกรรมการพัฒนา อบต.วังอ่าง"
+  },
+  {
+   "seq": 171,
+   "type": "image",
+   "region": "body",
+   "file": "images/088.png",
+   "width": 107,
+   "height": 62,
+   "bytes": 1939
+  },
+  {
+   "seq": 172,
+   "type": "image",
+   "region": "body",
+   "file": "images/089.png",
+   "width": 160,
+   "height": 62,
+   "bytes": 2248
+  },
+  {
+   "seq": 173,
+   "type": "image",
+   "region": "body",
+   "file": "images/090.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 174,
+   "type": "text",
+   "region": "body",
+   "text": "มาตรฐานการให้บริการ"
+  },
+  {
+   "seq": 175,
+   "type": "image",
+   "region": "body",
+   "file": "images/091.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 176,
+   "type": "text",
+   "region": "body",
+   "text": "สำนักปลัด"
+  },
+  {
+   "seq": 177,
+   "type": "image",
+   "region": "body",
+   "file": "images/092.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 178,
+   "type": "text",
+   "region": "body",
+   "text": "กองคลัง"
+  },
+  {
+   "seq": 179,
+   "type": "image",
+   "region": "body",
+   "file": "images/093.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 180,
+   "type": "text",
+   "region": "body",
+   "text": "กองช่าง"
+  },
+  {
+   "seq": 181,
+   "type": "image",
+   "region": "body",
+   "file": "images/094.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 182,
+   "type": "text",
+   "region": "body",
+   "text": "กองการศึกษา ศาสนาและวัฒนธรรม"
+  },
+  {
+   "seq": 183,
+   "type": "image",
+   "region": "body",
+   "file": "images/095.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 184,
+   "type": "text",
+   "region": "body",
+   "text": "สถิติการให้บริการประชาชน"
+  },
+  {
+   "seq": 185,
+   "type": "image",
+   "region": "body",
+   "file": "images/096.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 186,
+   "type": "text",
+   "region": "body",
+   "text": "ประกาศเจตนารมณ์นโยบาย No Gift Policy จากการปฏิบัติหน้าที่สถิติการให้บริการประชาชน - สำนักปลัด"
+  },
+  {
+   "seq": 187,
+   "type": "image",
+   "region": "body",
+   "file": "images/097.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 188,
+   "type": "text",
+   "region": "body",
+   "text": "สำนักปลัด"
+  },
+  {
+   "seq": 189,
+   "type": "image",
+   "region": "body",
+   "file": "images/098.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 190,
+   "type": "text",
+   "region": "body",
+   "text": "กองคลัง"
+  },
+  {
+   "seq": 191,
+   "type": "image",
+   "region": "body",
+   "file": "images/099.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 192,
+   "type": "text",
+   "region": "body",
+   "text": "กองช่าง"
+  },
+  {
+   "seq": 193,
+   "type": "image",
+   "region": "body",
+   "file": "images/100.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 194,
+   "type": "text",
+   "region": "body",
+   "text": "กองการศึกษา ศาสนาและวัฒนธรรม"
+  },
+  {
+   "seq": 195,
+   "type": "image",
+   "region": "body",
+   "file": "images/101.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 196,
+   "type": "text",
+   "region": "body",
+   "text": "การดำเนินการเพื่อป้องกันการทุจริต"
+  },
+  {
+   "seq": 197,
+   "type": "image",
+   "region": "body",
+   "file": "images/102.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 198,
+   "type": "text",
+   "region": "body",
+   "text": "เจตจำนงสุจริตของผู้บริหาร"
+  },
+  {
+   "seq": 199,
+   "type": "image",
+   "region": "body",
+   "file": "images/103.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 200,
+   "type": "text",
+   "region": "body",
+   "text": "การมีส่วนร่วมของผู้บริหาร"
+  },
+  {
+   "seq": 201,
+   "type": "image",
+   "region": "body",
+   "file": "images/104.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 202,
+   "type": "text",
+   "region": "body",
+   "text": "การประเมินความเสี่ยงการทุจริตประจำปี"
+  },
+  {
+   "seq": 203,
+   "type": "image",
+   "region": "body",
+   "file": "images/105.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 204,
+   "type": "text",
+   "region": "body",
+   "text": "การดำเนินการเพื่อจัดการความเสี่ยงการทุจริตประจำปี"
+  },
+  {
+   "seq": 205,
+   "type": "image",
+   "region": "body",
+   "file": "images/106.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 206,
+   "type": "text",
+   "region": "body",
+   "text": "มาตรการภายในเพื่อป้องกันการทุจริต"
+  },
+  {
+   "seq": 207,
+   "type": "image",
+   "region": "body",
+   "file": "images/107.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 208,
+   "type": "text",
+   "region": "body",
+   "text": "มาตรการส่งเสริมคุณธรรมและความโปร่งใสภายในหน่วยงาน"
+  },
+  {
+   "seq": 209,
+   "type": "image",
+   "region": "body",
+   "file": "images/108.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 210,
+   "type": "text",
+   "region": "body",
+   "text": "การดำเนินการตามมาตรการคุณธรรมและความโปร่งใสภายในหน่วยงาน"
+  },
+  {
+   "seq": 211,
+   "type": "image",
+   "region": "body",
+   "file": "images/109.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 212,
+   "type": "text",
+   "region": "body",
+   "text": "การบริหารและพัฒนาทรัพยากรบุคคล"
+  },
+  {
+   "seq": 213,
+   "type": "image",
+   "region": "body",
+   "file": "images/110.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 214,
+   "type": "text",
+   "region": "body",
+   "text": "นโยบายการบริหารทรัพยากรบุคคล"
+  },
+  {
+   "seq": 215,
+   "type": "image",
+   "region": "body",
+   "file": "images/111.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 216,
+   "type": "text",
+   "region": "body",
+   "text": "การดำเนินการตามนโยบายการบริหารทรัพยากรบุคคล"
+  },
+  {
+   "seq": 217,
+   "type": "image",
+   "region": "body",
+   "file": "images/112.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 218,
+   "type": "text",
+   "region": "body",
+   "text": "หลักเกณฑ์การบริหารและพัฒนาทรัพยากรบุคคล"
+  },
+  {
+   "seq": 219,
+   "type": "image",
+   "region": "body",
+   "file": "images/113.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 220,
+   "type": "text",
+   "region": "body",
+   "text": "รายงานผลการบริหารและพัฒนาทรัพยากรบุคคลประจำปี"
+  },
+  {
+   "seq": 221,
+   "type": "image",
+   "region": "body",
+   "file": "images/114.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 222,
+   "type": "text",
+   "region": "body",
+   "text": "รายงานผลการสำรวจความพึงพอใจในการให้บริการ"
+  },
+  {
+   "seq": 223,
+   "type": "image",
+   "region": "body",
+   "file": "images/115.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 224,
+   "type": "text",
+   "region": "body",
+   "text": "สำนักปลัด"
+  },
+  {
+   "seq": 225,
+   "type": "image",
+   "region": "body",
+   "file": "images/116.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 226,
+   "type": "text",
+   "region": "body",
+   "text": "กองคลัง"
+  },
+  {
+   "seq": 227,
+   "type": "image",
+   "region": "body",
+   "file": "images/117.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 228,
+   "type": "text",
+   "region": "body",
+   "text": "กองช่าง"
+  },
+  {
+   "seq": 229,
+   "type": "image",
+   "region": "body",
+   "file": "images/118.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 230,
+   "type": "text",
+   "region": "body",
+   "text": "กองการศึกษา ศาสนาและวัฒนธรรม"
+  },
+  {
+   "seq": 231,
+   "type": "image",
+   "region": "body",
+   "file": "images/119.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 232,
+   "type": "text",
+   "region": "body",
+   "text": "การจัดการความรู้ Knowledge Management"
+  },
+  {
+   "seq": 233,
+   "type": "image",
+   "region": "body",
+   "file": "images/120.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 234,
+   "type": "text",
+   "region": "body",
+   "text": "ข้อมูลข่าวสารเพื่อการรับรู้สู่ชุมชน"
+  },
+  {
+   "seq": 235,
+   "type": "image",
+   "region": "body",
+   "file": "images/121.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 236,
+   "type": "text",
+   "region": "body",
+   "text": "มุมบริหารงานบุคคล"
+  },
+  {
+   "seq": 237,
+   "type": "image",
+   "region": "body",
+   "file": "images/122.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 238,
+   "type": "text",
+   "region": "body",
+   "text": "การเปิดโอกาสให้เกิดการมีส่วนร่วม"
+  },
+  {
+   "seq": 239,
+   "type": "image",
+   "region": "body",
+   "file": "images/123.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 240,
+   "type": "text",
+   "region": "body",
+   "text": "ระเบียบกฎหมายที่เกี่ยวข้อง"
+  },
+  {
+   "seq": 241,
+   "type": "image",
+   "region": "body",
+   "file": "images/124.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 242,
+   "type": "text",
+   "region": "body",
+   "text": "การดำเนินการเพื่อป้องกันการทุจริต"
+  },
+  {
+   "seq": 243,
+   "type": "image",
+   "region": "body",
+   "file": "images/125.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 244,
+   "type": "text",
+   "region": "body",
+   "text": "รายงานผลการติดตามและประเมินผลแผนประจำปี"
+  },
+  {
+   "seq": 245,
+   "type": "image",
+   "region": "body",
+   "file": "images/126.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 246,
+   "type": "text",
+   "region": "body",
+   "text": "ประมวลจริยธรรมสำหรับเจ้าหน้าที่ของรัฐ"
+  },
+  {
+   "seq": 247,
+   "type": "image",
+   "region": "body",
+   "file": "images/127.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 248,
+   "type": "text",
+   "region": "body",
+   "text": "การเสริมสร้างวัฒนธรรมองค์กรตามมาตรฐานทางจริยธรรม"
+  },
+  {
+   "seq": 249,
+   "type": "image",
+   "region": "body",
+   "file": "images/128.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 250,
+   "type": "text",
+   "region": "body",
+   "text": "รายงานผลตามนโยบาย No Gift Policy"
+  },
+  {
+   "seq": 251,
+   "type": "image",
+   "region": "body",
+   "file": "images/129.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 252,
+   "type": "text",
+   "region": "body",
+   "text": "คู่มือหรือมาตรฐานการปฏิบัติงาน"
+  },
+  {
+   "seq": 253,
+   "type": "image",
+   "region": "body",
+   "file": "images/130.png",
+   "width": 153,
+   "height": 62,
+   "bytes": 2318
+  },
+  {
+   "seq": 254,
+   "type": "image",
+   "region": "body",
+   "file": "images/131.png",
+   "width": 16,
+   "height": 16,
+   "bytes": 2937
+  },
+  {
+   "seq": 255,
+   "type": "text",
+   "region": "body",
+   "text": "สายตรงสำนักงาน"
+  },
+  {
+   "seq": 256,
+   "type": "image",
+   "region": "body",
+   "file": "images/132.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 257,
+   "type": "text",
+   "region": "body",
+   "text": "ศูนย์รับเรื่องร้องทุกข์"
+  },
+  {
+   "seq": 258,
+   "type": "image",
+   "region": "body",
+   "file": "images/133.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 259,
+   "type": "text",
+   "region": "body",
+   "text": "ติดต่อสำนักงาน"
+  },
+  {
+   "seq": 260,
+   "type": "image",
+   "region": "body",
+   "file": "images/134.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 261,
+   "type": "text",
+   "region": "body",
+   "text": "สอบถามข้อมูลข่าวสาร"
+  },
+  {
+   "seq": 262,
+   "type": "image",
+   "region": "body",
+   "file": "images/135.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 263,
+   "type": "text",
+   "region": "body",
+   "text": "สายตรงนายก"
+  },
+  {
+   "seq": 264,
+   "type": "image",
+   "region": "body",
+   "file": "images/136.png",
+   "width": 10,
+   "height": 12,
+   "bytes": 2916
+  },
+  {
+   "seq": 265,
+   "type": "text",
+   "region": "body",
+   "text": "แจ้งเบาะแสป้ายโฆษณาหรือสิ่งอื่นใดที่รุกล้ำทางสาธารณะที่ไม่ชอบด้วยกฏหมาย"
+  },
+  {
+   "seq": 266,
+   "type": "image",
+   "region": "body",
+   "file": "images/137.png",
+   "width": 380,
+   "height": 65,
+   "bytes": 10330
+  },
+  {
+   "seq": 267,
+   "type": "image",
+   "region": "body",
+   "file": "images/138.jpg",
+   "width": 150,
+   "height": 190,
+   "bytes": 12001
+  },
+  {
+   "seq": 268,
+   "type": "text",
+   "region": "body",
+   "text": "นายธนดล เอื้อบำรุงเกียรติ"
+  },
+  {
+   "seq": 269,
+   "type": "text",
+   "region": "body",
+   "text": "นายกองค์การบริหารส่วนตำบลวังอ่าง"
+  },
+  {
+   "seq": 270,
+   "type": "text",
+   "region": "body",
+   "text": "โทร.093-1962353"
+  },
+  {
+   "seq": 271,
+   "type": "image",
+   "region": "body",
+   "file": "images/139.jpg",
+   "width": 150,
+   "height": 175,
+   "bytes": 9962
+  },
+  {
+   "seq": 272,
+   "type": "text",
+   "region": "body",
+   "text": "นายชวนชม พรหมเล็ก"
+  },
+  {
+   "seq": 273,
+   "type": "text",
+   "region": "body",
+   "text": "รองนายกองค์การบริหารส่วนตำบลวังอ่าง"
+  },
+  {
+   "seq": 274,
+   "type": "text",
+   "region": "body",
+   "text": "โทร.0646199522"
+  },
+  {
+   "seq": 275,
+   "type": "text",
+   "region": "body",
+   "text": "รับผิดชอบสำนักปลัด"
+  },
+  {
+   "seq": 276,
+   "type": "image",
+   "region": "body",
+   "file": "images/140.jpg",
+   "width": 140,
+   "height": 180,
+   "bytes": 12520
+  },
+  {
+   "seq": 277,
+   "type": "text",
+   "region": "body",
+   "text": "นายธีรศักดิ์ หนูนวล"
+  },
+  {
+   "seq": 278,
+   "type": "text",
+   "region": "body",
+   "text": "รองนายกองค์การบริหารส่วนตำบลวังอ่าง"
+  },
+  {
+   "seq": 279,
+   "type": "text",
+   "region": "body",
+   "text": "โทร.0655617440"
+  },
+  {
+   "seq": 280,
+   "type": "text",
+   "region": "body",
+   "text": "รับผิดชอบกองการศึกษา ศาสนา และวัฒนธรรม"
+  },
+  {
+   "seq": 281,
+   "type": "image",
+   "region": "body",
+   "file": "images/141.jpg",
+   "width": 140,
+   "height": 180,
+   "bytes": 12280
+  },
+  {
+   "seq": 282,
+   "type": "text",
+   "region": "body",
+   "text": "นายวรเดช แนมใส"
+  },
+  {
+   "seq": 283,
+   "type": "text",
+   "region": "body",
+   "text": "เลขานุการนายกองค์การบริหารส่วนตำบลวังอ่าง"
+  },
+  {
+   "seq": 284,
+   "type": "text",
+   "region": "body",
+   "text": "โทร.0624214916"
+  },
+  {
+   "seq": 285,
+   "type": "text",
+   "region": "body",
+   "text": "หัวหน้าส่วนราชการ"
+  },
+  {
+   "seq": 286,
+   "type": "image",
+   "region": "body",
+   "file": "images/142.jpg",
+   "width": 140,
+   "height": 180,
+   "bytes": 51417
+  },
+  {
+   "seq": 287,
+   "type": "text",
+   "region": "body",
+   "text": "นางสาวฐิติชล แนมไสย"
+  },
+  {
+   "seq": 288,
+   "type": "text",
+   "region": "body",
+   "text": "ปลัดองค์การบริหารส่วนตำบลวังอ่าง"
+  },
+  {
+   "seq": 289,
+   "type": "text",
+   "region": "body",
+   "text": "โทร.065-3481424"
+  },
+  {
+   "seq": 290,
+   "type": "image",
+   "region": "body",
+   "file": "images/143.jpg",
+   "width": 140,
+   "height": 180,
+   "bytes": 53093
+  },
+  {
+   "seq": 291,
+   "type": "text",
+   "region": "body",
+   "text": "นายเกียรติศักดิ์ ธานีรัตน์"
+  },
+  {
+   "seq": 292,
+   "type": "text",
+   "region": "body",
+   "text": "รองปลัดองค์การบริหารส่วนตำบลวังอ่าง"
+  },
+  {
+   "seq": 293,
+   "type": "text",
+   "region": "body",
+   "text": "โทร 083-6041759"
+  },
+  {
+   "seq": 294,
+   "type": "text",
+   "region": "body",
+   "text": "รับผิดชอบกองช่าง"
+  },
+  {
+   "seq": 295,
+   "type": "image",
+   "region": "body",
+   "file": "images/144.jpg",
+   "width": 140,
+   "height": 180,
+   "bytes": 33244
+  },
+  {
+   "seq": 296,
+   "type": "text",
+   "region": "body",
+   "text": "นายสัญชาติ ไชยชนะ"
+  },
+  {
+   "seq": 297,
+   "type": "text",
+   "region": "body",
+   "text": "หัวหน้าสำนักปลัด"
+  },
+  {
+   "seq": 298,
+   "type": "text",
+   "region": "body",
+   "text": "โทร.086-5966213"
+  },
+  {
+   "seq": 299,
+   "type": "image",
+   "region": "body",
+   "file": "images/145.gif",
+   "width": 140,
+   "height": 180,
+   "bytes": 8001
+  },
+  {
+   "seq": 300,
+   "type": "text",
+   "region": "body",
+   "text": "-ว่าง-"
+  },
+  {
+   "seq": 301,
+   "type": "text",
+   "region": "body",
+   "text": "ผู้อำนวยการกองคลัง"
+  },
+  {
+   "seq": 302,
+   "type": "image",
+   "region": "body",
+   "file": "images/146.jpg",
+   "width": 107,
+   "height": 127,
+   "bytes": 13909
+  },
+  {
+   "seq": 303,
+   "type": "text",
+   "region": "body",
+   "text": "นายทรงเกียรติ เดชสม"
+  },
+  {
+   "seq": 304,
+   "type": "text",
+   "region": "body",
+   "text": "ผู้อำนวยการกองช่าง"
+  },
+  {
+   "seq": 305,
+   "type": "text",
+   "region": "body",
+   "text": "โทร.080-6904168"
+  },
+  {
+   "seq": 306,
+   "type": "image",
+   "region": "body",
+   "file": "images/147.gif",
+   "width": 140,
+   "height": 180,
+   "bytes": 8001
+  },
+  {
+   "seq": 307,
+   "type": "text",
+   "region": "body",
+   "text": "-ว่าง-"
+  },
+  {
+   "seq": 308,
+   "type": "text",
+   "region": "body",
+   "text": "ผู้อำนวยการกองการศึกษา ศาสนา และวัฒนธรรม"
+  },
+  {
+   "seq": 309,
+   "type": "image",
+   "region": "body",
+   "file": "images/148.png",
+   "width": 601,
+   "height": 262,
+   "bytes": 39156
+  },
+  {
+   "seq": 310,
+   "type": "image",
+   "region": "body",
+   "file": "images/149.png",
+   "width": 250,
+   "height": 90,
+   "bytes": 13604
+  },
+  {
+   "seq": 311,
+   "type": "image",
+   "region": "body",
+   "file": "images/150.png",
+   "width": 250,
+   "height": 90,
+   "bytes": 11957
+  },
+  {
+   "seq": 312,
+   "type": "image",
+   "region": "body",
+   "file": "images/151.png",
+   "width": 72,
+   "height": 64,
+   "bytes": 3895
+  },
+  {
+   "seq": 313,
+   "type": "image",
+   "region": "body",
+   "file": "images/152.png",
+   "width": 77,
+   "height": 64,
+   "bytes": 4324
+  },
+  {
+   "seq": 314,
+   "type": "image",
+   "region": "body",
+   "file": "images/153.png",
+   "width": 77,
+   "height": 64,
+   "bytes": 10416
+  },
+  {
+   "seq": 315,
+   "type": "placeholder",
+   "kind": "iframe",
+   "region": "body",
+   "src": "https://www.google.com/maps/embed?pb=!1m14!1m8!1m3!1d7903.036059308436!2d99.909117!3d7.945296999999999!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x30528a0c3ed10cb1%3A0xa0898ba45bcb83b6!2z4Lit4LiH4LiE4LmM4LiB4Liy4Lij4Lia4Lij4Li04Lir4Liy4Lij4Liq4LmI4Lin4LiZ4LiV4Liz4Lia4Lil4Lin4Lix4LiH4Lit4LmI4Liy4LiH!5e0!3m2!1sth!2sth!4v1723088771945!5m2!1sth!2sth",
+   "title": null
+  },
+  {
+   "seq": 316,
+   "type": "image",
+   "region": "body",
+   "file": "images/154.png",
+   "width": 70,
+   "height": 70,
+   "bytes": 8564
+  },
+  {
+   "seq": 317,
+   "type": "text",
+   "region": "body",
+   "text": "อบต.วังอ่าง สวัสดีค่ะ"
+  }
+ ]
+}
