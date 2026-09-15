@@ -1,0 +1,6 @@
+{
+  "_note": "map loader section text (people.json[].section, or page title) -> exact visible option text of the backend department select. Unmapped sections upload anyway with blanks (created-partial) unless --strict-sections.",
+  "map": {
+    "คณะผู้บริหาร": "คณะผู้บริหาร"
+  }
+}

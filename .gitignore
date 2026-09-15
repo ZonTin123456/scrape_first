@@ -1,3 +1,9 @@
 out/
 
 **node_modules/
+
+# runtime artifacts (bloat — never push)
+uploader/shots/
+uploader/report-*.json
+uploader/verify-*.json
+uploader/field-dump.json
