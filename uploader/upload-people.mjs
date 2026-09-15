@@ -4,7 +4,7 @@
 // Usage:
 //   node upload-people.mjs --from out/<slug>/people.json --backend https://host [--port 9444] [--save] [--limit N] [--map uploader/maps/<host>.json]
 //   Login: reuse the logged-in Chrome on --port (no passwords stored).
-// Backend rule: phone goes into รายละเอียด (p_detail); skipped when absent.
+// Backend rule: phone + trailing note go into รายละเอียด (p_detail) joined with <br>; skipped when both absent.
 import { chromium } from "playwright-core";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, basename } from "node:path";
@@ -79,6 +79,8 @@ const fill = (s) => String(s || "").replace("{backend}", BACKEND);
 let listUrl = null; // set after fieldMap final (ephemeral automap may fill it)
 const norm = (s) => String(s || "").trim().normalize("NFC");
 const normSectionMap = Object.fromEntries(Object.entries(sectionMap).map(([k, v]) => [norm(k), v]));
+// detail (รายละเอียด) = phone + trailing note lines; backend renders <br> as breaks.
+const detailVal = (p) => [p.phone, p.note].filter((v) => v != null && v !== "").join("<br>") || null;
 const sectionEntry = (sec) => {
   if (!sec || !mapMeta?.map?.sections) return null;
   const keys = Object.keys(mapMeta.map.sections);
@@ -203,7 +205,12 @@ try {
           }
           if (item.action && item.action.startsWith("fill:")) {
             const key = item.action.slice(5);
-            const val = key === "photo" ? photoAbs : key === "section" ? deptOption : p[key];
+            // STS backends map logical "phone" straight into the detail box
+            // (#p_detail) with no separate fill:detail item — compose there.
+            const hasDetailItem = inv.some((x) => x && x.action === "fill:detail");
+            const val = key === "photo" ? photoAbs : key === "section" ? deptOption
+              : key === "detail" ? detailVal(p)
+              : key === "phone" && !hasDetailItem ? detailVal(p) : p[key];
             if (val == null || val === "") continue;
             if (!item.selector) { unmapped.push(item.label || item.name || key); continue; }
             if (key === "photo") await page.setInputFiles(item.selector, val, { timeout: 15000 });
@@ -221,10 +228,11 @@ try {
         if (F.order?.selector && p.order != null) {
           await page.fill(F.order.selector, String(p.order), { timeout: 10000 }).catch(() => null);
         }
-        if (F.detail?.selector && p.phone) {
-          await page.fill(F.detail.selector, p.phone, { timeout: 10000 });
+        const detailText = detailVal(p);
+        if (F.detail?.selector && detailText) {
+          await page.fill(F.detail.selector, detailText, { timeout: 10000 });
         }
-        if (p.phone && F.phone?.selector && !/^TBD/.test(F.phone.selector)) {
+        if (p.phone && F.phone?.selector && !/^TBD/.test(F.phone.selector) && F.phone.selector !== F.detail?.selector) {
           await page.fill(F.phone.selector, p.phone, { timeout: 10000 });
         }
         if (deptOption && !perSection) {

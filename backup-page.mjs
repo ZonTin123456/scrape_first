@@ -100,8 +100,10 @@ function resolveSlug(url, outDir = OUT) {
   }
   return `${base}-${Date.now()}`;
 }
-// caption = next <=2 text nodes before next image/placeholder/iframe. Skips chrome-mismatched text.
-// phone = first tel:-flagged (or phone-pattern) text within next <=4 texts. section = nearest preceding H1-H3.
+// caption = next 2 non-phone texts (name, position). phone = first tel:-flagged
+// (or phone-pattern) text in the same run. extras = every trailing text after
+// those (until the next image/placeholder/iframe), minus junk tails, joined
+// with <br> into note for the backend detail field. section = nearest preceding H1-H3.
 const PHONE_RE = /^[+\d][\d\s\-().]{7,}$/;
 const isPhoneText = (t) => {
   if (!t || !PHONE_RE.test(t)) return false;
@@ -115,6 +117,12 @@ const SEC_FROM_POSITION = [
 ];
 // division header: สำนัก/กอง/ฝ่าย/แผนก/งาน + short name (section context for following images)
 const VACANT_RE = /^(ว่าง|.*ว่าง.*|ไม่มีผู้ดำรงตำแหน่ง)$/;
+// junk-only tails (punct separators, widget tails): extras stop here.
+const JUNK_TEXT_RE = /^[\s.,·•\-–—_|/\\:;…!?()[\]{}"']+$/;
+const isJunkText = (t) => {
+  const s = String(t || "").trim();
+  return s.length < 2 || JUNK_TEXT_RE.test(s);
+};
 const isDivisionText = (t) => {
   if (!t) return false;
   const s = t.replace(/\s+/g, " ").trim();
@@ -138,7 +146,7 @@ function attachCaptions(kept, pageSection = null) {
     }
     if (n.type !== "image") continue;
     const texts = [];
-    for (let j = i + 1; j < kept.length && texts.length < 4; j++) {
+    for (let j = i + 1; j < kept.length; j++) {
       const m = kept[j];
       if (m.type !== "text") break; // stop at next image/placeholder/iframe-sameorigin
       if (m.chrome !== n.chrome) continue; // don't mix chrome text into content caption
@@ -153,6 +161,19 @@ function attachCaptions(kept, pageSection = null) {
     n.caption_next = (rest.slice(0, 2));
     n.caption_text = n.caption_next.join(" | ");
     n.phone = phone;
+    // extras: trailing texts after the caption lines + phone, in DOM order.
+    // Stops at the first junk-only tail (punct separators, widget tails).
+    const extras = [];
+    {
+      let seenCap = 0;
+      for (const m of texts) {
+        if (phone !== null && m.text === phone) continue;
+        if (seenCap < n.caption_next.length) { seenCap++; continue; }
+        if (isJunkText(m.text)) break;
+        extras.push(m.text);
+      }
+    }
+    n.note = extras.length ? extras.join("<br>") : null;
     // header graphic? (division name as caption, no position/phone)
     const headName = n.caption_next[0];
     if (headName && !n.caption_next[1] && !phone && isDivisionText(headName)) {
@@ -186,11 +207,12 @@ function buildPeople(kept, url, photoKey) {
   const imgs = kept.filter((n) => n.type === "image");
   return imgs.map((n, idx) => ({
     seq: n.seq,
-    order: idx + 1,
+    order: idx, // 0-based DOM sequence: backend ตำแหน่งภาพ starts at 0
     photo: (photoKey === "file" ? (n.file || n.src || null) : (n.src || null)),
     name: n.caption_next?.[0] || null,
     position: n.caption_next?.[1] || null,
     phone: n.phone || null,
+    note: n.note || null,
     section: n.section || null, section_from: n.section_from || null,
     likely_header: !!n.likely_header, vacant: !!n.vacant,
     width: n.width, height: n.height,
@@ -597,7 +619,7 @@ async function scrapeOne(c, url, timeoutMs, imageSeqFilter = null) {
     extractor_version: VERSION, counts: { ...stats, imgErrors, people: people.length },
     rules: ["text-only chrome", "image denylist + <=70B filter", "text denylist (goog-te, เลือกภาษา)",
       `dedupe by absolute URL`, `min size ${MIN_PX}px`, "cross-origin iframes -> placeholder",
-      "UTF-8 JSON output", `image retry x${RETRY}`, "caption_next = next <=2 non-phone texts", "phone = tel: link or phone-pattern within next 4 texts", "section = H1-H3 heading > --page-sections url > position inference", `slug unique (${slug})`,
+      "UTF-8 JSON output", `image retry x${RETRY}`, "caption_next = next 2 non-phone texts", "phone = first tel:/phone-pattern text in run", "note = trailing texts joined with <br> (junk tails cut)", "order = 0-based DOM sequence", "section = H1-H3 heading > --page-sections url > position inference", `slug unique (${slug})`,
       `image via ${VIA}${c._cfChallenge ? " (cf-challenge seen: cdp forced)" : ""}`, `cf-wait ${CF_WAIT_S}s${CF_MANUAL ? "+manual" : ""}`, `cdp :${PORT}`] };
   if (imageSeqFilter) { manifest.picked = true; }
   writeFileSync(join(dir, "content.json"), JSON.stringify({ manifest, nodes: kept }, null, 1), "utf8");
@@ -618,7 +640,7 @@ async function probeOne(c, url, timeoutMs) {
     alt: n.alt || null, fullres_candidate: n.fullres_candidate || null,
     caption_next: n.caption_next || [], caption_text: n.caption_text || "",
     name: n.caption_next?.[0] || null, position: n.caption_next?.[1] || null,
-    phone: n.phone || null, section: n.section || null, section_from: n.section_from || null,
+    phone: n.phone || null, note: n.note || null, section: n.section || null, section_from: n.section_from || null,
     likely_header: !!n.likely_header, vacant: !!n.vacant,
   }));
   const probe = { source_url: url, source_title: title, captured_at: new Date().toISOString(),
@@ -700,10 +722,11 @@ function pickImagesHTML(url, title, slug, images) {
   const cards = images.map((im, i) => {
     const who = [im.name, im.position].filter(Boolean).join(" | ") || im.alt || "(ไม่มีชื่อใต้รูป)";
     const extra = [im.section ? `แผนก: ${esc(im.section)}` : "", im.phone ? `โทร: ${esc(im.phone)}` : ""].filter(Boolean).join("<br>");
+    const noteLine = im.note ? `<br><small>${String(im.note).split("<br>").map(esc).join("<br>")}</small>` : "";
     const flag = im.likely_header ? "<br><i>ป้ายแผนก (ข้ามอัตโนมัติ)</i>" : im.vacant ? "<br><i>เก้าอี้ว่าง</i>" : (!im.name ? "<br><i>ไม่มีชื่อ</i>" : "");
     const checked = (im.likely_header || !im.name) ? "" : "checked";
     return `<figure><img src="${esc(im.src)}" loading="lazy" onerror="this.outerHTML='<div style=\\'padding:20px;background:#eee\\'>โหลดพรีวิวไม่ได้<br>${im.width}x${im.height}</div>'">`
-    + `<figcaption>#${i} seq=${im.seq} ${im.width}x${im.height}<br><b>${esc(who)}</b>${extra ? `<br>${extra}` : ""}${flag}`
+    + `<figcaption>#${i} seq=${im.seq} ${im.width}x${im.height}<br><b>${esc(who)}</b>${extra ? `<br>${extra}` : ""}${noteLine}${flag}`
     + `<br><label><input type="checkbox" data-seq="${im.seq}" ${checked}> โหลดรูปนี้</label></figcaption></figure>`;
   }).join("\n");
   return `<!doctype html><html lang="th"><meta charset="utf-8"><title>เลือกรูป — ${esc(title)}</title>
@@ -836,7 +859,8 @@ function reviewHTML(sel, nodes, slug) {
     const n = bySeq.get(s.seq);
     const cap = n?.caption_text || "";
     const phone = n?.phone ? `<br>โทร: ${esc(n.phone)}` : "";
-    return `<figure><img src="../${s.file}" loading="lazy"><figcaption>#${i} seq=${s.seq} ${s.file.split("/").pop()}${cap ? `<br><b>${esc(cap)}</b>` : ""}${phone}<br><label><input type="checkbox" data-seq="${s.seq}" data-file="${esc(s.file)}" checked> เก็บ (รูปคนชัด)</label></figcaption></figure>`;
+    const noteLine = n?.note ? `<br><small>${String(n.note).split("<br>").map(esc).join("<br>")}</small>` : "";
+    return `<figure><img src="../${s.file}" loading="lazy"><figcaption>#${i} seq=${s.seq} ${s.file.split("/").pop()}${cap ? `<br><b>${esc(cap)}</b>` : ""}${phone}${noteLine}<br><label><input type="checkbox" data-seq="${s.seq}" data-file="${esc(s.file)}" checked> เก็บ (รูปคนชัด)</label></figcaption></figure>`;
   }).join("\n");
   return `<!doctype html><html lang="th"><meta charset="utf-8"><title>เลือกรูปคน — ติ๊กเฉพาะรูปที่เอา</title>
 <style>body{font-family:system-ui;margin:16px}figure{display:inline-block;width:220px;vertical-align:top;margin:8px}img{width:100%}button{font-size:18px;padding:8px 16px}</style>
@@ -884,7 +908,7 @@ function finalize(dir) {
     try {
       const people = JSON.parse(readFileSync(peoplePath, "utf8"));
       const pruned = people.filter((p) => keep.has(p.seq));
-      pruned.forEach((p, idx) => { p.order = idx + 1; });
+      pruned.forEach((p, idx) => { p.order = idx; });
       writeFileSync(peoplePath, JSON.stringify(pruned, null, 1), "utf8");
       cj.manifest.counts.people = pruned.length;
       writeFileSync(cjPath, JSON.stringify(cj, null, 1), "utf8");

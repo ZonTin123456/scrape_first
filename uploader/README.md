@@ -34,5 +34,5 @@ node upload-people.mjs --map uploader/maps/<host>.json --from ..\out\<slug>\peop
 - รูปหาย -> `failed` ไปต่อคนถัดไป / section ไม่ได้ map -> อัปโหลดเลยเว้นว่าง (`created-partial`, ไม่เดาค่า) / `--strict-sections` กลับไปโหมดปฏิเสธทั้งล็อตแบบเดิม
 - ชื่อว่าง -> อัปโหลดเลยเว้นว่าง (`created-partial`) — ติ๊กแล้วได้ลงทุกแถว เหลือแค่รูปหายที่เป็น `failed`
 - ชื่อมีบนหน้าลิสต์แล้ว -> `skipped-exists`
-- เบอร์โทรลงช่อง `รายละเอียด` (`p_detail`) ถ้าไม่มีเบอร์เว้นว่างไว้ / `ตำแหน่งภาพ` <- order
+- เบอร์โทร + ข้อความต่อท้ายลงช่อง `รายละเอียด` (`p_detail`) ต่อด้วย `<br>` ถ้าไม่มีทั้งคู่เว้นว่างไว้ / `ตำแหน่งภาพ` <- order (0-based ตามลำดับหน้าเว็บ)
 - report: `report-<slug>.json` + รูป proof `shots/<slug>/`

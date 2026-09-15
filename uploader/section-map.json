@@ -1,6 +1,0 @@
-{
-  "_note": "map loader section text (people.json[].section, or page title) -> exact visible option text of the backend department select. Unmapped sections are SKIPPED per person (never guessed).",
-  "map": {
-    "คณะผู้บริหาร": "คณะผู้บริหาร"
-  }
-}
