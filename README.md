@@ -1,13 +1,16 @@
 # คำสั่งเดียวจบสาย (เลือก/เรียงขั้นได้, ข้ามขั้นได้):
 node pipeline.mjs --from urls.txt
 node pipeline.mjs --from urls.txt --steps probe,run,finalize,upload --yes --limit 3
-# --serve เปิดเองอัตโนมัติให้ติ๊กในเบราว์เซอร์ (ปุ่ม "บันทึกเลย" เขียนไฟล์ตรง)
+# ขั้นคน (pick-links/master) หยุดรอ Enter — เปิดไฟล์ HTML จากดิสก์ ติ๊ก กด "บันทึกทับไฟล์เดิม"
 
 # 0. เปิดแท็บหลังบ้านเว็บนั้นทิ้งไว้ใน Chrome (login ค้าง)
+
 # 1. ดูดต้นทาง
 node backup-page.mjs --probe --from urls.txt
-node backup-page.mjs --serve   # เปิด http://127.0.0.1:9334/ ติ๊กแล้วกด "บันทึกเลย" (ไม่ต้อง export ทับ)
-# ติ๊ก pick-links.html + pick-images.html แล้ว
+# ติ๊กรวมทีเดียว: เปิด out/_staging/master-pick.html ติ๊ก กด "บันทึกทับไฟล์เดิม" (master.json)
+node backup-page.mjs --apply-master out/_staging/master.json
+# หรือติ๊กแยกหน้า: pick-links.html + pick-images.html (ปุ่ม File Picker บันทึกทับไฟล์เดิมได้เลย)
+# ติ๊กแล้ว
 node backup-page.mjs --run --from out/_staging/picked-links.json
 
 # 2. ยิงเลย (หา port+backend+ฟอร์มเอง)

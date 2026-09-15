@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // pipeline: one command for the whole chain, steps in any order you choose.
-//   node pipeline.mjs --from urls.txt [--steps probe,pick-links,run,pick-images,finalize,upload]
-// Human steps (pick-links / pick-images / review-before-finalize) pause for you
-// to tick in the browser; --serve is started automatically so "บันทึกเลย" writes
-// straight to disk. --yes accepts all defaults and skips every pause.
+//   node pipeline.mjs --from urls.txt [--steps probe,pick-links,master,apply-master,run,finalize,upload]
+// Human steps pause for you to tick pages opened straight from disk
+// (File Picker buttons save over the real files, no server needed).
+// --yes accepts all defaults and skips every pause.
 // Needs: Node 18+, Chrome on CDP (see backup-page.mjs --help).
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,14 +19,14 @@ const opt = (n, d) => {
 const has = (n) => argv.includes(n);
 const fail = (m) => { console.error("pipeline: " + m); process.exit(1); };
 if (!argv.length || has("-h") || has("--help")) {
-  console.log("Usage: node pipeline.mjs --from urls.txt [--steps probe,pick-links,run,pick-images,finalize,upload] [--out ./out]");
+  console.log("Usage: node pipeline.mjs --from urls.txt [--steps probe,pick-links,master,apply-master,run,finalize,upload] [--out ./out]");
   console.log("  backup-page flags passed through: --port --timeout --via --cf-wait --no-cf-manual");
   console.log("  upload flags passed through: --backend --map --limit --save --i-verified");
-  console.log("  --serve-port 9334 (auto-started for ticking; --no-serve to disable)");
   console.log("  --yes: accept defaults, skip all human pauses");
+  console.log("  (pick-images step still available for per-page ticking instead of master)");
   process.exit(2);
 }
-const ALL = ["probe", "pick-links", "run", "pick-images", "finalize", "upload"];
+const ALL = ["probe", "pick-links", "master", "apply-master", "run", "pick-images", "finalize", "upload"];
 const steps = String(opt("--steps", ALL.join(","))).split(",").map((s) => s.trim()).filter(Boolean);
 for (const s of steps) if (!ALL.includes(s)) fail(`unknown step ${s} (want ${ALL.join("|")})`);
 const FROM = opt("--from", null);
@@ -57,31 +57,23 @@ function pause(msg) {
 }
 const readJson = (p) => JSON.parse(readFileSync(p, "utf8"));
 
-let serveChild = null;
-function serveStart() {
-  if (has("--no-serve") || serveChild) return;
-  const port = opt("--serve-port", "9334");
-  serveChild = spawn("node", ["backup-page.mjs", "--serve", "--serve-port", port, "--out", OUT],
-    { cwd: HERE, stdio: "ignore", detached: false });
-  console.log(`serve: tick pages at http://127.0.0.1:${port}/ ("บันทึกเลย" writes straight to disk)`);
-}
-function serveStop() { try { serveChild?.kill(); } catch { /* noop */ } serveChild = null; }
-process.on("SIGINT", () => { serveStop(); process.exit(130); });
-
-try {
-  for (const s of steps) {
+for (const s of steps) {
     if (s === "probe") {
       sh(["backup-page.mjs", "--probe", "--from", FROM, "--out", OUT, ...BP]);
     } else if (s === "pick-links") {
-      serveStart();
-      pause(`ชั้น 1 — ติ๊กลิงก์ใน pick-links.html แล้วกด "บันทึกเลย" เสร็จแล้วกลับมากด Enter`);
+      pause(`ชั้น 1 — เปิด ${stagingFile("pick-links.html")} ติ๊กลิงก์ กด "บันทึกทับไฟล์เดิม" แล้วกลับมากด Enter`);
+    } else if (s === "master") {
+      pause(`ติ๊กรวม — เปิด ${stagingFile("master-pick.html")} ติ๊กครั้งเดียว กด "บันทึกทับไฟล์เดิม" (master.json) แล้วกลับมากด Enter`);
+    } else if (s === "apply-master") {
+      const master = stagingFile("master.json");
+      if (!existsSync(master)) fail(`missing ${master} (probe writes a default one — run probe + master first)`);
+      sh(["backup-page.mjs", "--apply-master", master, "--out", OUT]);
     } else if (s === "run") {
       const picked = stagingFile("picked-links.json");
       if (!existsSync(picked)) fail(`missing ${picked} (run probe + pick-links first, or re-add those steps)`);
       sh(["backup-page.mjs", "--run", "--from", picked, "--out", OUT, ...BP]);
     } else if (s === "pick-images") {
-      serveStart();
-      pause(`ชั้น 2 — ติ๊กรูปในแต่ละ pick-images.html แล้วกด "บันทึกเลย" เสร็จแล้วกลับมากด Enter`);
+      pause(`ชั้น 2 — เปิดแต่ละ pick-images.html ใน ${stagingFile()} ติ๊ก กด "บันทึกทับไฟล์เดิม" แล้วกลับมากด Enter`);
     } else if (s === "finalize") {
       const summary = join(HERE, OUT, "summary.json");
       let dirs = [];
@@ -106,8 +98,5 @@ try {
         sh(["uploader/upload-people.mjs", "--from", people, ...UP], join(HERE, "uploader"));
       }
     }
-  }
-} finally {
-  serveStop();
 }
 console.log("\npipeline: done.");
