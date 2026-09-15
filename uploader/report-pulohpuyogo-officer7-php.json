@@ -1,0 +1,20 @@
+{
+ "generated_at": "2026-09-15T08:23:33.983Z",
+ "mode": "save",
+ "backend": "https://pulohpuyo.klongsaikhaw.go.th",
+ "from": "out/pulohpuyogo-officer7-php/people.json",
+ "slug": "pulohpuyogo-officer7-php",
+ "total": 1,
+ "by_status": {
+  "created": 1
+ },
+ "results": [
+  {
+   "seq": 175,
+   "order": 1,
+   "name": "นายธีรยุทธ กะลูแป",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-officer7-php\\001-seq175.png"
+  }
+ ]
+}

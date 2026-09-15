@@ -46,7 +46,86 @@ export async function dumpForm(page) {
   });
 }
 
-export function classify(host, dumped) {
+// Field inventory: every fillable element on the person form becomes DATA
+// (action fill:<peopleKey> | const:<json> | click | skip), so new templates
+// need map review — never code patches. Unclassified fillables => skip + unmapped:true (loud in report).
+export function buildInventory(dumped, fields) {
+  // scope to the form holding the photo input (excludes row toggles/tables/groups)
+  let photoFi = null;
+  for (const f of dumped.forms) {
+    const fe = f.elements.findIndex((e) => (e.type || "").toLowerCase() === "file");
+    if (fe >= 0) { photoFi = f.elements[fe].fi; break; }
+  }
+  const matchField = (e) => {
+    for (const [key, m] of Object.entries(fields || {})) {
+      if (!m || (!m.selector && !m.strategy)) continue;
+      if (m.selector && fieldMatchesSel(m.selector, e)) return { key, ...m };
+    }
+    return null;
+  };
+  const inv = [];
+  for (const f of dumped.forms) {
+    for (const e of f.elements) {
+      if (photoFi != null && e.fi !== photoFi) continue;
+      const m = matchField(e);
+      if (m) { inv.push(invEntry(e, actionFor(m.key, m), false)); continue; }
+      const tag = e.tag, type = (e.type || "").toLowerCase();
+      if (tag === "INPUT" && ["hidden", "submit", "button", "reset", "image"].includes(type)) {
+        if (type === "hidden") continue; // csrf tokens etc.
+        inv.push(invEntry(e, type === "submit" ? "click-candidate" : "skip", type !== "submit"));
+        continue;
+      }
+      if (tag === "BUTTON") { inv.push(invEntry(e, "click-candidate", true)); continue; }
+      if (tag === "INPUT" && ["text", "search", "tel", "number", "email", "url", "date"].includes(type)) {
+        inv.push(invEntry(e, "skip", true)); continue;
+      }
+      if (tag === "TEXTAREA" || tag === "SELECT") { inv.push(invEntry(e, "skip", true)); continue; }
+      if (tag === "INPUT" && ["checkbox", "radio"].includes(type)) { inv.push(invEntry(e, "skip", true)); continue; }
+      if (tag === "INPUT" && type === "file") { inv.push(invEntry(e, "skip", true)); continue; }
+    }
+  }
+  // save strategy (no concrete selector): resolve at upload time — unless the
+  // photo form already has a concrete submit (promote it to the click item)
+  const save = fields?.save;
+  const photoSubmit = inv.find((i) => i.action === "click-candidate" && i.type === "submit" && (photoFi == null || i.fi === photoFi));
+  if (photoSubmit) { photoSubmit.action = "click"; photoSubmit.unmapped = false; }
+  else if (save && save.strategy && !inv.some((i) => i.action === "click")) {
+    inv.push({ selector: null, strategy: save.strategy, tag: "BUTTON", type: "submit", label: save.label || null, action: "click", unmapped: false, fi: photoFi });
+  }
+  return inv;
+}
+
+// match a known field selector against a dumped element (exact, name-attr, or id form)
+function fieldMatchesSel(fieldSel, e) {
+  if (!fieldSel) return false;
+  if (fieldSel === e.selector) return true;
+  let m = /^([a-z]+)\[name="([^"]+)"\]$/i.exec(fieldSel);
+  if (m && (e.tag || "").toLowerCase() === m[1].toLowerCase() && e.name === m[2]) return true;
+  m = /^#(.+)$/.exec(fieldSel);
+  if (m && e.id === m[1]) return true;
+  return false;
+}
+
+function invEntry(e, action, unmapped) {
+  return { selector: e.selector || null, tag: e.tag, type: e.type || null, name: e.name || null, label: (e.label && e.label.text) || null, action, unmapped: !!unmapped, fi: e.fi ?? null };
+}
+
+function actionFor(key, m) {
+  switch (key) {
+    case "photo": return "fill:photo";
+    case "name": return "fill:name";
+    case "position": return "fill:position";
+    case "phone": return "fill:phone";
+    case "detail": return "fill:phone"; // STS rule: phone goes to รายละเอียด; edit in map if different
+    case "order": return "fill:order";
+    case "department": return m.kind === "select" ? "fill:section" : "fill:section";
+    case "publish": return "const:true";
+    case "save": return "click";
+    default: return "skip";
+  }
+}
+
+function classify(host, dumped) {
   const els = dumped.forms.flatMap((f) => f.elements.map((e) => ({ ...e, formAction: f.action })));
   const has = (t, ...keys) => { const s = (t || "").toLowerCase(); return keys.some((k) => s.includes(k)); };
   const attr = (e) => `${e.name || ""} ${e.id || ""}`.toLowerCase();
@@ -167,14 +246,22 @@ export async function automap(context, host, sections, opts = {}) {
         out.push({ deptId: m[1], personUrl: a.href, rowText });
       }
       const seen = new Set();
-      return out.filter((d) => (seen.has(d.deptId) ? false : (seen.add(d.deptId), true))).slice(0, 6);
+      return out.filter((d) => (seen.has(d.deptId) ? false : (seen.add(d.deptId), true))).slice(0, 20);
     });
     rec.deptRows = deptRows;
+    // prioritize rows matching requested sections (new divisions live past the cap)
+    const normLo = (s) => String(s || "").trim().normalize("NFC").toLowerCase();
+    const wanted = sections.map(normLo);
+    const ranked = [...deptRows].sort((a, b) => {
+      const am = wanted.some((w) => w && normLo(a.rowText).includes(w)) ? 0 : 1;
+      const bm = wanted.some((w) => w && normLo(b.rowText).includes(w)) ? 0 : 1;
+      return am - bm;
+    }).slice(0, 6);
     // profile-first: dump first dept form, match profiles before full classify
     const profiles = loadProfiles();
     const sectionsMap = {};
     let profileName = null;
-    for (const d of deptRows) {
+    for (const d of ranked) {
       await page.goto(d.personUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
       await page.waitForTimeout(2000);
       const dumped = await dumpForm(page);
@@ -188,7 +275,7 @@ export async function automap(context, host, sections, opts = {}) {
         const c = classify(host, dumped);
         fields = c.fields; ambiguous = c.ambiguous;
       }
-      sectionsMap[d.rowText || `dept-${d.deptId}`] = { deptId: d.deptId, personUrl: dumped.url, fields, ambiguous, profile: matched?.name || null };
+      sectionsMap[d.rowText || `dept-${d.deptId}`] = { deptId: d.deptId, personUrl: dumped.url, fields, ambiguous, profile: matched?.name || null, inventory: buildInventory(dumped, fields) };
     }
     const firstKey = Object.keys(sectionsMap)[0];
     const firstFields = firstKey ? sectionsMap[firstKey].fields : classify(host, { forms: [], selects: [], buttons: [] }).fields;
@@ -205,6 +292,15 @@ export async function automap(context, host, sections, opts = {}) {
     if (write && mapsDir) {
       mkdirSync(mapsDir, { recursive: true });
       const outPath = join(mapsDir, `${slugOf(host)}.json`);
+      // merge with existing map (never drop previously known sections)
+      let prev = null;
+      try { prev = JSON.parse(readFileSync(outPath, "utf8")); } catch { /* first run */ }
+      const mergedSections = { ...((prev && prev.map && prev.map.sections) || {}), ...sectionsMap };
+      const firstKey = Object.keys(mergedSections)[0];
+      content.map.sections = mergedSections;
+      content.map.fields = firstKey ? mergedSections[firstKey].fields : content.map.fields;
+      content.map.department_options = Object.keys(mergedSections);
+      content.merged_from = prev ? prev.detected_at || true : null;
       writeFileSync(outPath, JSON.stringify(content, null, 1), "utf8");
       rec.mapPath = outPath;
     }

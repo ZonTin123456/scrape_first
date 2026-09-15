@@ -1,14 +1,14 @@
 {
  "_status": "profile:sts-personnel-v1 - REVIEW then use",
  "host": "https://pulohpuyo.klongsaikhaw.go.th",
- "detected_at": "2026-09-15T06:00:45.122Z",
+ "detected_at": "2026-09-15T08:13:09.532Z",
  "profile": "sts-personnel-v1",
  "sections_probed": [
-  "สำนักปลัด"
+  "กองศึกษา ศาสนาและวัฒนธรรม"
  ],
  "filter": {
   "title": "องค์การบริหารส่วนตำบลปุโละปุโย",
-  "forms": 2,
+  "forms": 3,
   "filterCandidates": [
    {
     "action": "https://pulohpuyo.klongsaikhaw.go.th/personal",
@@ -22,18 +22,79 @@
   "personImgs": [],
   "links": [
    "https://pulohpuyo.klongsaikhaw.go.th/personal",
-   "https://pulohpuyo.klongsaikhaw.go.th/personal/delete/9",
-   "https://pulohpuyo.klongsaikhaw.go.th/personal/person/9",
-   "https://pulohpuyo.klongsaikhaw.go.th/personal/9"
+   "https://pulohpuyo.klongsaikhaw.go.th/personal/delete/13",
+   "https://pulohpuyo.klongsaikhaw.go.th/personal/delete/14",
+   "https://pulohpuyo.klongsaikhaw.go.th/personal/delete/15",
+   "https://pulohpuyo.klongsaikhaw.go.th/personal/delete/19",
+   "https://pulohpuyo.klongsaikhaw.go.th/personal/delete/20",
+   "https://pulohpuyo.klongsaikhaw.go.th/personal/delete/21",
+   "https://pulohpuyo.klongsaikhaw.go.th/personal/delete/22",
+   "https://pulohpuyo.klongsaikhaw.go.th/personal/delete/23",
+   "https://pulohpuyo.klongsaikhaw.go.th/personal/delete/24"
   ],
-  "bodyHead": "สำนักงานเทศบาลตำบลคลองทรายขาว\nเจ้าหน้าที่ดูแลเว็บไซต์\nหน้าแรก\nระบบควบคุมเมนู\nระบบควบคุมข่าว\nระบบควบคุมภาพสไลค์\nระบบควบคุมภาพบุคลากร\nประมวลผลภาพกิจกรรม\nวีดีโอกิจกรรม\nแหล่งท่องเที่ยว\nผลิตภัณฑ์ตำบล\nจดหมายข่าว\nส่วนควบคุมวีดีโอ\nส่วนควบคุมแบนเนอร์\nระบบควบคุมลิงค์\nOpen Data\nปฏิทินกิจกรรม\nคำถามที่พบบ่อย FAQ\nตั้งค่าเว็บไซต์\nChatbot\nจัดการสถิติ (Manual)\nระบบควบคุมภาพบุคลากร\nย้อนกลับ\n เพิ่มข้อมูลแผนกสำเร็จ\nชื่อแผนก\nเผยแพร่\n\tชื่อแผนก\tควบคุม\n\tสำนักปลัด\t\n\n\nลบ",
-  "filterNote": "section \"สำนักปลัด\" gave no person rows; dept rows found: 1"
+  "bodyHead": "สำนักงานเทศบาลตำบลคลองทรายขาว\nเจ้าหน้าที่ดูแลเว็บไซต์\nหน้าแรก\nระบบควบคุมเมนู\nระบบควบคุมข่าว\nระบบควบคุมภาพสไลค์\nระบบควบคุมภาพบุคลากร\nประมวลผลภาพกิจกรรม\nวีดีโอกิจกรรม\nแหล่งท่องเที่ยว\nผลิตภัณฑ์ตำบล\nจดหมายข่าว\nส่วนควบคุมวีดีโอ\nส่วนควบคุมแบนเนอร์\nระบบควบคุมลิงค์\nOpen Data\nปฏิทินกิจกรรม\nคำถามที่พบบ่อย FAQ\nตั้งค่าเว็บไซต์\nChatbot\nจัดการสถิติ (Manual)\nระบบควบคุมภาพบุคลากร\nย้อนกลับ\n เพิ่มข้อมูลแผนกสำเร็จ\nชื่อแผนก\nเผยแพร่\n\tชื่อแผนก\tควบคุม\n\tสภา อบต.\t\n\n\tคณะผู้บริหาร\t\n\n\tหัวหน้าส่วนราชการ\t\n\n\tสำนักปลัด\t\n\n\tกองค",
+  "filterNote": "section \"กองศึกษา ศาสนาและวัฒนธรรม\" gave no person rows; dept rows found: 4"
  },
  "deptRows": [
   {
-   "deptId": "9",
-   "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/9",
+   "deptId": "13",
+   "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/13",
+   "rowText": "สภา อบต."
+  },
+  {
+   "deptId": "14",
+   "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/14",
+   "rowText": "คณะผู้บริหาร"
+  },
+  {
+   "deptId": "15",
+   "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/15",
+   "rowText": "หัวหน้าส่วนราชการ"
+  },
+  {
+   "deptId": "19",
+   "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/19",
    "rowText": "สำนักปลัด"
+  },
+  {
+   "deptId": "20",
+   "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/20",
+   "rowText": "กองคลัง"
+  },
+  {
+   "deptId": "21",
+   "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/21",
+   "rowText": "ส่วนโยธา"
+  },
+  {
+   "deptId": "22",
+   "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/22",
+   "rowText": "กองศึกษา ศาสนาและวัฒนธรรม"
+  },
+  {
+   "deptId": "23",
+   "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/23",
+   "rowText": "กองศึกษา ศาสนาและวัฒนธรรม"
+  },
+  {
+   "deptId": "24",
+   "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/24",
+   "rowText": "กองศึกษา ศาสนาและวัฒนธรรม"
+  },
+  {
+   "deptId": "25",
+   "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/25",
+   "rowText": "กองศึกษา ศาสนาและวัฒนธรรม"
+  },
+  {
+   "deptId": "26",
+   "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/26",
+   "rowText": "กองศึกษา ศาสนาและวัฒนธรรม"
+  },
+  {
+   "deptId": "27",
+   "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/27",
+   "rowText": "กองศึกษา ศาสนาและวัฒนธรรม"
   }
  ],
  "map": {
@@ -95,9 +156,712 @@
    }
   },
   "sections": {
-   "สำนักปลัด": {
-    "deptId": "9",
-    "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/9",
+   "สภา อบต.": {
+    "deptId": "13",
+    "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/13",
+    "fields": {
+     "photo": {
+      "selector": "input[name=\"img_path\"]",
+      "kind": "file",
+      "confidence": "profile",
+      "label": "ภาพ"
+     },
+     "name": {
+      "selector": "input[name=\"p_name\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ชื่อ-สกุล"
+     },
+     "position": {
+      "selector": "input[name=\"p_position\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่ง"
+     },
+     "phone": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "no phone field on STS form (phone goes to detail)"
+     },
+     "detail": {
+      "selector": "input[name=\"p_detail\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "รายละเอียด"
+     },
+     "order": {
+      "selector": "input[name=\"prarent_id\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่งภาพ"
+     },
+     "department": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "department = the person/{id} page itself"
+     },
+     "publish": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "publish = per-row toggle"
+     },
+     "save": {
+      "strategy": "photo-form-submit",
+      "kind": "button",
+      "confidence": "profile",
+      "label": "submit in photo form"
+     }
+    },
+    "ambiguous": [],
+    "profile": "sts-personnel-v1",
+    "inventory": [
+     {
+      "selector": "#file_input",
+      "tag": "INPUT",
+      "type": "file",
+      "name": "img_path",
+      "label": "ภาพ",
+      "action": "skip",
+      "unmapped": true
+     },
+     {
+      "selector": "#p_name",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "p_name",
+      "label": "ชื่อ-สกุล",
+      "action": "skip",
+      "unmapped": true
+     },
+     {
+      "selector": "#p_position",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "p_position",
+      "label": "ตำแหน่ง",
+      "action": "skip",
+      "unmapped": true
+     },
+     {
+      "selector": "#p_detail",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "p_detail",
+      "label": "รายละเอียด",
+      "action": "skip",
+      "unmapped": true
+     },
+     {
+      "selector": "#prarent_id",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "prarent_id",
+      "label": "ตำแหน่งภาพ",
+      "action": "skip",
+      "unmapped": true
+     },
+     {
+      "selector": "form[action=\"https://pulohpuyo.klongsaikhaw.go.th/personal/person/13\"] button[type=\"submit\"]",
+      "tag": "BUTTON",
+      "type": "submit",
+      "name": null,
+      "label": "ตำแหน่งภาพ",
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"submit\"]",
+      "tag": "BUTTON",
+      "type": "submit",
+      "name": null,
+      "label": "ยกเลิก",
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"submit\"]",
+      "tag": "BUTTON",
+      "type": "submit",
+      "name": null,
+      "label": "ยกเลิก",
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"submit\"]",
+      "tag": "BUTTON",
+      "type": "submit",
+      "name": null,
+      "label": "ยกเลิก",
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"submit\"]",
+      "tag": "BUTTON",
+      "type": "submit",
+      "name": null,
+      "label": "ยกเลิก",
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"submit\"]",
+      "tag": "BUTTON",
+      "type": "submit",
+      "name": null,
+      "label": "ยกเลิก",
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"submit\"]",
+      "tag": "BUTTON",
+      "type": "submit",
+      "name": null,
+      "label": "ยกเลิก",
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"submit\"]",
+      "tag": "BUTTON",
+      "type": "submit",
+      "name": null,
+      "label": "ยกเลิก",
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"submit\"]",
+      "tag": "BUTTON",
+      "type": "submit",
+      "name": null,
+      "label": "ยกเลิก",
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"submit\"]",
+      "tag": "BUTTON",
+      "type": "submit",
+      "name": null,
+      "label": "ยกเลิก",
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"submit\"]",
+      "tag": "BUTTON",
+      "type": "submit",
+      "name": null,
+      "label": "ยกเลิก",
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "#default-checkbox",
+      "tag": "INPUT",
+      "type": "checkbox",
+      "name": "per_id[]",
+      "label": null,
+      "action": "skip",
+      "unmapped": true
+     },
+     {
+      "selector": "#default-checkbox",
+      "tag": "INPUT",
+      "type": "checkbox",
+      "name": "per_id[]",
+      "label": null,
+      "action": "skip",
+      "unmapped": true
+     },
+     {
+      "selector": "#default-checkbox",
+      "tag": "INPUT",
+      "type": "checkbox",
+      "name": "per_id[]",
+      "label": null,
+      "action": "skip",
+      "unmapped": true
+     },
+     {
+      "selector": "#default-checkbox",
+      "tag": "INPUT",
+      "type": "checkbox",
+      "name": "per_id[]",
+      "label": null,
+      "action": "skip",
+      "unmapped": true
+     },
+     {
+      "selector": "#default-checkbox",
+      "tag": "INPUT",
+      "type": "checkbox",
+      "name": "per_id[]",
+      "label": null,
+      "action": "skip",
+      "unmapped": true
+     },
+     {
+      "selector": "#default-checkbox",
+      "tag": "INPUT",
+      "type": "checkbox",
+      "name": "per_id[]",
+      "label": null,
+      "action": "skip",
+      "unmapped": true
+     },
+     {
+      "selector": "#default-checkbox",
+      "tag": "INPUT",
+      "type": "checkbox",
+      "name": "per_id[]",
+      "label": null,
+      "action": "skip",
+      "unmapped": true
+     },
+     {
+      "selector": "#default-checkbox",
+      "tag": "INPUT",
+      "type": "checkbox",
+      "name": "per_id[]",
+      "label": null,
+      "action": "skip",
+      "unmapped": true
+     },
+     {
+      "selector": "#default-checkbox",
+      "tag": "INPUT",
+      "type": "checkbox",
+      "name": "per_id[]",
+      "label": null,
+      "action": "skip",
+      "unmapped": true
+     },
+     {
+      "selector": "#default-checkbox",
+      "tag": "INPUT",
+      "type": "checkbox",
+      "name": "per_id[]",
+      "label": null,
+      "action": "skip",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "#group_id",
+      "tag": "INPUT",
+      "type": "number",
+      "name": "group_id",
+      "label": "หมายเลขกลุ่ม",
+      "action": "skip",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"submit\"]",
+      "tag": "BUTTON",
+      "type": "submit",
+      "name": null,
+      "label": null,
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": "button[type=\"button\"]",
+      "tag": "BUTTON",
+      "type": "button",
+      "name": null,
+      "label": "เพิ่มกลุ่ม",
+      "action": "click-candidate",
+      "unmapped": true
+     },
+     {
+      "selector": null,
+      "strategy": "photo-form-submit",
+      "tag": "BUTTON",
+      "type": "submit",
+      "label": "submit in photo form",
+      "action": "click",
+      "unmapped": false
+     }
+    ]
+   },
+   "คณะผู้บริหาร": {
+    "deptId": "14",
+    "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/14",
     "fields": {
      "photo": {
       "selector": "input[name=\"img_path\"]",
@@ -156,11 +920,390 @@
     },
     "ambiguous": [],
     "profile": "sts-personnel-v1"
+   },
+   "หัวหน้าส่วนราชการ": {
+    "deptId": "15",
+    "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/15",
+    "fields": {
+     "photo": {
+      "selector": "input[name=\"img_path\"]",
+      "kind": "file",
+      "confidence": "profile",
+      "label": "ภาพ"
+     },
+     "name": {
+      "selector": "input[name=\"p_name\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ชื่อ-สกุล"
+     },
+     "position": {
+      "selector": "input[name=\"p_position\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่ง"
+     },
+     "phone": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "no phone field on STS form (phone goes to detail)"
+     },
+     "detail": {
+      "selector": "input[name=\"p_detail\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "รายละเอียด"
+     },
+     "order": {
+      "selector": "input[name=\"prarent_id\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่งภาพ"
+     },
+     "department": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "department = the person/{id} page itself"
+     },
+     "publish": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "publish = per-row toggle"
+     },
+     "save": {
+      "strategy": "photo-form-submit",
+      "kind": "button",
+      "confidence": "profile",
+      "label": "submit in photo form"
+     }
+    },
+    "ambiguous": [],
+    "profile": "sts-personnel-v1"
+   },
+   "สำนักปลัด": {
+    "deptId": "19",
+    "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/19",
+    "fields": {
+     "photo": {
+      "selector": "input[name=\"img_path\"]",
+      "kind": "file",
+      "confidence": "profile",
+      "label": "ภาพ"
+     },
+     "name": {
+      "selector": "input[name=\"p_name\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ชื่อ-สกุล"
+     },
+     "position": {
+      "selector": "input[name=\"p_position\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่ง"
+     },
+     "phone": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "no phone field on STS form (phone goes to detail)"
+     },
+     "detail": {
+      "selector": "input[name=\"p_detail\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "รายละเอียด"
+     },
+     "order": {
+      "selector": "input[name=\"prarent_id\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่งภาพ"
+     },
+     "department": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "department = the person/{id} page itself"
+     },
+     "publish": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "publish = per-row toggle"
+     },
+     "save": {
+      "strategy": "photo-form-submit",
+      "kind": "button",
+      "confidence": "profile",
+      "label": "submit in photo form"
+     }
+    },
+    "ambiguous": [],
+    "profile": "sts-personnel-v1"
+   },
+   "กองคลัง": {
+    "deptId": "20",
+    "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/20",
+    "fields": {
+     "photo": {
+      "selector": "input[name=\"img_path\"]",
+      "kind": "file",
+      "confidence": "profile",
+      "label": "ภาพ"
+     },
+     "name": {
+      "selector": "input[name=\"p_name\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ชื่อ-สกุล"
+     },
+     "position": {
+      "selector": "input[name=\"p_position\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่ง"
+     },
+     "phone": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "no phone field on STS form (phone goes to detail)"
+     },
+     "detail": {
+      "selector": "input[name=\"p_detail\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "รายละเอียด"
+     },
+     "order": {
+      "selector": "input[name=\"prarent_id\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่งภาพ"
+     },
+     "department": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "department = the person/{id} page itself"
+     },
+     "publish": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "publish = per-row toggle"
+     },
+     "save": {
+      "strategy": "photo-form-submit",
+      "kind": "button",
+      "confidence": "profile",
+      "label": "submit in photo form"
+     }
+    },
+    "ambiguous": [],
+    "profile": "sts-personnel-v1"
+   },
+   "ส่วนโยธา": {
+    "deptId": "21",
+    "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/21",
+    "fields": {
+     "photo": {
+      "selector": "input[name=\"img_path\"]",
+      "kind": "file",
+      "confidence": "profile",
+      "label": "ภาพ"
+     },
+     "name": {
+      "selector": "input[name=\"p_name\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ชื่อ-สกุล"
+     },
+     "position": {
+      "selector": "input[name=\"p_position\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่ง"
+     },
+     "phone": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "no phone field on STS form (phone goes to detail)"
+     },
+     "detail": {
+      "selector": "input[name=\"p_detail\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "รายละเอียด"
+     },
+     "order": {
+      "selector": "input[name=\"prarent_id\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่งภาพ"
+     },
+     "department": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "department = the person/{id} page itself"
+     },
+     "publish": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "publish = per-row toggle"
+     },
+     "save": {
+      "strategy": "photo-form-submit",
+      "kind": "button",
+      "confidence": "profile",
+      "label": "submit in photo form"
+     }
+    },
+    "ambiguous": [],
+    "profile": "sts-personnel-v1"
+   },
+   "กองศึกษา ศาสนาและวัฒนธรรม": {
+    "deptId": "27",
+    "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/27",
+    "fields": {
+     "photo": {
+      "selector": "input[name=\"img_path\"]",
+      "kind": "file",
+      "confidence": "profile",
+      "label": "ภาพ"
+     },
+     "name": {
+      "selector": "input[name=\"p_name\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ชื่อ-สกุล"
+     },
+     "position": {
+      "selector": "input[name=\"p_position\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่ง"
+     },
+     "phone": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "no phone field on STS form (phone goes to detail)"
+     },
+     "detail": {
+      "selector": "input[name=\"p_detail\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "รายละเอียด"
+     },
+     "order": {
+      "selector": "input[name=\"prarent_id\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่งภาพ"
+     },
+     "department": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "department = the person/{id} page itself"
+     },
+     "publish": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "publish = per-row toggle"
+     },
+     "save": {
+      "strategy": "photo-form-submit",
+      "kind": "button",
+      "confidence": "profile",
+      "label": "submit in photo form"
+     }
+    },
+    "ambiguous": [],
+    "profile": "sts-personnel-v1",
+    "inventory": [
+     {
+      "selector": "#file_input",
+      "tag": "INPUT",
+      "type": "file",
+      "name": "img_path",
+      "label": "ภาพ",
+      "action": "fill:photo",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "#p_name",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "p_name",
+      "label": "ชื่อ-สกุล",
+      "action": "fill:name",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "#p_position",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "p_position",
+      "label": "ตำแหน่ง",
+      "action": "fill:position",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "#p_detail",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "p_detail",
+      "label": "รายละเอียด",
+      "action": "fill:phone",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "#prarent_id",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "prarent_id",
+      "label": "ตำแหน่งภาพ",
+      "action": "fill:order",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "form[action=\"https://pulohpuyo.klongsaikhaw.go.th/personal/person/27\"] button[type=\"submit\"]",
+      "tag": "BUTTON",
+      "type": "submit",
+      "name": null,
+      "label": "ตำแหน่งภาพ",
+      "action": "click",
+      "unmapped": false,
+      "fi": 1
+     }
+    ]
    }
   },
   "ambiguous": [],
   "department_options": [
-   "สำนักปลัด"
+   "สภา อบต.",
+   "คณะผู้บริหาร",
+   "หัวหน้าส่วนราชการ",
+   "สำนักปลัด",
+   "กองคลัง",
+   "ส่วนโยธา",
+   "กองศึกษา ศาสนาและวัฒนธรรม"
   ]
- }
+ },
+ "merged_from": "2026-09-15T08:11:43.815Z"
 }

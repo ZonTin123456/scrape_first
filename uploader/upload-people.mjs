@@ -169,28 +169,56 @@ try {
           rec.detail = ((rec.detail ? rec.detail + "; " : "") + "duplicate: name already on list page (uploading anyway)");
         }
       } catch { /* list check failed -> proceed */ }
-      // 4. fill person form (per-section person/{id} page or generic create form)
+      // 4. fill person form: inventory-driven when available, legacy fields fallback
       await page.goto(formUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
       const F = perSection && p.section && sectionEntry(p.section)?.fields?.photo?.selector
         ? sectionEntry(p.section).fields : fieldMap.fields;
-      await page.setInputFiles(F.photo.selector, photoAbs, { timeout: 15000 });
-      if (p.name) await page.fill(F.name.selector, p.name, { timeout: 10000 });
-      if (p.position) await page.fill(F.position.selector, p.position, { timeout: 10000 });
-      if (F.order?.selector && p.order != null) {
-        await page.fill(F.order.selector, String(p.order), { timeout: 10000 }).catch(() => null);
-      }
-      if (F.detail?.selector && p.phone) {
-        await page.fill(F.detail.selector, p.phone, { timeout: 10000 });
-      }
-      if (p.phone && F.phone?.selector && !/^TBD/.test(F.phone.selector)) {
-        await page.fill(F.phone.selector, p.phone, { timeout: 10000 });
-      }
-      if (deptOption && !perSection) {
-        await page.selectOption(F.department.selector, { label: deptOption }, { timeout: 10000 });
-      }
-      if (F.publish?.selector && !/^TBD/.test(F.publish.selector)) {
-        const box = page.locator(F.publish.selector).first();
-        if (!(await box.isChecked().catch(() => true))) await box.check({ timeout: 5000 }).catch(() => null);
+      const inv = perSection && p.section ? sectionEntry(p.section)?.inventory : null;
+      const unmapped = [];
+      if (inv && inv.length) {
+        for (const item of inv) {
+          if (!item || item.action === "skip") { if (item?.unmapped) unmapped.push(item.label || item.name || item.selector); continue; }
+          if (item.action === "click" || item.action === "click-candidate") continue; // save phase only
+          if (item.action === "const:true") {
+            if (item.selector) {
+              const box = page.locator(item.selector).first();
+              if (!(await box.isChecked().catch(() => true))) await box.check({ timeout: 5000 }).catch(() => null);
+            }
+            continue;
+          }
+          if (item.action && item.action.startsWith("fill:")) {
+            const key = item.action.slice(5);
+            const val = key === "photo" ? photoAbs : key === "section" ? deptOption : p[key];
+            if (val == null || val === "") continue;
+            if (!item.selector) { unmapped.push(item.label || item.name || key); continue; }
+            if (key === "photo") await page.setInputFiles(item.selector, val, { timeout: 15000 });
+            else if (item.tag === "SELECT") await page.selectOption(item.selector, { label: String(val) }, { timeout: 10000 });
+            else if (item.tag === "INPUT" && item.type === "checkbox") { if (val) await page.locator(item.selector).first().check({ timeout: 5000 }).catch(() => null); }
+            else await page.fill(item.selector, String(val), { timeout: 10000 });
+            continue;
+          }
+        }
+        if (unmapped.length) rec.detail = ((rec.detail ? rec.detail + "; " : "") + `unmapped fields (skipped by map, edit inventory): ${unmapped.join(", ")}`);
+      } else {
+        await page.setInputFiles(F.photo.selector, photoAbs, { timeout: 15000 });
+        if (p.name) await page.fill(F.name.selector, p.name, { timeout: 10000 });
+        if (p.position) await page.fill(F.position.selector, p.position, { timeout: 10000 });
+        if (F.order?.selector && p.order != null) {
+          await page.fill(F.order.selector, String(p.order), { timeout: 10000 }).catch(() => null);
+        }
+        if (F.detail?.selector && p.phone) {
+          await page.fill(F.detail.selector, p.phone, { timeout: 10000 });
+        }
+        if (p.phone && F.phone?.selector && !/^TBD/.test(F.phone.selector)) {
+          await page.fill(F.phone.selector, p.phone, { timeout: 10000 });
+        }
+        if (deptOption && !perSection) {
+          await page.selectOption(F.department.selector, { label: deptOption }, { timeout: 10000 });
+        }
+        if (F.publish?.selector && !/^TBD/.test(F.publish.selector)) {
+          const box = page.locator(F.publish.selector).first();
+          if (!(await box.isChecked().catch(() => true))) await box.check({ timeout: 5000 }).catch(() => null);
+        }
       }
       const shot = join(shotsDir, `${String(p.order).padStart(3, "0")}-seq${p.seq}.png`);
       await page.screenshot({ path: shot, fullPage: false });
@@ -199,10 +227,11 @@ try {
         rec.status = "dry"; results.push(rec); continue;
       }
       // 5. real save (only with --save)
-      let saveSel = F.save.selector;
-      if (!saveSel && F.save.strategy === "photo-form-submit") {
-        saveSel = await resolvePhotoFormSubmit(page, F.photo.selector);
-        if (!saveSel) throw new Error("save strategy unresolved: no submit button in photo form");
+      const Fsave = (inv && inv.length && inv.find((i) => i.action === "click")) || F.save;
+      let saveSel = Fsave.selector;
+      if (!saveSel && (Fsave.strategy === "photo-form-submit" || !Fsave.selector)) {
+        saveSel = await resolvePhotoFormSubmit(page, (F.photo || {}).selector || 'input[type="file"]');
+        if (!saveSel) throw new Error("save unresolved: no submit button in photo form (check inventory click item)");
       }
       await page.click(saveSel, { timeout: 10000 });
       const mark = fieldMap.success_mark && !/^TBD/.test(fieldMap.success_mark) ? fieldMap.success_mark : null;

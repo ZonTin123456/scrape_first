@@ -1,0 +1,69 @@
+{
+ "generated_at": "2026-09-15T08:17:26.725Z",
+ "mode": "save",
+ "backend": "https://pulohpuyo.klongsaikhaw.go.th",
+ "from": "out/pulohpuyogo-officer5-php/people.json",
+ "slug": "pulohpuyogo-officer5-php",
+ "total": 8,
+ "by_status": {
+  "created": 8
+ },
+ "results": [
+  {
+   "seq": 175,
+   "order": 1,
+   "name": "นางสาวสุภาภรณ์ รัตนชนะวงษ์",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-officer5-php\\001-seq175.png"
+  },
+  {
+   "seq": 179,
+   "order": 2,
+   "name": "นางสาวมารีเยาะ ไมมูรา",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-officer5-php\\002-seq179.png"
+  },
+  {
+   "seq": 182,
+   "order": 3,
+   "name": "นางสาวอาลีเมาะ บือราเฮง",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-officer5-php\\003-seq182.png"
+  },
+  {
+   "seq": 185,
+   "order": 4,
+   "name": "นายอุซือมัน ยูโซะ",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-officer5-php\\004-seq185.png"
+  },
+  {
+   "seq": 188,
+   "order": 5,
+   "name": "นางสาวนูรียะ สามะ",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-officer5-php\\005-seq188.png"
+  },
+  {
+   "seq": 191,
+   "order": 6,
+   "name": "นางสาวสุจินดา ช่วยประสม",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-officer5-php\\006-seq191.png"
+  },
+  {
+   "seq": 194,
+   "order": 7,
+   "name": "นายอับดุลฮาลิม มะลี",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-officer5-php\\007-seq194.png"
+  },
+  {
+   "seq": 197,
+   "order": 8,
+   "name": "นางสาวซัยนับ มะลี",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-officer5-php\\008-seq197.png"
+  }
+ ]
+}

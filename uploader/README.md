@@ -10,7 +10,7 @@ node detect.mjs --from ..\out\<slug>\people.json
 # สแกนแท็บ CDP หา */personal → กด filter แผนกเอง → ลงชั้น person/{id} → เทียบลายเซ็น profiles/sts-personnel-v1 ก่อน ไม่ตรงค่อย classify เต็ม
 # ได้ uploader/maps/<host>.json แล้วหยุดให้ตรวจ (ไม่บันทึกอะไร)
 ```
-`maps/` เก็บแยก host ไม่ปนกัน
+`maps/` เก็บแยก host ไม่ปนกัน แต่ละ section มี `inventory` (field ไหนเติมจาก people key ไหน / click / skip) — ฟอร์มใหม่แค่รัน detect ใหม่ ไม่ต้องแก้โค้ด ฟิลด์ไม่รู้จักจะโผล่ใน report ว่า UNMAPPED
 
 ## 1. ยิงแบบไม่ต้องมี map (profile ตรง)
 ```text
