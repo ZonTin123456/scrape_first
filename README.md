@@ -1,6 +1,7 @@
 # คำสั่งเดียวจบสาย (เลือก/เรียงขั้นได้, ข้ามขั้นได้):
 node pipeline.mjs --from urls.txt
 node pipeline.mjs --from urls.txt --steps probe,run,finalize,upload --yes --limit 3
+# ยิงรวมเลือกลำดับ: --order officer7,house (จับคู่ชื่อ slug ที่เหลือต่อท้าย)
 # ขั้นคน (pick-links/master) หยุดรอ Enter — เปิดไฟล์ HTML จากดิสก์ ติ๊ก กด "บันทึกทับไฟล์เดิม"
 
 # 0. เปิดแท็บหลังบ้านเว็บนั้นทิ้งไว้ใน Chrome (login ค้าง)

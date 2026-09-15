@@ -22,6 +22,7 @@ if (!argv.length || has("-h") || has("--help")) {
   console.log("Usage: node pipeline.mjs --from urls.txt [--steps probe,pick-links,master,apply-master,run,finalize,upload] [--out ./out]");
   console.log("  backup-page flags passed through: --port --timeout --via --cf-wait --no-cf-manual");
   console.log("  upload flags passed through: --backend --map --limit --save --i-verified");
+  console.log("  --order a,b,c: fire matching slugs first (upload step; rest keep summary order)");
   console.log("  --yes: accept defaults, skip all human pauses");
   console.log("  (pick-images step still available for per-page ticking instead of master)");
   process.exit(2);
@@ -56,6 +57,27 @@ function pause(msg) {
   readFileSync(0); // block until Enter (stdin raw bytes, no readline needed)
 }
 const readJson = (p) => JSON.parse(readFileSync(p, "utf8"));
+
+// --order a,b,c: substring match against slug (then url), first-match wins.
+// Subs nobody matched keep original order appended after. Unknown tokens warn.
+function orderSubs(subs, orderRaw) {
+  const tokens = String(orderRaw || "").split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+  if (!tokens.length) return subs;
+  const rest = [...subs], out = [];
+  for (const t of tokens) {
+    const i = rest.findIndex((r) =>
+      String(r.slug || "").toLowerCase().includes(t) || String(r.url || "").toLowerCase().includes(t));
+    if (i < 0) { console.log(`upload: warn: --order token "${t}" matches nothing`); continue; }
+    out.push(rest.splice(i, 1)[0]);
+  }
+  return [...out, ...rest];
+}
+function peopleCount(dir) {
+  try {
+    const p = JSON.parse(readFileSync(join(dir, "people.json"), "utf8"));
+    return Array.isArray(p) ? p.length : "?";
+  } catch { return "?"; }
+}
 
 for (const s of steps) {
     if (s === "probe") {
@@ -92,10 +114,13 @@ for (const s of steps) {
       if (!existsSync(summary)) fail(`missing ${summary} (nothing to upload)`);
       const subs = readJson(summary).results.filter((r) => !r.error && r.dir);
       if (!subs.length) fail("no successful scrapes to upload");
-      for (const r of subs) {
+      const queue = orderSubs(subs, opt("--order", ""));
+      console.log("upload queue:");
+      queue.forEach((r, i) => console.log(`  ${i + 1}. ${r.slug || r.dir} (${peopleCount(resolve(HERE, r.dir))} rows)${r.url ? " <" + r.url + ">" : ""}`));
+      for (const r of queue) {
         const people = resolve(HERE, r.dir, "people.json");
         if (!existsSync(people)) { console.log(`upload: skip ${r.dir} (no people.json)`); continue; }
-        sh(["uploader/upload-people.mjs", "--from", people, ...UP], join(HERE, "uploader"));
+        sh([join(HERE, "uploader", "upload-people.mjs"), "--from", people, ...UP]);
       }
     }
 }
