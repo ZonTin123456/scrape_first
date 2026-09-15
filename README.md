@@ -7,6 +7,9 @@ node pipeline.mjs --from urls.txt --steps probe,run,finalize,upload --yes --limi
 # กฎข้อมูล: name/position = ข้อความ 2 ตัวแรกหลังรูป, phone = เบอร์ตัวแรก,
 # note = ข้อความที่เหลือต่อด้วย <br> (หยุดที่ตัวคั่นขยะ) -> ลงรายละเอียดเป็น "เบอร์<br>note"
 # order = ลำดับรูปตามหน้าเว็บ เริ่ม 0 (ตำแหน่งภาพหลังบ้านเริ่ม 0)
+# review/index.html มีช่องตำแหน่งภาพทุกใบ: ติ๊กหลายใบใส่เลขเดียวแล้วกดตั้งเลขใบที่ติ๊ก
+# (เลขซ้ำได้ finalize เตือน; finalize เขียนเลขลง people.json)
+# finalize หมู่: node backup-page.mjs --finalize --all (หรือระบุหลายโฟลเดอร์)
 
 # 0. เปิดแท็บหลังบ้านเว็บนั้นทิ้งไว้ใน Chrome (login ค้าง)
 

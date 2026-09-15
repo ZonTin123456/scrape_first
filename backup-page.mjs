@@ -25,7 +25,7 @@ function usage() {
   console.log("       node backup-page.mjs --from urls.txt [--out ./out] [--port auto] [--timeout 60] [--page-sections sections.json]");
   console.log("       node backup-page.mjs --probe --from urls.txt [--out ./out] [--port auto]");
   console.log("       node backup-page.mjs --run --from picked-links.json [--out ./out] [--port auto]");
-  console.log("       node backup-page.mjs --finalize <outdir>");
+  console.log("       node backup-page.mjs --finalize <outdir...> | --finalize --all [--out ./out]");
   console.log("       node backup-page.mjs --apply-master <master.json> [--out ./out]");
   console.log("  --port auto scans 9333 -> 9444 -> 9222 (explicit port still works)");
   console.log("  --via auto|cdp|fetch (default auto; cdp forced on Cloudflare/403)");
@@ -846,7 +846,7 @@ function applyMaster(masterPath) {
 // --- people shortlist: human picks which candidate photos to keep ---
 function writeReview(dir, nodes) {
   const cands = nodes.filter((n) => n.type === "image" && n.file && n.width >= CAND_MIN_W && n.height >= CAND_MIN_H);
-  const sel = cands.map((n) => ({ seq: n.seq, file: n.file, keep: true }));
+  const sel = cands.map((n, idx) => ({ seq: n.seq, file: n.file, keep: true, order: idx }));
   mkdirSync(join(dir, "review"), { recursive: true });
   writeFileSync(join(dir, "review", "selection.json"), JSON.stringify(sel, null, 1), "utf8");
   writeFileSync(join(dir, "review", "index.html"), reviewHTML(sel, nodes, basename(dir)), "utf8");
@@ -860,7 +860,7 @@ function reviewHTML(sel, nodes, slug) {
     const cap = n?.caption_text || "";
     const phone = n?.phone ? `<br>โทร: ${esc(n.phone)}` : "";
     const noteLine = n?.note ? `<br><small>${String(n.note).split("<br>").map(esc).join("<br>")}</small>` : "";
-    return `<figure><img src="../${s.file}" loading="lazy"><figcaption>#${i} seq=${s.seq} ${s.file.split("/").pop()}${cap ? `<br><b>${esc(cap)}</b>` : ""}${phone}${noteLine}<br><label><input type="checkbox" data-seq="${s.seq}" data-file="${esc(s.file)}" checked> เก็บ (รูปคนชัด)</label></figcaption></figure>`;
+    return `<figure><img src="../${s.file}" loading="lazy"><figcaption>#${i} seq=${s.seq} ${s.file.split("/").pop()}${cap ? `<br><b>${esc(cap)}</b>` : ""}${phone}${noteLine}<br><label><input type="checkbox" data-seq="${s.seq}" data-file="${esc(s.file)}" checked> เก็บ (รูปคนชัด)</label><br><label>ตำแหน่งภาพ: <input type="number" data-ord="${s.seq}" value="${i}" min="0" style="width:4em"></label></figcaption></figure>`;
   }).join("\n");
   return `<!doctype html><html lang="th"><meta charset="utf-8"><title>เลือกรูปคน — ติ๊กเฉพาะรูปที่เอา</title>
 <style>body{font-family:system-ui;margin:16px}figure{display:inline-block;width:220px;vertical-align:top;margin:8px}img{width:100%}button{font-size:18px;padding:8px 16px}</style>
@@ -868,14 +868,34 @@ function reviewHTML(sel, nodes, slug) {
 <button id="save">ดาวน์โหลด selection.json</button>
 ${filePickerBtn("selection.json")}
 <p>ติ๊กเสร็จกด “บันทึกทับไฟล์เดิม” (เลือก <code>review/selection.json</code> ครั้งเดียว) แล้วรัน <code>node backup-page.mjs --finalize &lt;โฟลเดอร์&gt;</code></p>
+<p>ติ๊กหลายใบแล้วตั้งเลขเดียวกัน: <input id="bulk-ord" type="number" min="0" value="0" style="width:4em"> <button id="bulk-set">ตั้งเลขใบที่ติ๊ก</button> (เลขซ้ำได้ แต่ backend โชว์ใบไหนก่อนแล้วแต่ระบบ)</p>
 <div>${cards}</div>
-<script>function collect(){
-  return [...document.querySelectorAll("input[data-seq]")].map(c=>({seq:+c.dataset.seq,file:c.dataset.file,keep:c.checked}));
+<script>function ordOf(seq){
+  const el=document.querySelector('input[data-ord="'+seq+'"]');
+  const v=el?parseInt(el.value,10):NaN;
+  return Number.isFinite(v)&&v>=0?v:0;
+}
+function collect(){
+  return [...document.querySelectorAll("input[data-seq]")].map(c=>({seq:+c.dataset.seq,file:c.dataset.file,keep:c.checked,order:ordOf(+c.dataset.seq)}));
 }
 function applyTicks(arr){
-  const bySeq=new Map((arr||[]).map(e=>[+e.seq,!!e.keep]));
-  document.querySelectorAll("input[data-seq]").forEach(c=>{if(bySeq.has(+c.dataset.seq))c.checked=bySeq.get(+c.dataset.seq);});
+  const bySeq=new Map((arr||[]).map(e=>[+e.seq,e]));
+  document.querySelectorAll("input[data-seq]").forEach(c=>{
+    const e=bySeq.get(+c.dataset.seq);
+    if(!e) return;
+    c.checked=!!e.keep;
+    const o=document.querySelector('input[data-ord="'+c.dataset.seq+'"]');
+    if(o&&Number.isFinite(+e.order)&&+e.order>=0)o.value=+e.order;
+  });
 }
+document.getElementById("bulk-set").onclick=()=>{
+  const v=parseInt(document.getElementById("bulk-ord").value,10);
+  if(!Number.isFinite(v)||v<0)return;
+  document.querySelectorAll("input[data-seq]:checked").forEach(c=>{
+    const o=document.querySelector('input[data-ord="'+c.dataset.seq+'"]');
+    if(o)o.value=v;
+  });
+};
 document.getElementById("save").onclick=()=>{
   const out=collect();
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,1)],{type:"application/json"}));a.download="selection.json";a.click();
@@ -888,6 +908,15 @@ function finalize(dir) {
   const cj = JSON.parse(readFileSync(cjPath, "utf8"));
   const sel = JSON.parse(readFileSync(selPath, "utf8"));
   const keep = new Set(sel.filter((s) => s.keep).map((s) => s.seq));
+  // explicit orders from review page (bulk or per-card); rows without one
+  // fill the smallest free numbers in card order. Duplicates allowed (warned).
+  const explicit = new Map();
+  for (const s of sel) {
+    if (!s.keep || !keep.has(s.seq)) continue;
+    if (s.order === undefined || s.order === null || s.order === "") continue;
+    const o = Number(s.order);
+    if (Number.isInteger(o) && o >= 0) explicit.set(s.seq, o);
+  }
   let removed = 0;
   cj.nodes = cj.nodes.filter((n) => {
     if (n.type === "image" && n.file && !keep.has(n.seq)) {
@@ -908,7 +937,20 @@ function finalize(dir) {
     try {
       const people = JSON.parse(readFileSync(peoplePath, "utf8"));
       const pruned = people.filter((p) => keep.has(p.seq));
-      pruned.forEach((p, idx) => { p.order = idx; });
+      const used = new Set(explicit.values());
+      let next = 0;
+      const takeFree = () => { while (used.has(next)) next++; used.add(next); return next; };
+      for (const p of pruned) {
+        p.order = explicit.has(p.seq) ? explicit.get(p.seq) : takeFree();
+      }
+      const dupGroups = new Map();
+      for (const p of pruned) {
+        if (!dupGroups.has(p.order)) dupGroups.set(p.order, []);
+        dupGroups.get(p.order).push(p.seq);
+      }
+      const dups = [...dupGroups].filter(([, seqs]) => seqs.length > 1);
+      if (dups.length) console.log(`finalize: warn: duplicate orders: ${dups.map(([o, seqs]) => `${o} (seq ${seqs.join(",")})`).join("; ")}`);
+      if (explicit.size) cj.manifest.order_overrides = true;
       writeFileSync(peoplePath, JSON.stringify(pruned, null, 1), "utf8");
       cj.manifest.counts.people = pruned.length;
       writeFileSync(cjPath, JSON.stringify(cj, null, 1), "utf8");
@@ -934,8 +976,21 @@ function writeSummary(outDir, results) {
 
 // ---------- CLI dispatch ----------
 if (argv[0] === "--finalize") {
-  if (!argv[1]) fail("usage: node backup-page.mjs --finalize <outdir>");
-  finalize(argv[1]);
+  // single dir, several dirs, or --all (every OUT subdir with review/selection.json)
+  let dirs = argv.slice(1).filter((a) => !a.startsWith("--") && a !== OUT);
+  if (has("--all")) {
+    dirs = [];
+    try {
+      for (const d of readdirSync(OUT).sort()) {
+        if (existsSync(join(OUT, d, "content.json")) && existsSync(join(OUT, d, "review", "selection.json")))
+          dirs.push(join(OUT, d));
+      }
+    } catch { /* unreadable OUT */ }
+    if (!dirs.length) fail(`--all found nothing to finalize under ${OUT}`);
+  }
+  if (!dirs.length) fail("usage: node backup-page.mjs --finalize <outdir...> | --finalize --all [--out ./out]");
+  for (const d of dirs) finalize(d);
+  if (dirs.length > 1) console.log(`finalized ${dirs.length} dirs`);
   process.exit(0);
 }
 if (argv[0] === "--apply-master") {
