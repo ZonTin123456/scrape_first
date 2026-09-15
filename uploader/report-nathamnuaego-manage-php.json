@@ -1,0 +1,20 @@
+{
+ "generated_at": "2026-09-15T17:14:04.863Z",
+ "mode": "save",
+ "backend": "https://nathamnuae.watkeaw.go.th",
+ "from": "C:\\Users\\ACER\\Desktop\\my_first_scrape\\out\\nathamnuaego-manage-php\\people.json",
+ "slug": "nathamnuaego-manage-php",
+ "total": 1,
+ "by_status": {
+  "created": 1
+ },
+ "results": [
+  {
+   "seq": 331,
+   "order": 1,
+   "name": "นายณัฐภัทร รักงาม",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\nathamnuaego-manage-php\\001-seq331.png"
+  }
+ ]
+}
