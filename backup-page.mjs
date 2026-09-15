@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // backup-page: backup Thai local-gov pages via Chrome CDP. Implements SPEC.md + multi/probe extensions.
 // Usage:
-//   node backup-page.mjs <url> [--out ./out] [--port 9444] [--timeout 60]
+//   node backup-page.mjs <url> [--out ./out] [--port auto] [--timeout 60] [--via auto] [--cf-wait 60]
 //   node backup-page.mjs <url1> <url2> ...            (direct multi, sequential)
 //   node backup-page.mjs --from urls.txt              (direct multi from file)
 //   node backup-page.mjs --probe --from urls.txt      (phase 1: metadata only, no image bytes)
 //   node backup-page.mjs --run --from picked-links.json
 //   node backup-page.mjs --finalize <outdir>
-// Needs: Node 18+, Chrome (uses running instance on --port, else launches headless).
+// Needs: Node 18+, Chrome (uses running headed instance via --port auto 9333->9444->9222, else launches headless).
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, basename } from "node:path";
@@ -20,12 +20,15 @@ const CAND_MIN_W = 130, CAND_MIN_H = 100;
 const STAGING = "_staging";
 
 function usage() {
-  console.log("Usage: node backup-page.mjs <url> [--out ./out] [--port 9444] [--timeout 60]");
+  console.log("Usage: node backup-page.mjs <url> [--out ./out] [--port auto] [--timeout 60] [--via auto] [--cf-wait 60] [--no-cf-manual]");
   console.log("       node backup-page.mjs <url1> <url2> ... [--out ./out]");
-  console.log("       node backup-page.mjs --from urls.txt [--out ./out] [--port 9444] [--timeout 60] [--page-sections sections.json]");
-  console.log("       node backup-page.mjs --probe --from urls.txt [--out ./out] [--port 9444]");
-  console.log("       node backup-page.mjs --run --from picked-links.json [--out ./out] [--port 9444]");
+  console.log("       node backup-page.mjs --from urls.txt [--out ./out] [--port auto] [--timeout 60] [--page-sections sections.json]");
+  console.log("       node backup-page.mjs --probe --from urls.txt [--out ./out] [--port auto]");
+  console.log("       node backup-page.mjs --run --from picked-links.json [--out ./out] [--port auto]");
   console.log("       node backup-page.mjs --finalize <outdir>");
+  console.log("  --port auto scans 9333 -> 9444 -> 9222 (explicit port still works)");
+  console.log("  --via auto|cdp|fetch (default auto; cdp forced on Cloudflare/403)");
+  console.log("  --cf-wait <sec> auto-wait for challenge; then pause for manual solve unless --no-cf-manual");
   process.exit(2);
 }
 const argv = process.argv.slice(2);
@@ -35,10 +38,15 @@ const opt = (name, def) => {
   return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : def;
 };
 const has = (name) => argv.includes(name);
-const OUT = opt("--out", "./out");
-let PORT = Number(opt("--port", "9444"));
-const TIMEOUT_S = Number(opt("--timeout", "60"));
 const fail = (msg) => { console.error("backup-page: " + msg); process.exit(1); };
+const OUT = opt("--out", "./out");
+const PORT_RAW = opt("--port", "auto");
+let PORT = PORT_RAW === "auto" ? 0 : Number(PORT_RAW);
+const TIMEOUT_S = Number(opt("--timeout", "60"));
+const VIA_RAW = String(opt("--via", "auto")).toLowerCase();
+const VIA = ["auto", "cdp", "fetch"].includes(VIA_RAW) ? VIA_RAW : fail(`bad --via ${VIA_RAW} (want auto|cdp|fetch)`);
+const CF_WAIT_S = (() => { const n = Number(opt("--cf-wait", "60")); return Number.isFinite(n) && n >= 0 ? n : 60; })();
+const CF_MANUAL = !has("--no-cf-manual"); // pause for manual Turnstile solve when challenge persists
 
 // ---------- pure helpers (no Chrome needed, testable) ----------
 function normalizeUrl(s) {
@@ -195,15 +203,41 @@ async function cdp(path, method = "GET") {
   if (!r.ok) throw new Error(`CDP ${path}: http ${r.status}`);
   return r.json();
 }
+async function cdpAlive(p) {
+  try {
+    const r = await fetch(`http://127.0.0.1:${p}/json/version`);
+    return r.ok;
+  } catch { return false; }
+}
+async function warnIfHeadless() {
+  try {
+    const v = await cdp("/json/version");
+    if (/headless/i.test(`${v.Browser || ""} ${v["User-Agent"] || ""}`))
+      console.error("backup-page: warning: connected Chrome looks headless — Cloudflare may block; prefer headed Chrome on :9333");
+  } catch { /* version probe is best-effort */ }
+}
 async function ensureChrome() {
-  try { await cdp("/json/version"); return; } catch { /* launch */ }
+  // Prefer an already-running (headed, logged-in) Chrome. --port auto scans 9333 -> 9444 -> 9222.
+  if (PORT_RAW !== "auto") {
+    try { await cdp("/json/version"); await warnIfHeadless(); return; } catch { /* launch below */ }
+  } else {
+    for (const p of [9333, 9444, 9222]) {
+      if (await cdpAlive(p)) {
+        PORT = p;
+        console.log(`CDP: using 127.0.0.1:${PORT}`);
+        await warnIfHeadless();
+        return;
+      }
+    }
+    PORT = 9444; // nothing listening: fall through and launch on default
+  }
   const cands = [
     process.env.PROGRAMFILES + "\\Google\\Chrome\\Application\\chrome.exe",
     process.env["PROGRAMFILES(X86)"] + "\\Google\\Chrome\\Application\\chrome.exe",
     process.env.LOCALAPPDATA + "\\Google\\Chrome\\Application\\chrome.exe",
   ].filter(Boolean);
   const bin = cands.find((p) => existsSync(p));
-  if (!bin) fail(`no Chrome on port ${PORT} and no chrome.exe found (use --port of a running instance)`);
+  if (!bin) fail(`no Chrome reachable (scanned 9333/9444/9222) and no chrome.exe found — start headed Chrome: chrome.exe --remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir="C:\\tmp\\chrome-cdp-profile"`);
   spawn(bin, [`--headless=new`, `--remote-debugging-port=${PORT}`,
     `--remote-allow-origins=*`, `--no-first-run`, `about:blank`],
     { detached: true, stdio: "ignore" }).unref();
@@ -389,10 +423,78 @@ function buildKept(rawNodes, origin, pageSection = null) {
   return { kept, queue, stats };
 }
 
+// ---------- Cloudflare challenge handling ----------
+// Detects IUAM / Turnstile / "Just a moment" walls so we wait (or pause for a
+// human to tick the checkbox in the headed Chrome) instead of scraping a wall.
+const CF_TITLE_RE = /just a moment|attention required|security check|verifying you|confirm you are human/i;
+const CF_BODY_MARKERS = ["verifying you are human", "just a moment", "cf-challenge",
+  "turnstile", "attention required", "cf_clearance", "challenge-form"];
+const CHALLENGE_PROBE_EXPR = `(() => { try {
+    return { title: document.title || "",
+      hasTurnstile: !!document.querySelector('iframe[src*="turnstile"],iframe[src*="challenge"],#cf-challenge,#challenge-form,.cf-turnstile'),
+      body: (document.body ? document.body.innerText : "").slice(0, 2000) };
+  } catch (e) { return { title: "", hasTurnstile: false, body: "" }; } })()`;
+function isChallengeProbe(p) {
+  if (!p) return false;
+  if (CF_TITLE_RE.test(String(p.title || ""))) return true;
+  if (p.hasTurnstile) return true;
+  const b = String(p.body || "").toLowerCase();
+  return CF_BODY_MARKERS.some((m) => b.includes(m));
+}
+function waitForEnter(msg) {
+  return new Promise((res) => {
+    process.stdout.write(msg);
+    const onData = () => { cleanup(); res(); };
+    const cleanup = () => {
+      try { process.stdin.removeListener("data", onData); } catch { /* noop */ }
+      try { process.stdin.pause(); } catch { /* noop */ }
+    };
+    try { process.stdin.resume(); process.stdin.setEncoding("utf8"); } catch { /* noop */ }
+    process.stdin.once("data", onData);
+  });
+}
+async function probeChallenge(c) {
+  try {
+    const ev = await c.send("Runtime.evaluate", { expression: CHALLENGE_PROBE_EXPR, returnByValue: true });
+    return ev.result?.result?.value || null;
+  } catch { return null; }
+}
+// Polls until the challenge clears. Returns {challenged, stillBlocked}.
+// challenged=true if a wall was seen at least once (image path then prefers CDP).
+async function waitForChallengeClear(c, url) {
+  const budgetMs = Math.max(0, CF_WAIT_S * 1000);
+  const t0 = Date.now();
+  let challenged = false;
+  for (;;) {
+    const p = await probeChallenge(c);
+    if (!isChallengeProbe(p)) return { challenged, stillBlocked: false };
+    challenged = true;
+    if (Date.now() - t0 >= budgetMs) break;
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  if (CF_MANUAL && process.stdin.isTTY) {
+    console.error(`backup-page: Cloudflare challenge still up for ${url}`);
+    console.error(`backup-page: solve Turnstile/checkbox in the headed Chrome (:${PORT}), keep the tab open, then press Enter here...`);
+    await waitForEnter("");
+    const t1 = Date.now();
+    for (;;) {
+      const p = await probeChallenge(c);
+      if (!isChallengeProbe(p)) return { challenged: true, stillBlocked: false };
+      if (Date.now() - t1 >= 60000) break;
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  }
+  return { challenged: true, stillBlocked: true };
+}
+
 async function navigateAndExtract(c, url, timeoutMs) {
   await c.send("Page.enable");
   await c.send("Page.navigate", { url });
   await c.waitEvent("Page.loadEventFired", timeoutMs);
+  const cf = await waitForChallengeClear(c, url);
+  c._cfChallenge = cf.challenged || false;
+  if (cf.stillBlocked)
+    throw new Error(`cloudflare challenge not cleared in ${CF_WAIT_S}s (solve Turnstile in Chrome :${PORT}, keep tab open, rerun)`);
   await new Promise((r) => setTimeout(r, 2500));
   // trigger lazy-loaders/sliders: scroll top->bottom->top, then let images settle
   await c.send("Runtime.evaluate", { expression:
@@ -418,18 +520,45 @@ async function navigateAndExtract(c, url, timeoutMs) {
     awaitPromise: true, returnByValue: true }).catch(() => null);
   const ev = await c.send("Runtime.evaluate", { expression: EXPR, returnByValue: true });
   if (ev.result?.subtype === "error" || !ev.result?.result?.value) throw new Error("evaluate failed");
-  return ev.result.result.value; // {origin, title, nodes}
+  const data = ev.result.result.value; // {origin, title, nodes}
+  if (CF_TITLE_RE.test(String(data.title || "")) && (data.nodes || []).length < 10)
+    throw new Error(`cloudflare wall after extract (${String(data.title).slice(0, 60)}) — solve in Chrome :${PORT} and rerun`);
+  return data;
 }
 
 async function downloadQueue(c, queue, kept, stats, dir, url, origin) {
   const imgDir = join(dir, "images");
   mkdirSync(imgDir, { recursive: true });
+  const forceCdp = VIA === "cdp" || (VIA === "auto" && !!c._cfChallenge);
+  if (forceCdp) console.error(`backup-page: image via=cdp (${VIA === "cdp" ? "flag" : "cloudflare wall seen"})`);
   let imgErrors = 0;
   for (const rec of queue) {
-    let got = await fetchBuf(rec.src, url);
-    if (got.error && sameOrigin(rec.src, origin)) {
-      const g2 = await cdpFetchImage(c, rec.src).catch((e) => ({ error: String(e.message || e).slice(0, 80) }));
-      if (!g2.error) { got = g2; rec.via = "cdp"; }
+    const cdpTry = async () => {
+      const g = await cdpFetchImage(c, rec.src).catch((e) => ({ error: String(e.message || e).slice(0, 80) }));
+      if (!g.error) { rec.via = "cdp"; return g; }
+      return g;
+    };
+    let got;
+    if (VIA === "cdp") {
+      got = await cdpTry();
+      if (got.error) {
+        const f = await fetchBuf(rec.src, url); // last-resort direct fetch
+        if (!f.error) { got = f; delete rec.via; }
+      }
+    } else if (VIA === "fetch") {
+      got = await fetchBuf(rec.src, url);
+      if (got.error && sameOrigin(rec.src, origin)) {
+        const g2 = await cdpTry();
+        if (!g2.error) got = g2;
+      }
+    } else { // auto: direct first (cookies/TLS of node), CDP fallback on block
+      got = await fetchBuf(rec.src, url);
+      const blocked = !!got.error && /http 40[13]/.test(got.error); // 401/403 incl. Cloudflare
+      if (got.error && (sameOrigin(rec.src, origin) || blocked || forceCdp)) {
+        const g2 = await cdpTry();
+        if (!g2.error) got = g2;
+        else if (forceCdp || blocked) got = g2; // keep CDP (in-page cookies) error, it is authoritative
+      }
     }
     if (got.error) { rec.file = null; rec.error = got.error; imgErrors++; }
     else {
@@ -467,7 +596,8 @@ async function scrapeOne(c, url, timeoutMs, imageSeqFilter = null) {
     extractor_version: VERSION, counts: { ...stats, imgErrors, people: people.length },
     rules: ["text-only chrome", "image denylist + <=70B filter", "text denylist (goog-te, เลือกภาษา)",
       `dedupe by absolute URL`, `min size ${MIN_PX}px`, "cross-origin iframes -> placeholder",
-      "UTF-8 JSON output", `image retry x${RETRY}`, "caption_next = next <=2 non-phone texts", "phone = tel: link or phone-pattern within next 4 texts", "section = H1-H3 heading > --page-sections url > position inference", `slug unique (${slug})`] };
+      "UTF-8 JSON output", `image retry x${RETRY}`, "caption_next = next <=2 non-phone texts", "phone = tel: link or phone-pattern within next 4 texts", "section = H1-H3 heading > --page-sections url > position inference", `slug unique (${slug})`,
+      `image via ${VIA}${c._cfChallenge ? " (cf-challenge seen: cdp forced)" : ""}`, `cf-wait ${CF_WAIT_S}s${CF_MANUAL ? "+manual" : ""}`, `cdp :${PORT}`] };
   if (imageSeqFilter) { manifest.picked = true; }
   writeFileSync(join(dir, "content.json"), JSON.stringify({ manifest, nodes: kept }, null, 1), "utf8");
   writeFileSync(join(dir, "people.json"), JSON.stringify(people, null, 1), "utf8");
@@ -676,13 +806,13 @@ if (fromFile) {
 } else {
   const positionals = argv.filter((a) => !a.startsWith("--") && a !== opt("--out", null) && a !== opt("--port", null) && a !== opt("--timeout", null));
   // filter out option values
-  const optVals = new Set([OUT, String(PORT), String(TIMEOUT_S)]);
+  const optVals = new Set([OUT, String(PORT_RAW), String(TIMEOUT_S), VIA_RAW, String(CF_WAIT_S)]);
   const urls = [];
   let skipNext = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (skipNext) { skipNext = false; continue; }
-    if (["--out", "--port", "--timeout", "--from"].includes(a)) { skipNext = true; continue; }
+    if (["--out", "--port", "--timeout", "--from", "--via", "--cf-wait", "--page-sections"].includes(a)) { skipNext = true; continue; }
     if (a.startsWith("--")) continue;
     const u = normalizeUrl(a);
     if (u) urls.push(u);
