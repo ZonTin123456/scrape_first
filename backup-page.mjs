@@ -9,8 +9,8 @@
 //   node backup-page.mjs --finalize <outdir>
 // Needs: Node 18+, Chrome (uses running headed instance via --port auto 9333->9444->9222, else launches headless).
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
-import { join, basename } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { join, basename, dirname, resolve, extname, sep } from "node:path";
 
 const VERSION = "1.3.0";
 const IMG_DENY = /(cleardot|blank\.gif|j1\.gif|rblue\.gif|spacer|pixel)/i;
@@ -26,6 +26,7 @@ function usage() {
   console.log("       node backup-page.mjs --probe --from urls.txt [--out ./out] [--port auto]");
   console.log("       node backup-page.mjs --run --from picked-links.json [--out ./out] [--port auto]");
   console.log("       node backup-page.mjs --finalize <outdir>");
+  console.log("       node backup-page.mjs --serve [--serve-port 9334] [--out ./out]");
   console.log("  --port auto scans 9333 -> 9444 -> 9222 (explicit port still works)");
   console.log("  --via auto|cdp|fetch (default auto; cdp forced on Cloudflare/403)");
   console.log("  --cf-wait <sec> auto-wait for challenge; then pause for manual solve unless --no-cf-manual");
@@ -637,6 +638,22 @@ function esc(s) {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+// Direct-save button for --serve mode: POSTs collected ticks to /api/save.
+// When the page was opened from disk (no --serve), the message tells the user
+// to use the download button instead.
+function saveDirectBtn(saveFile) {
+  return `<button id="save-direct">บันทึกเลย (เขียนไฟล์ตรง)</button> <span id="save-msg"></span>
+<script>document.getElementById("save-direct").onclick=async()=>{
+  const out=collect();
+  const msg=document.getElementById("save-msg");
+  try{
+    const r=await fetch("/api/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({file:${JSON.stringify(saveFile)},data:out})});
+    const j=await r.json();
+    msg.textContent=j.ok?("บันทึกแล้ว "+j.file):("ล้มเหลว: "+(j.error||r.status));
+  }catch(e){ msg.textContent="ต่อ --serve ไม่ได้ (รัน node backup-page.mjs --serve แล้วเปิดเพจจาก http://127.0.0.1:9334/) — ใช้ปุ่มดาวน์โหลดแทน"; }
+};</script>`;
+}
+
 function pickLinksHTML(probes) {
   const rows = probes.map((p, i) => {
     const ok = !p.error;
@@ -648,13 +665,17 @@ function pickLinksHTML(probes) {
   return `<!doctype html><html lang="th"><meta charset="utf-8"><title>ติ๊กเลือกลิงก์ที่จะโหลด (${probes.length})</title>
 <style>body{font-family:system-ui;margin:16px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:8px;vertical-align:top}button{font-size:18px;padding:8px 16px}</style>
 <h2>ชั้น 1 — ติ๊กเลือกลิงก์ที่จะโหลด (${probes.length} ลิงก์)</h2>
-<button id="save">บันทึก picked-links.json</button>
-<p>เอาไฟล์ที่โหลดได้ไปทับ <code>${STAGING}/picked-links.json</code> จากนั้นรัน <code>node backup-page.mjs --run --from ${STAGING}/picked-links.json</code></p>
+<button id="save">ดาวน์โหลด picked-links.json</button>
+${saveDirectBtn(`${STAGING}/picked-links.json`)}
+<p>เปิดผ่าน <code>--serve</code>: กด “บันทึกเลย” ได้เลย. เปิดจากไฟล์: เอาไฟล์ที่โหลดได้ไปทับ <code>${STAGING}/picked-links.json</code> จากนั้นรัน <code>node backup-page.mjs --run --from ${STAGING}/picked-links.json</code></p>
 <table><tr><th>เอา</th><th>เว็บ</th><th>รูป</th></tr>${rows}</table>
-<script>document.getElementById("save").onclick=()=>{
+<script>const META=${JSON.stringify(probes.map((p) => ({ url: p.source_url, slug: p.slug })))};
+function collect(){
   const boxes=[...document.querySelectorAll("input[data-i]")];
-  const meta=${JSON.stringify(probes.map((p) => ({ url: p.source_url, slug: p.slug })))};
-  const out=boxes.map(c=>({url:meta[+c.dataset.i].url,slug:meta[+c.dataset.i].slug,keep:c.checked}));
+  return boxes.map(c=>({url:META[+c.dataset.i].url,slug:META[+c.dataset.i].slug,keep:c.checked}));
+}
+document.getElementById("save").onclick=()=>{
+  const out=collect();
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,1)],{type:"application/json"}));a.download="picked-links.json";a.click();
 };</script>`;
 }
@@ -673,11 +694,15 @@ function pickImagesHTML(url, title, slug, images) {
 <style>body{font-family:system-ui;margin:16px}figure{display:inline-block;width:220px;vertical-align:top;margin:8px;border:1px solid #ddd;padding:8px}img{width:100%}button{font-size:18px;padding:8px 16px}</style>
 <h2>ชั้น 2 — ติ๊กรูปที่จะโหลด (${images.length} รูป)</h2>
 <p>${esc(title)}<br><small>${esc(url)}</small></p>
-<button id="save">บันทึก picked-images.json</button>
-<p>เอาไฟล์ที่โหลดได้ไปทับ <code>${STAGING}/${esc(slug)}/picked-images.json</code></p>
+<button id="save">ดาวน์โหลด picked-images.json</button>
+${saveDirectBtn(`${STAGING}/${slug}/picked-images.json`)}
+<p>เปิดผ่าน <code>--serve</code>: กด “บันทึกเลย” ได้เลย. เปิดจากไฟล์: เอาไฟล์ที่โหลดได้ไปทับ <code>${STAGING}/${esc(slug)}/picked-images.json</code></p>
 <div>${cards || "<p>ไม่มีรูปให้เลือก</p>"}</div>
-<script>document.getElementById("save").onclick=()=>{
-  const out=[...document.querySelectorAll("input[data-seq]")].map(c=>({seq:+c.dataset.seq,src:c.closest("figure").querySelector("img")?.getAttribute("src")||"",keep:c.checked}));
+<script>function collect(){
+  return [...document.querySelectorAll("input[data-seq]")].map(c=>({seq:+c.dataset.seq,src:c.closest("figure").querySelector("img")?.getAttribute("src")||"",keep:c.checked}));
+}
+document.getElementById("save").onclick=()=>{
+  const out=collect();
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,1)],{type:"application/json"}));a.download="picked-images.json";a.click();
 };</script>`;
 }
@@ -688,26 +713,30 @@ function writeReview(dir, nodes) {
   const sel = cands.map((n) => ({ seq: n.seq, file: n.file, keep: true }));
   mkdirSync(join(dir, "review"), { recursive: true });
   writeFileSync(join(dir, "review", "selection.json"), JSON.stringify(sel, null, 1), "utf8");
-  writeFileSync(join(dir, "review", "index.html"), reviewHTML(sel, nodes), "utf8");
+  writeFileSync(join(dir, "review", "index.html"), reviewHTML(sel, nodes, basename(dir)), "utf8");
   return cands.length;
 }
 
-function reviewHTML(sel, nodes) {
+function reviewHTML(sel, nodes, slug) {
   const bySeq = new Map(nodes.map((n) => [n.seq, n]));
   const cards = sel.map((s, i) => {
     const n = bySeq.get(s.seq);
     const cap = n?.caption_text || "";
     const phone = n?.phone ? `<br>โทร: ${esc(n.phone)}` : "";
-    return `<figure><img src="../${s.file}" loading="lazy"><figcaption>#${i} seq=${s.seq} ${s.file.split("/").pop()}${cap ? `<br><b>${esc(cap)}</b>` : ""}${phone}<br><label><input type="checkbox" data-i="${i}" checked> เก็บ (รูปคนชัด)</label></figcaption></figure>`;
+    return `<figure><img src="../${s.file}" loading="lazy"><figcaption>#${i} seq=${s.seq} ${s.file.split("/").pop()}${cap ? `<br><b>${esc(cap)}</b>` : ""}${phone}<br><label><input type="checkbox" data-seq="${s.seq}" data-file="${esc(s.file)}" checked> เก็บ (รูปคนชัด)</label></figcaption></figure>`;
   }).join("\n");
   return `<!doctype html><html lang="th"><meta charset="utf-8"><title>เลือกรูปคน — ติ๊กเฉพาะรูปที่เอา</title>
 <style>body{font-family:system-ui;margin:16px}figure{display:inline-block;width:220px;vertical-align:top;margin:8px}img{width:100%}button{font-size:18px;padding:8px 16px}</style>
 <h2>ติ๊กเฉพาะรูปคนชัดที่ต้องการเก็บ (${sel.length} รูป)</h2>
-<button id="save">บันทึก selection.json</button>
-<p>แล้วเอาไฟล์ที่โหลดได้ไปทับ <code>review/selection.json</code> จากนั้นรัน <code>node backup-page.mjs --finalize &lt;โฟลเดอร์&gt;</code></p>
+<button id="save">ดาวน์โหลด selection.json</button>
+${saveDirectBtn(`${slug}/review/selection.json`)}
+<p>เปิดผ่าน <code>--serve</code>: กด “บันทึกเลย” ได้เลย แล้วรัน <code>node backup-page.mjs --finalize &lt;โฟลเดอร์&gt;</code>. เปิดจากไฟล์: เอาไฟล์ที่โหลดได้ไปทับ <code>review/selection.json</code> ก่อน</p>
 <div>${cards}</div>
-<script>document.getElementById("save").onclick=()=>{
-  const out=[...document.querySelectorAll("input[data-i]")].map(c=>({seq:+c.closest("figure").textContent.match(/seq=(\\d+)/)[1],file:c.closest("figure").querySelector("img").getAttribute("src").replace("../",""),keep:c.checked}));
+<script>function collect(){
+  return [...document.querySelectorAll("input[data-seq]")].map(c=>({seq:+c.dataset.seq,file:c.dataset.file,keep:c.checked}));
+}
+document.getElementById("save").onclick=()=>{
+  const out=collect();
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,1)],{type:"application/json"}));a.download="selection.json";a.click();
 };</script>`;
 }
@@ -762,10 +791,98 @@ function writeSummary(outDir, results) {
   return summary;
 }
 
+// --- --serve: browse pick/review pages and save ticks straight to disk ---
+// Serves OUT over http://127.0.0.1:<serve-port>/ so the "บันทึกเลย" buttons on
+// pick-links / pick-images / review pages can POST JSON back. Only .json files
+// under OUT are writable (path traversal rejected).
+async function serve() {
+  const { createServer } = await import("node:http");
+  const servePort = Number(opt("--serve-port", "9334")) || 9334;
+  const root = resolve(OUT);
+  mkdirSync(root, { recursive: true });
+  const MIME = { ".html": "text/html; charset=utf-8", ".json": "application/json; charset=utf-8",
+    ".css": "text/css", ".js": "text/javascript", ".png": "image/png",
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
+    ".webp": "image/webp", ".svg": "image/svg+xml" };
+  const send = (res, code, body, type = "text/plain; charset=utf-8") => {
+    const buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
+    res.writeHead(code, { "content-type": type, "content-length": buf.length });
+    res.end(buf);
+  };
+  const safeJoin = (rel) => {
+    const p = resolve(root, rel);
+    return (p === root || p.startsWith(root + sep)) ? p : null;
+  };
+  const indexHTML = () => {
+    const link = (href, label) => `<li><a href="${href}">${label}</a></li>`;
+    const stage = [], finals = [];
+    const st = join(root, STAGING);
+    if (existsSync(join(st, "pick-links.html"))) stage.push(link(`/${STAGING}/pick-links.html`, "ชั้น 1 — ติ๊กลิงก์ (pick-links)"));
+    if (existsSync(st)) for (const d of readdirSync(st)) {
+      try {
+        if (statSync(join(st, d)).isDirectory() && existsSync(join(st, d, "pick-images.html")))
+          stage.push(link(`/${STAGING}/${d}/pick-images.html`, `ชั้น 2 — เลือกรูป ${esc(d)}`));
+      } catch { /* skip unreadable */ }
+    }
+    try {
+      for (const d of readdirSync(root)) {
+        if (d === STAGING) continue;
+        try {
+          if (statSync(join(root, d)).isDirectory() && existsSync(join(root, d, "review", "index.html")))
+            finals.push(link(`/${d}/review/index.html`, `ตรวจรูปคน ${esc(d)}`));
+        } catch { /* skip unreadable */ }
+      }
+    } catch { /* empty root */ }
+    return `<!doctype html><html lang="th"><meta charset="utf-8"><title>backup pages</title>`
+      + `<style>body{font-family:system-ui;margin:16px}</style><h2>ติ๊กเลือกลิงก์/รูป</h2>`
+      + `<ul>${stage.join("") || "<li>(ยังไม่มี probe — รัน --probe ก่อน)</li>"}</ul>`
+      + `<h2>ตรวจรูปคน</h2><ul>${finals.join("") || "<li>(ยังไม่มี)</li>"}</ul>`;
+  };
+  const server = createServer((req, res) => {
+    let u;
+    try { u = new URL(req.url, "http://x"); } catch { return send(res, 400, "bad url"); }
+    if (req.method === "POST" && u.pathname === "/api/save") {
+      let raw = "";
+      req.on("data", (ch) => { raw += ch; if (raw.length > 50_000_000) req.destroy(); });
+      req.on("end", () => {
+        try {
+          const { file, data } = JSON.parse(raw);
+          if (typeof file !== "string" || !/\.json$/.test(file))
+            return send(res, 400, JSON.stringify({ ok: false, error: "file must be a .json path" }), MIME[".json"]);
+          const abs = safeJoin(file);
+          if (!abs) return send(res, 403, JSON.stringify({ ok: false, error: "path outside out dir" }), MIME[".json"]);
+          mkdirSync(dirname(abs), { recursive: true });
+          writeFileSync(abs, JSON.stringify(data, null, 1), "utf8");
+          return send(res, 200, JSON.stringify({ ok: true, file }), MIME[".json"]);
+        } catch (e) {
+          return send(res, 400, JSON.stringify({ ok: false, error: String(e.message || e).slice(0, 120) }), MIME[".json"]);
+        }
+      });
+      return;
+    }
+    if (req.method !== "GET") return send(res, 405, "method not allowed");
+    if (u.pathname === "/") return send(res, 200, indexHTML(), MIME[".html"]);
+    let abs;
+    try { abs = safeJoin(decodeURIComponent(u.pathname)); } catch { return send(res, 400, "bad path"); }
+    if (!abs || !existsSync(abs)) return send(res, 404, "not found");
+    let fp = abs;
+    try { if (statSync(fp).isDirectory()) fp = join(fp, "index.html"); }
+    catch { return send(res, 404, "not found"); }
+    if (!existsSync(fp)) return send(res, 404, "not found");
+    send(res, 200, readFileSync(fp), MIME[extname(fp).toLowerCase()] || "application/octet-stream");
+  });
+  server.listen(servePort, "127.0.0.1", () => console.log(`serve: http://127.0.0.1:${servePort}/ (root ${root}) — Ctrl+C to stop`));
+  await new Promise(() => {}); // run until killed
+}
+
 // ---------- CLI dispatch ----------
 if (argv[0] === "--finalize") {
   if (!argv[1]) fail("usage: node backup-page.mjs --finalize <outdir>");
   finalize(argv[1]);
+  process.exit(0);
+}
+if (argv[0] === "--serve") {
+  await serve();
   process.exit(0);
 }
 
@@ -812,7 +929,7 @@ if (fromFile) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (skipNext) { skipNext = false; continue; }
-    if (["--out", "--port", "--timeout", "--from", "--via", "--cf-wait", "--page-sections"].includes(a)) { skipNext = true; continue; }
+    if (["--out", "--port", "--timeout", "--from", "--via", "--cf-wait", "--page-sections", "--serve-port"].includes(a)) { skipNext = true; continue; }
     if (a.startsWith("--")) continue;
     const u = normalizeUrl(a);
     if (u) urls.push(u);
@@ -875,7 +992,7 @@ if (isProbe) {
   writeFileSync(join(OUT, STAGING, "picked-links.json"),
     JSON.stringify(results.map((r) => ({ url: r.url, slug: r.slug || slugBaseOf(r.url), keep: !r.error })), null, 1), "utf8");
   writeFileSync(join(OUT, STAGING, "pick-links.html"), pickLinksHTML(probes), "utf8");
-  console.log(`probe done: open ${join(OUT, STAGING, "pick-links.html")} — tick links, save picked-links.json, then open each pick-images.html`);
+  console.log(`probe done: serve http://127.0.0.1:9334/ via (node backup-page.mjs --serve --out ${OUT}) then tick pick-links.html, or open ${join(OUT, STAGING, "pick-links.html")} from disk`);
 }
 if (fromFile || urlList.length > 1) writeSummary(isProbe ? join(OUT, STAGING) : OUT, results);
 if (results.some((r) => r.error)) process.exitCode = 1;

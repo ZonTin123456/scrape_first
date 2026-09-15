@@ -31,7 +31,8 @@ node upload-people.mjs --from ..\out\<slug>\people.json
 node upload-people.mjs --map uploader/maps/<host>.json --from ..\out\<slug>\people.json --limit 3
 node upload-people.mjs --map uploader/maps/<host>.json --from ..\out\<slug>\people.json --save   # ของจริง
 ```
-- รูปหาย -> `failed` ไปต่อคนถัดไป / section ไม่ได้ map -> `skipped-no-section` (ไม่เดา)
+- รูปหาย -> `failed` ไปต่อคนถัดไป / section ไม่ได้ map -> อัปโหลดเลยเว้นว่าง (`created-partial`, ไม่เดาค่า) / `--strict-sections` กลับไปโหมดปฏิเสธทั้งล็อตแบบเดิม
+- ชื่อว่าง -> อัปโหลดเลยเว้นว่าง (`created-partial`) — ติ๊กแล้วได้ลงทุกแถว เหลือแค่รูปหายที่เป็น `failed`
 - ชื่อมีบนหน้าลิสต์แล้ว -> `skipped-exists`
 - เบอร์โทรลงช่อง `รายละเอียด` (`p_detail`) ถ้าไม่มีเบอร์เว้นว่างไว้ / `ตำแหน่งภาพ` <- order
 - report: `report-<slug>.json` + รูป proof `shots/<slug>/`
