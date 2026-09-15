@@ -9,4 +9,6 @@ node uploader/upload-people.mjs --from out/<slug>/people.json --limit 3
 # ดู shots/ ถูก → ของจริง:
 node uploader/upload-people.mjs --from out/<slug>/people.json --save --i-verified
 
-node uploader/upload-people.mjs --from out/pulohpuyogo-officer2-php/people.json --save --i-verified
+node uploader/upload-people.mjs --from out/pulohpuyogo-officer5-php/people.json --save --i-verified
+
+Remove-Item .\out\* -Recurse -Force

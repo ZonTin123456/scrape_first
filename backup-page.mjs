@@ -98,22 +98,35 @@ const isPhoneText = (t) => {
   if (!t || !PHONE_RE.test(t)) return false;
   return (t.replace(/\D/g, "").length >= 9);
 };
-// section priority: H1-H3 heading > --page-sections url override > position inference
+// section priority: H1-H3 heading > --page-sections url override > division context > position inference > page fallback
 const SEC_FROM_POSITION = [
   [/สภา/, "สภาท้องถิ่น"],
   [/นายก|รองนายก|เลขานุการนายก|ที่ปรึกษา/, "คณะผู้บริหาร"],
-  [/ปลัด|รองปลัด|หัวหน้า|ผู้อำนวยการ|นักวิชาการ|นักจัดการ|เจ้าพนักงาน|พนักงาน|ลูกจ้าง/, "พนักงานส่วนท้องถิ่น"],
+  [/ปลัด|รองปลัด|หัวหน้า|ผู้อำนวยการ|นัก|เจ้าพนักงาน|พนักงาน|ลูกจ้าง|ข้าราชการ|คนงาน|แม่บ้าน|ภารโรง|ประจำ|ผู้ช่วย|เจ้าหน้าที่|พนักงานจ้าง/, "พนักงานส่วนท้องถิ่น"],
 ];
+// division header: สำนัก/กอง/ฝ่าย/แผนก/งาน + short name (section context for following images)
+const VACANT_RE = /^(ว่าง|.*ว่าง.*|ไม่มีผู้ดำรงตำแหน่ง)$/;
+const isDivisionText = (t) => {
+  if (!t) return false;
+  const s = t.replace(/\s+/g, " ").trim();
+  if (s.length < 2 || s.length > 30) return false;
+  return /^(สำนัก|กอง|ฝ่าย|แผนก|งาน)\S*( .{1,24})?$/.test(s);
+};
 function inferSection(position, name) {
   const t = `${position || ""} ${name || ""}`;
   for (const [re, sec] of SEC_FROM_POSITION) if (re.test(t)) return sec;
   return null;
 }
 function attachCaptions(kept, pageSection = null) {
-  let lastHeading = null;
+  let lastHeading = null, lastDivision = null;
   for (let i = 0; i < kept.length; i++) {
     const n = kept[i];
-    if (n.type === "text" && n.h && (n.h === "H1" || n.h === "H2" || n.h === "H3") && !n.chrome) lastHeading = n.text;
+    if (n.type === "text") {
+      if (n.h && (n.h === "H1" || n.h === "H2" || n.h === "H3") && !n.chrome) lastHeading = n.text;
+      // division headers are plain texts, not menu links
+      if (!n.chrome && !n.link && isDivisionText(n.text)) lastDivision = n.text.replace(/\s+/g, " ").trim();
+      continue;
+    }
     if (n.type !== "image") continue;
     const texts = [];
     for (let j = i + 1; j < kept.length && texts.length < 4; j++) {
@@ -131,11 +144,30 @@ function attachCaptions(kept, pageSection = null) {
     n.caption_next = (rest.slice(0, 2));
     n.caption_text = n.caption_next.join(" | ");
     n.phone = phone;
+    // header graphic? (division name as caption, no position/phone)
+    const headName = n.caption_next[0];
+    if (headName && !n.caption_next[1] && !phone && isDivisionText(headName)) {
+      n.likely_header = true;
+      lastDivision = headName;
+    }
+    if (VACANT_RE.test(n.caption_next[0] || "")) n.vacant = true;
     if (lastHeading) { n.section = lastHeading; n.section_from = "heading"; }
     else if (pageSection) { n.section = pageSection; n.section_from = "url"; }
+    else if (lastDivision && !n.likely_header) { n.section = lastDivision; n.section_from = "division"; }
     else {
       const inferred = inferSection(n.caption_next[1], n.caption_next[0]);
       n.section = inferred; n.section_from = inferred ? "position" : null;
+    }
+    if (n.likely_header && !n.section) { n.section = lastDivision; n.section_from = "division"; }
+  }
+  // guarantee: every named image leaves with a section (first section seen on page)
+  let pageFallback = null;
+  for (const n of kept) { if (n.type === "image" && n.section) { pageFallback = n.section; break; } }
+  if (pageFallback) {
+    for (const n of kept) {
+      if (n.type === "image" && !n.section && n.caption_next?.[0]) {
+        n.section = pageFallback; n.section_from = "page";
+      }
     }
   }
   return kept;
@@ -150,7 +182,8 @@ function buildPeople(kept, url, photoKey) {
     name: n.caption_next?.[0] || null,
     position: n.caption_next?.[1] || null,
     phone: n.phone || null,
-    section: n.section || null,
+    section: n.section || null, section_from: n.section_from || null,
+    likely_header: !!n.likely_header, vacant: !!n.vacant,
     width: n.width, height: n.height,
     alt: n.alt || null,
     source_url: url,
@@ -239,7 +272,8 @@ const EXPR = `(() => {
       if (!text) continue;
       const p = n.parentElement;
       if (p && skip.has(p.tagName)) continue;
-      out.push({ t: "text", text, chrome: chromeOf(n), goog: goog(n), h: headOf(n), tel: telOf(n) });
+      out.push({ t: "text", text, chrome: chromeOf(n), goog: goog(n), h: headOf(n), tel: telOf(n),
+        link: !!(p && p.closest && p.closest("a[href]")) });
     } else if (n.tagName === "IMG") {
       const a = n.closest("a[href]");
       const raw = n.currentSrc || n.getAttribute("src") || "";
@@ -323,6 +357,7 @@ function buildKept(rawNodes, origin, pageSection = null) {
       const rec = { seq: i, type: "text", chrome: n.chrome, text: n.text };
       if (n.h) rec.h = n.h;
       if (n.tel) rec.tel = n.tel;
+      if (n.link) rec.link = true;
       kept.push(rec);
     } else if (n.t === "img") {
       if (!n.src || n.src.startsWith("data:")) return cut(); // inline data-URI icons, not content
@@ -452,16 +487,18 @@ async function probeOne(c, url, timeoutMs) {
     alt: n.alt || null, fullres_candidate: n.fullres_candidate || null,
     caption_next: n.caption_next || [], caption_text: n.caption_text || "",
     name: n.caption_next?.[0] || null, position: n.caption_next?.[1] || null,
-    phone: n.phone || null, section: n.section || null, section_from: n.section_from || null, section_from: n.section_from || null,
+    phone: n.phone || null, section: n.section || null, section_from: n.section_from || null,
+    likely_header: !!n.likely_header, vacant: !!n.vacant,
   }));
   const probe = { source_url: url, source_title: title, captured_at: new Date().toISOString(),
     extractor_version: VERSION, slug, counts: { ...stats, people: buildPeople(kept, url, "src").length }, images,
     people_preview: buildPeople(kept, url, "src").slice(0, 5),
     texts_preview: kept.filter((n) => n.type === "text").slice(0, 8).map((n) => n.text) };
   writeFileSync(join(stageDir, "probe.json"), JSON.stringify(probe, null, 1), "utf8");
-  // default picked-images = all keep:true (user overwrites via HTML save)
+  // default picked-images: keep everything with a name; untick header graphics and nameless icons
+  // (vacant seats have names like ว่าง and are kept — untick manually to drop)
   writeFileSync(join(stageDir, "picked-images.json"),
-    JSON.stringify(images.map((im) => ({ seq: im.seq, src: im.src, keep: true })), null, 1), "utf8");
+    JSON.stringify(images.map((im) => ({ seq: im.seq, src: im.src, keep: !!(im.name && !im.likely_header) })), null, 1), "utf8");
   writeFileSync(join(stageDir, "pick-images.html"), pickImagesHTML(url, title, slug, images), "utf8");
   return probe;
 }
@@ -496,9 +533,11 @@ function pickImagesHTML(url, title, slug, images) {
   const cards = images.map((im, i) => {
     const who = [im.name, im.position].filter(Boolean).join(" | ") || im.alt || "(ไม่มีชื่อใต้รูป)";
     const extra = [im.section ? `แผนก: ${esc(im.section)}` : "", im.phone ? `โทร: ${esc(im.phone)}` : ""].filter(Boolean).join("<br>");
+    const flag = im.likely_header ? "<br><i>ป้ายแผนก (ข้ามอัตโนมัติ)</i>" : im.vacant ? "<br><i>เก้าอี้ว่าง</i>" : (!im.name ? "<br><i>ไม่มีชื่อ</i>" : "");
+    const checked = (im.likely_header || !im.name) ? "" : "checked";
     return `<figure><img src="${esc(im.src)}" loading="lazy" onerror="this.outerHTML='<div style=\\'padding:20px;background:#eee\\'>โหลดพรีวิวไม่ได้<br>${im.width}x${im.height}</div>'">`
-    + `<figcaption>#${i} seq=${im.seq} ${im.width}x${im.height}<br><b>${esc(who)}</b>${extra ? `<br>${extra}` : ""}`
-    + `<br><label><input type="checkbox" data-seq="${im.seq}" checked> โหลดรูปนี้</label></figcaption></figure>`;
+    + `<figcaption>#${i} seq=${im.seq} ${im.width}x${im.height}<br><b>${esc(who)}</b>${extra ? `<br>${extra}` : ""}${flag}`
+    + `<br><label><input type="checkbox" data-seq="${im.seq}" ${checked}> โหลดรูปนี้</label></figcaption></figure>`;
   }).join("\n");
   return `<!doctype html><html lang="th"><meta charset="utf-8"><title>เลือกรูป — ${esc(title)}</title>
 <style>body{font-family:system-ui;margin:16px}figure{display:inline-block;width:220px;vertical-align:top;margin:8px;border:1px solid #ddd;padding:8px}img{width:100%}button{font-size:18px;padding:8px 16px}</style>

@@ -107,6 +107,21 @@ for (const k of need) {
   if (!hasSel(k)) fail(`map fields.${k} has no selector/strategy (ambiguous? check ${MAP || "auto-detect output"})`);
 }
 listUrl = fill(fieldMap.list_url);
+// pre-flight: every section in the batch must resolve — fail fast before touching the browser
+{
+  const missing = new Set();
+  const deptOpts = mapMeta?.map?.department_options || [];
+  for (const p of people) {
+    if (perSection) {
+      const ent = p.section ? sectionEntry(p.section) : null;
+      const ov = p.section ? normSectionMap[norm(p.section)] : null;
+      if (!ent && !(ov && /\/personal\/person\/\d+/.test(ov))) missing.add(p.section || "(none)");
+    } else if (p.section && !normSectionMap[norm(p.section)] && !deptOpts.includes(p.section) && fieldMap.fields.department?.selector) {
+      missing.add(p.section);
+    }
+  }
+  if (missing.size) fail(`unmapped sections, refusing to start: ${[...missing].join(", ")} (add to section-map or detected map)`);
+}
 const page = await context.newPage();
 const results = [];
 
@@ -114,6 +129,7 @@ try {
   for (const p of people) {
     const rec = { seq: p.seq, order: p.order, name: p.name, status: null, detail: null };
     try {
+      // ticked = upload. Only a missing local photo file can stop a record (genuine error).
       // 1. photo must exist locally
       const photoAbs = p.photo && !/^https?:/.test(p.photo) ? resolve(fromDir, p.photo) : null;
       if (!photoAbs || !existsSync(photoAbs)) {
@@ -129,7 +145,7 @@ try {
           // try manual section-map override: value may be a deptId or personUrl
           const ov = p.section ? normSectionMap[norm(p.section)] : null;
           if (ov && /\/personal\/person\/\d+/.test(ov)) { formUrl = ov; }
-          else { rec.status = "skipped-no-section"; rec.detail = `section not in detected map: ${p.section || "(none)"}`; results.push(rec); continue; }
+          else { rec.status = "failed"; rec.detail = `section unresolved (pre-flight missed): ${p.section || "(none)"}`; results.push(rec); continue; }
         } else {
           formUrl = ent.personUrl;
           deptOption = ent.deptId;
@@ -139,21 +155,20 @@ try {
         const autoDept = p.section && !normSectionMap[norm(p.section)] && deptOpts.includes(p.section);
         deptOption = p.section ? (normSectionMap[norm(p.section)] || (autoDept ? p.section : null)) : null;
         if (!deptOption && F0.department?.selector) {
-          rec.status = "skipped-no-section"; rec.detail = `section not mapped: ${p.section || "(none)"}`;
+          rec.status = "failed"; rec.detail = `section unresolved (pre-flight missed): ${p.section || "(none)"}`;
           results.push(rec); continue;
         }
         if (autoDept) rec.detail = "section auto-matched to department option";
       }
       if (!formUrl) { rec.status = "failed"; rec.detail = "no form URL resolved"; results.push(rec); continue; }
-      // 3. duplicate check: exact name on list page (best effort)
+      // 3. duplicate note (informational only — ticked rows upload anyway)
       try {
         await page.goto(listUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
         const body = (await page.evaluate(() => document.body.innerText)).slice(0, 20000);
         if (p.name && body.includes(p.name)) {
-          rec.status = "skipped-exists"; rec.detail = "name already on list page";
-          results.push(rec); continue;
+          rec.detail = ((rec.detail ? rec.detail + "; " : "") + "duplicate: name already on list page (uploading anyway)");
         }
-      } catch { /* list check failed -> proceed, note it */ rec.detail = "dup-check inconclusive"; }
+      } catch { /* list check failed -> proceed */ }
       // 4. fill person form (per-section person/{id} page or generic create form)
       await page.goto(formUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
       const F = perSection && p.section && sectionEntry(p.section)?.fields?.photo?.selector
