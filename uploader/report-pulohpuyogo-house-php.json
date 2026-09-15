@@ -1,0 +1,83 @@
+{
+ "generated_at": "2026-09-15T06:09:26.461Z",
+ "mode": "save",
+ "backend": "https://pulohpuyo.klongsaikhaw.go.th",
+ "from": "out/pulohpuyogo-house-php/people.json",
+ "slug": "pulohpuyogo-house-php",
+ "total": 10,
+ "by_status": {
+  "created": 10
+ },
+ "results": [
+  {
+   "seq": 175,
+   "order": 1,
+   "name": "นายลาซิ ดือราแม",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-house-php\\001-seq175.png"
+  },
+  {
+   "seq": 179,
+   "order": 2,
+   "name": "นายแวมะรูดิง แวเย็ง",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-house-php\\002-seq179.png"
+  },
+  {
+   "seq": 183,
+   "order": 3,
+   "name": "นายอารีดี ปากบารา",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-house-php\\003-seq183.png"
+  },
+  {
+   "seq": 187,
+   "order": 4,
+   "name": "นายอาแซ กึจิ",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-house-php\\004-seq187.png"
+  },
+  {
+   "seq": 191,
+   "order": 5,
+   "name": "นายสะลีม ยูโซะ",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-house-php\\005-seq191.png"
+  },
+  {
+   "seq": 195,
+   "order": 6,
+   "name": "นายบุญชอบ ศรีประชุม",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-house-php\\006-seq195.png"
+  },
+  {
+   "seq": 199,
+   "order": 7,
+   "name": "นายอับดุลรอฮิง ยีเร็ง",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-house-php\\007-seq199.png"
+  },
+  {
+   "seq": 203,
+   "order": 8,
+   "name": "นางสาวซูไวบะห์ กาเดร์",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-house-php\\008-seq203.png"
+  },
+  {
+   "seq": 207,
+   "order": 9,
+   "name": "นายกามัน ขาเร็ง",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-house-php\\009-seq207.png"
+  },
+  {
+   "seq": 211,
+   "order": 10,
+   "name": "นายมะสุกรี มะลี",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-house-php\\010-seq211.png"
+  }
+ ]
+}

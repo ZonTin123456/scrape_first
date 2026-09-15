@@ -1,0 +1,166 @@
+{
+ "_status": "profile:sts-personnel-v1 - REVIEW then use",
+ "host": "https://pulohpuyo.klongsaikhaw.go.th",
+ "detected_at": "2026-09-15T06:00:45.122Z",
+ "profile": "sts-personnel-v1",
+ "sections_probed": [
+  "สำนักปลัด"
+ ],
+ "filter": {
+  "title": "องค์การบริหารส่วนตำบลปุโละปุโย",
+  "forms": 2,
+  "filterCandidates": [
+   {
+    "action": "https://pulohpuyo.klongsaikhaw.go.th/personal",
+    "input": "pg_name",
+    "selector": "#pg_name"
+   }
+  ]
+ },
+ "rowsAfterFilter": {
+  "url": "https://pulohpuyo.klongsaikhaw.go.th/personal",
+  "personImgs": [],
+  "links": [
+   "https://pulohpuyo.klongsaikhaw.go.th/personal",
+   "https://pulohpuyo.klongsaikhaw.go.th/personal/delete/9",
+   "https://pulohpuyo.klongsaikhaw.go.th/personal/person/9",
+   "https://pulohpuyo.klongsaikhaw.go.th/personal/9"
+  ],
+  "bodyHead": "สำนักงานเทศบาลตำบลคลองทรายขาว\nเจ้าหน้าที่ดูแลเว็บไซต์\nหน้าแรก\nระบบควบคุมเมนู\nระบบควบคุมข่าว\nระบบควบคุมภาพสไลค์\nระบบควบคุมภาพบุคลากร\nประมวลผลภาพกิจกรรม\nวีดีโอกิจกรรม\nแหล่งท่องเที่ยว\nผลิตภัณฑ์ตำบล\nจดหมายข่าว\nส่วนควบคุมวีดีโอ\nส่วนควบคุมแบนเนอร์\nระบบควบคุมลิงค์\nOpen Data\nปฏิทินกิจกรรม\nคำถามที่พบบ่อย FAQ\nตั้งค่าเว็บไซต์\nChatbot\nจัดการสถิติ (Manual)\nระบบควบคุมภาพบุคลากร\nย้อนกลับ\n เพิ่มข้อมูลแผนกสำเร็จ\nชื่อแผนก\nเผยแพร่\n\tชื่อแผนก\tควบคุม\n\tสำนักปลัด\t\n\n\nลบ",
+  "filterNote": "section \"สำนักปลัด\" gave no person rows; dept rows found: 1"
+ },
+ "deptRows": [
+  {
+   "deptId": "9",
+   "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/9",
+   "rowText": "สำนักปลัด"
+  }
+ ],
+ "map": {
+  "mode": "per-section-url",
+  "fields": {
+   "photo": {
+    "selector": "input[name=\"img_path\"]",
+    "kind": "file",
+    "confidence": "profile",
+    "label": "ภาพ"
+   },
+   "name": {
+    "selector": "input[name=\"p_name\"]",
+    "kind": "text",
+    "confidence": "profile",
+    "label": "ชื่อ-สกุล"
+   },
+   "position": {
+    "selector": "input[name=\"p_position\"]",
+    "kind": "text",
+    "confidence": "profile",
+    "label": "ตำแหน่ง"
+   },
+   "phone": {
+    "selector": null,
+    "kind": null,
+    "confidence": "missing",
+    "label": "no phone field on STS form (phone goes to detail)"
+   },
+   "detail": {
+    "selector": "input[name=\"p_detail\"]",
+    "kind": "text",
+    "confidence": "profile",
+    "label": "รายละเอียด"
+   },
+   "order": {
+    "selector": "input[name=\"prarent_id\"]",
+    "kind": "text",
+    "confidence": "profile",
+    "label": "ตำแหน่งภาพ"
+   },
+   "department": {
+    "selector": null,
+    "kind": null,
+    "confidence": "missing",
+    "label": "department = the person/{id} page itself"
+   },
+   "publish": {
+    "selector": null,
+    "kind": null,
+    "confidence": "missing",
+    "label": "publish = per-row toggle"
+   },
+   "save": {
+    "strategy": "photo-form-submit",
+    "kind": "button",
+    "confidence": "profile",
+    "label": "submit in photo form"
+   }
+  },
+  "sections": {
+   "สำนักปลัด": {
+    "deptId": "9",
+    "personUrl": "https://pulohpuyo.klongsaikhaw.go.th/personal/person/9",
+    "fields": {
+     "photo": {
+      "selector": "input[name=\"img_path\"]",
+      "kind": "file",
+      "confidence": "profile",
+      "label": "ภาพ"
+     },
+     "name": {
+      "selector": "input[name=\"p_name\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ชื่อ-สกุล"
+     },
+     "position": {
+      "selector": "input[name=\"p_position\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่ง"
+     },
+     "phone": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "no phone field on STS form (phone goes to detail)"
+     },
+     "detail": {
+      "selector": "input[name=\"p_detail\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "รายละเอียด"
+     },
+     "order": {
+      "selector": "input[name=\"prarent_id\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่งภาพ"
+     },
+     "department": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "department = the person/{id} page itself"
+     },
+     "publish": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "publish = per-row toggle"
+     },
+     "save": {
+      "strategy": "photo-form-submit",
+      "kind": "button",
+      "confidence": "profile",
+      "label": "submit in photo form"
+     }
+    },
+    "ambiguous": [],
+    "profile": "sts-personnel-v1"
+   }
+  },
+  "ambiguous": [],
+  "department_options": [
+   "สำนักปลัด"
+  ]
+ }
+}

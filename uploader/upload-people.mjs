@@ -1,0 +1,237 @@
+#!/usr/bin/env node
+// upload-people: people.json (loader output) -> STS backend personnel form.
+// READS out/<slug>/ only. NEVER writes there. Default is --dry (fill + screenshot, no save).
+// Usage:
+//   node upload-people.mjs --from out/<slug>/people.json --backend https://host [--port 9444] [--save] [--limit N] [--map uploader/maps/<host>.json]
+//   Login: reuse the logged-in Chrome on --port (no passwords stored).
+// Backend rule: phone goes into รายละเอียด (p_detail); skipped when absent.
+import { chromium } from "playwright-core";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve, basename } from "node:path";
+import { fileURLToPath } from "node:url";
+import { resolvePort, discoverBackends } from "./lib/cdp-port.mjs";
+import { automap } from "./lib/automap.mjs";
+
+const argv = process.argv.slice(2);
+const opt = (n, d) => {
+  const i = argv.indexOf(n);
+  return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : d;
+};
+const fail = (m) => { console.error("upload-people: " + m); process.exit(1); };
+if (!argv.length || argv.includes("-h") || argv.includes("--help")) {
+  console.log("Usage: node upload-people.mjs --from out/<slug>/people.json [--backend https://host] [--port auto] [--save] [--limit N] [--map uploader/maps/<host>.json] [--i-verified]");
+  console.log("  --port auto scans 9333 -> 9444 -> 9222; backend auto-discovered from open tabs when omitted");
+  console.log("  no --map: profile auto-detect runs inline (dry free, --save needs --map or --i-verified)");
+  console.log("  default = --dry (fill + screenshot per person, never clicks save)");
+  process.exit(2);
+}
+const FROM = opt("--from", null);
+let BACKEND = (opt("--backend", null) || "").replace(/\/$/, "");
+const PORT = await resolvePort(opt("--port", "auto")).catch((e) => fail(e.message));
+const MAP = opt("--map", null);
+const SAVE = argv.includes("--save");
+const LIMIT = Number(opt("--limit", "0")) || 0;
+if (!FROM) fail("missing --from out/<slug>/people.json");
+if (!existsSync(FROM)) fail(`people file not found: ${FROM}`);
+
+const uploaderDir = dirname(fileURLToPath(import.meta.url));
+const readJson = (p) => JSON.parse(readFileSync(join(uploaderDir, p), "utf8"));
+let fieldMap, mapMeta = null;
+if (MAP) {
+  const m = JSON.parse(readFileSync(MAP, "utf8"));
+  if (m.map && m.map.fields) {
+    // auto-detected map file from detect.mjs
+    mapMeta = m;
+    const firstSec = m.map.sections ? Object.values(m.map.sections)[0] : null;
+    fieldMap = { fields: m.map.fields, create_url: firstSec?.personUrl || m.formUrl || null, list_url: `${m.host}/personal`, success_mark: null };
+    console.log(`using detected map ${MAP} - REVIEW it before --save`);
+  } else {
+    fieldMap = m;
+    if (fieldMap._status !== "locked") {
+      fail(`map file is "${fieldMap._status}": lock it first (map-check.mjs) or use an automap maps/<host>.json`);
+    }
+  }
+}
+if (!BACKEND && mapMeta?.host) BACKEND = mapMeta.host; // --map knows its backend
+if (!BACKEND) {
+  const found = await discoverBackends(PORT).catch(() => []);
+  if (found.length === 1) { BACKEND = found[0]; console.log(`backend auto-discovered: ${BACKEND}`); }
+  else if (found.length > 1) fail(`multiple backends open (${found.join(", ")}): specify --backend`);
+  else fail("missing --backend https://tenant.host (no /personal tab found on CDP)");
+}
+if (!MAP) {
+  // fieldMap filled via inline automap after browser connect (below).
+}
+const sectionMap = readJson("section-map.json").map || {};
+const peopleAll = JSON.parse(readFileSync(FROM, "utf8"));
+if (!Array.isArray(peopleAll) || !peopleAll.length) fail("people.json is empty");
+const people = LIMIT > 0 ? peopleAll.slice(0, LIMIT) : peopleAll;
+const fromDir = dirname(resolve(FROM));
+const slug = basename(fromDir);
+const perSectionMode = () => mapMeta?.map?.mode === "per-section-url";
+const hasSel = (k) => {
+  const f = fieldMap.fields?.[k];
+  return !!(f && (f.selector || f.strategy) && !/^TBD/.test(f.selector || ""));
+};
+const fill = (s) => String(s || "").replace("{backend}", BACKEND);
+let listUrl = null; // set after fieldMap final (ephemeral automap may fill it)
+const norm = (s) => String(s || "").trim().normalize("NFC");
+const normSectionMap = Object.fromEntries(Object.entries(sectionMap).map(([k, v]) => [norm(k), v]));
+const sectionEntry = (sec) => {
+  if (!sec || !mapMeta?.map?.sections) return null;
+  const keys = Object.keys(mapMeta.map.sections);
+  return mapMeta.map.sections[keys.find((k) => norm(k) === norm(sec))];
+};
+const shotsDir = join(uploaderDir, "shots", slug);
+mkdirSync(shotsDir, { recursive: true });
+
+const browser = await chromium.connectOverCDP(`http://127.0.0.1:${PORT}`).catch((e) => fail(`connect port ${PORT}: ${e.message}`));
+const context = browser.contexts()[0];
+if (!context) fail("no browser context");
+if (!MAP) {
+  // no map: inline profile auto-detect (ephemeral, not saved). Dry is free; save needs approval.
+  if (SAVE && !argv.includes("--i-verified")) fail("refusing --save without --map (reviewed) or --i-verified");
+  const probeSections = [...new Set(people.map((p) => p.section).filter(Boolean))];
+  if (!probeSections.length) fail("people.json has no sections for auto-detect (give --map instead)");
+  console.log(`no --map: auto-detecting ${BACKEND} ...`);
+  const auto = await automap(context, BACKEND, probeSections, { write: false });
+  if (!auto.ok) fail(`auto-detect failed: ${auto.error}`);
+  mapMeta = { host: BACKEND, map: auto.content.map };
+  const firstSec = Object.values(auto.content.map.sections || {})[0];
+  fieldMap = { fields: auto.content.map.fields, create_url: firstSec?.personUrl || null, list_url: `${BACKEND}/personal`, success_mark: null };
+  console.log(`auto-detect: ${auto.content.profile ? "profile:" + auto.content.profile : "full-classify"} (${Object.keys(auto.content.map.sections || {}).length} sections)`);
+}
+const perSection = perSectionMode();
+const need = perSection ? ["photo", "name", "position", "save"] : ["photo", "name", "position", "department", "save"];
+for (const k of need) {
+  if (!hasSel(k)) fail(`map fields.${k} has no selector/strategy (ambiguous? check ${MAP || "auto-detect output"})`);
+}
+listUrl = fill(fieldMap.list_url);
+const page = await context.newPage();
+const results = [];
+
+try {
+  for (const p of people) {
+    const rec = { seq: p.seq, order: p.order, name: p.name, status: null, detail: null };
+    try {
+      // 1. photo must exist locally
+      const photoAbs = p.photo && !/^https?:/.test(p.photo) ? resolve(fromDir, p.photo) : null;
+      if (!photoAbs || !existsSync(photoAbs)) {
+        rec.status = "failed"; rec.detail = `photo missing: ${p.photo}`;
+        results.push(rec); continue;
+      }
+      // 2. resolve section: per-section-url mode (STS template) or department select
+      const F0 = fieldMap.fields;
+      let deptOption = null, formUrl = fill(fieldMap.create_url);
+      if (perSection) {
+        const ent = p.section ? sectionEntry(p.section) : null;
+        if (!ent) {
+          // try manual section-map override: value may be a deptId or personUrl
+          const ov = p.section ? normSectionMap[norm(p.section)] : null;
+          if (ov && /\/personal\/person\/\d+/.test(ov)) { formUrl = ov; }
+          else { rec.status = "skipped-no-section"; rec.detail = `section not in detected map: ${p.section || "(none)"}`; results.push(rec); continue; }
+        } else {
+          formUrl = ent.personUrl;
+          deptOption = ent.deptId;
+        }
+      } else {
+        const deptOpts = mapMeta?.map?.department_options || [];
+        const autoDept = p.section && !normSectionMap[norm(p.section)] && deptOpts.includes(p.section);
+        deptOption = p.section ? (normSectionMap[norm(p.section)] || (autoDept ? p.section : null)) : null;
+        if (!deptOption && F0.department?.selector) {
+          rec.status = "skipped-no-section"; rec.detail = `section not mapped: ${p.section || "(none)"}`;
+          results.push(rec); continue;
+        }
+        if (autoDept) rec.detail = "section auto-matched to department option";
+      }
+      if (!formUrl) { rec.status = "failed"; rec.detail = "no form URL resolved"; results.push(rec); continue; }
+      // 3. duplicate check: exact name on list page (best effort)
+      try {
+        await page.goto(listUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+        const body = (await page.evaluate(() => document.body.innerText)).slice(0, 20000);
+        if (p.name && body.includes(p.name)) {
+          rec.status = "skipped-exists"; rec.detail = "name already on list page";
+          results.push(rec); continue;
+        }
+      } catch { /* list check failed -> proceed, note it */ rec.detail = "dup-check inconclusive"; }
+      // 4. fill person form (per-section person/{id} page or generic create form)
+      await page.goto(formUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+      const F = perSection && p.section && sectionEntry(p.section)?.fields?.photo?.selector
+        ? sectionEntry(p.section).fields : fieldMap.fields;
+      await page.setInputFiles(F.photo.selector, photoAbs, { timeout: 15000 });
+      if (p.name) await page.fill(F.name.selector, p.name, { timeout: 10000 });
+      if (p.position) await page.fill(F.position.selector, p.position, { timeout: 10000 });
+      if (F.order?.selector && p.order != null) {
+        await page.fill(F.order.selector, String(p.order), { timeout: 10000 }).catch(() => null);
+      }
+      if (F.detail?.selector && p.phone) {
+        await page.fill(F.detail.selector, p.phone, { timeout: 10000 });
+      }
+      if (p.phone && F.phone?.selector && !/^TBD/.test(F.phone.selector)) {
+        await page.fill(F.phone.selector, p.phone, { timeout: 10000 });
+      }
+      if (deptOption && !perSection) {
+        await page.selectOption(F.department.selector, { label: deptOption }, { timeout: 10000 });
+      }
+      if (F.publish?.selector && !/^TBD/.test(F.publish.selector)) {
+        const box = page.locator(F.publish.selector).first();
+        if (!(await box.isChecked().catch(() => true))) await box.check({ timeout: 5000 }).catch(() => null);
+      }
+      const shot = join(shotsDir, `${String(p.order).padStart(3, "0")}-seq${p.seq}.png`);
+      await page.screenshot({ path: shot, fullPage: false });
+      rec.detail = ((rec.detail ? rec.detail + "; " : "") + `shot: ${shot}`);
+      if (!SAVE) {
+        rec.status = "dry"; results.push(rec); continue;
+      }
+      // 5. real save (only with --save)
+      let saveSel = F.save.selector;
+      if (!saveSel && F.save.strategy === "photo-form-submit") {
+        saveSel = await resolvePhotoFormSubmit(page, F.photo.selector);
+        if (!saveSel) throw new Error("save strategy unresolved: no submit button in photo form");
+      }
+      await page.click(saveSel, { timeout: 10000 });
+      const mark = fieldMap.success_mark && !/^TBD/.test(fieldMap.success_mark) ? fieldMap.success_mark : null;
+      if (mark) await page.getByText(mark, { exact: false }).first().waitFor({ timeout: 15000 });
+      else await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
+      rec.status = "created"; results.push(rec);
+    } catch (e) {
+      rec.status = rec.status || "failed";
+      rec.detail = ((rec.detail ? rec.detail + "; " : "") + String(e.message || e).slice(0, 160));
+      results.push(rec);
+    }
+  }
+} finally {
+  await page.close().catch(() => null);
+}
+
+// strategy save: submit button in the exact <form> as the photo input (profile-based maps).
+async function resolvePhotoFormSubmit(page, photoSelector) {
+  return page.evaluate((psel) => {
+    const photo = document.querySelector(psel);
+    const form = photo ? photo.closest("form") : null;
+    const scope = form || document;
+    const btns = [...scope.querySelectorAll('button[type="submit"], input[type="submit"]')];
+    const b = btns[0];
+    if (!b) return null;
+    if (b.id) return `#${b.id}`;
+    if (b.name) return `${b.tagName.toLowerCase()}[name="${b.name}"]`;
+    const fa = form ? form.getAttribute("action") : null;
+    if (fa) return `form[action="${fa}"] ${b.tagName.toLowerCase()}[type="submit"]`;
+    return null;
+  }, photoSelector);
+}
+
+const report = {
+  generated_at: new Date().toISOString(), mode: SAVE ? "save" : "dry",
+  backend: BACKEND, from: FROM, slug,
+  total: results.length,
+  by_status: results.reduce((m, r) => ((m[r.status] = (m[r.status] || 0) + 1), m), {}),
+  results,
+};
+const reportPath = join(uploaderDir, `report-${slug}.json`);
+writeFileSync(reportPath, JSON.stringify(report, null, 1), "utf8");
+console.log(`mode=${report.mode} total=${report.total} ${JSON.stringify(report.by_status)}`);
+console.log(`report: ${reportPath}`);
+const failed = results.some((r) => r.status === "failed");
+await browser.close().catch(() => null);
+process.exit(failed ? 1 : 0);

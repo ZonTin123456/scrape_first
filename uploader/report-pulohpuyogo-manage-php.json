@@ -1,0 +1,41 @@
+{
+ "generated_at": "2026-09-15T06:14:03.064Z",
+ "mode": "save",
+ "backend": "https://pulohpuyo.klongsaikhaw.go.th",
+ "from": "out/pulohpuyogo-manage-php/people.json",
+ "slug": "pulohpuyogo-manage-php",
+ "total": 4,
+ "by_status": {
+  "created": 4
+ },
+ "results": [
+  {
+   "seq": 175,
+   "order": 1,
+   "name": "นายซานูซี วงศ์ปัตน",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-manage-php\\001-seq175.png"
+  },
+  {
+   "seq": 179,
+   "order": 2,
+   "name": "นายสุกรี การียา",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-manage-php\\002-seq179.png"
+  },
+  {
+   "seq": 185,
+   "order": 3,
+   "name": "ว่าง",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-manage-php\\003-seq185.png"
+  },
+  {
+   "seq": 191,
+   "order": 4,
+   "name": "นายมูหามัดสัมรี สะมะแอ",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-manage-php\\004-seq191.png"
+  }
+ ]
+}

@@ -1,0 +1,126 @@
+{
+ "generated_at": "2026-09-15T06:56:06.665Z",
+ "mode": "save",
+ "backend": "https://pulohpuyo.klongsaikhaw.go.th",
+ "from": "out/pulohpuyogo-officer2-php/people.json",
+ "slug": "pulohpuyogo-officer2-php",
+ "total": 16,
+ "by_status": {
+  "created": 6,
+  "skipped-no-section": 10
+ },
+ "results": [
+  {
+   "seq": 176,
+   "order": 1,
+   "name": "นายอารีดี ปากบารา",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-officer2-php\\001-seq176.png"
+  },
+  {
+   "seq": 180,
+   "order": 2,
+   "name": "ว่าง",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-officer2-php\\002-seq180.png"
+  },
+  {
+   "seq": 183,
+   "order": 3,
+   "name": "นายซาฟีอี ดอเลาะ",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-officer2-php\\003-seq183.png"
+  },
+  {
+   "seq": 187,
+   "order": 4,
+   "name": "นายมูฮำหมัดรอดี ยานยา",
+   "status": "skipped-no-section",
+   "detail": "section not in detected map: (none)"
+  },
+  {
+   "seq": 190,
+   "order": 5,
+   "name": "นางสาวอาอีเสาะ สาและ",
+   "status": "skipped-no-section",
+   "detail": "section not in detected map: (none)"
+  },
+  {
+   "seq": 193,
+   "order": 6,
+   "name": "ว่าง",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-officer2-php\\006-seq193.png"
+  },
+  {
+   "seq": 196,
+   "order": 7,
+   "name": "นางสาวอนิตยา ณะนิตย์",
+   "status": "skipped-no-section",
+   "detail": "section not in detected map: (none)"
+  },
+  {
+   "seq": 199,
+   "order": 8,
+   "name": "นายเอ็นดีฟิมเด่ม อาแว",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-officer2-php\\008-seq199.png"
+  },
+  {
+   "seq": 202,
+   "order": 9,
+   "name": "นายสาฮะ หามะ",
+   "status": "skipped-no-section",
+   "detail": "section not in detected map: (none)"
+  },
+  {
+   "seq": 205,
+   "order": 10,
+   "name": "นายอับดุลเลาะ ดาซอ",
+   "status": "created",
+   "detail": "shot: C:\\Users\\ACER\\Desktop\\my_first_scrape\\uploader\\shots\\pulohpuyogo-officer2-php\\010-seq205.png"
+  },
+  {
+   "seq": 208,
+   "order": 11,
+   "name": "นาวสาวรุสมีมี อาแว",
+   "status": "skipped-no-section",
+   "detail": "section not in detected map: (none)"
+  },
+  {
+   "seq": 211,
+   "order": 12,
+   "name": "นางสาวอาอีเซาะ แวมะเด็ง",
+   "status": "skipped-no-section",
+   "detail": "section not in detected map: (none)"
+  },
+  {
+   "seq": 214,
+   "order": 13,
+   "name": "นางสาวอารีนา วาจิ",
+   "status": "skipped-no-section",
+   "detail": "section not in detected map: (none)"
+  },
+  {
+   "seq": 217,
+   "order": 14,
+   "name": "นางสาวซูเรียวาตี สาและ",
+   "status": "skipped-no-section",
+   "detail": "section not in detected map: (none)"
+  },
+  {
+   "seq": 220,
+   "order": 15,
+   "name": "นางสาวอามีเน๊าะ เจ๊ะเต๊ะ",
+   "status": "skipped-no-section",
+   "detail": "section not in detected map: (none)"
+  },
+  {
+   "seq": 223,
+   "order": 16,
+   "name": "นายรุสลัน หะมะ",
+   "status": "skipped-no-section",
+   "detail": "section not in detected map: (none)"
+  }
+ ]
+}

@@ -1,0 +1,37 @@
+# uploader — Playwright: people.json -> ฟอร์มบุคลากรหลังบ้าน STS
+
+อ่าน `out/<slug>/people.json` อย่างเดียว **ไม่เขียนทับ `out/` เด็ดขาด**
+login ด้วย Chrome ที่ login ค้าง (connect CDP) ไม่เก็บรหัส
+`--port auto` (default): หา CDP เอง `9333 -> 9444 -> 9222`
+
+## 0. auto-detect (หลายเว็บ ไม่ต้องล็อกมือ)
+```text
+node detect.mjs --from ..\out\<slug>\people.json
+# สแกนแท็บ CDP หา */personal → กด filter แผนกเอง → ลงชั้น person/{id} → เทียบลายเซ็น profiles/sts-personnel-v1 ก่อน ไม่ตรงค่อย classify เต็ม
+# ได้ uploader/maps/<host>.json แล้วหยุดให้ตรวจ (ไม่บันทึกอะไร)
+```
+`maps/` เก็บแยก host ไม่ปนกัน
+
+## 1. ยิงแบบไม่ต้องมี map (profile ตรง)
+```text
+node upload-people.mjs --from ..\out\<slug>\people.json
+# หา port + backend จากแท็บเอง → detect inline (ไม่เซฟไฟล์) → dry ทันที
+# --save ต้องมี --map หรือ --i-verified (กันมือลั่น)
+```
+
+## 2. ล็อก field-map มือ (กรณี detect ไม่เจอ)
+1. เปิดแท็บฟอร์ม **เพิ่ม/แก้ไขบุคลากร** บน Chrome ที่ login แล้ว
+2. `npm install` (ครั้งแรกครั้งเดียว)
+3. `node map-check.mjs` -> ได้ `field-dump.json`
+4. เอา selector จาก dump ใส่ `field-map.json` ทุกช่อง + `success_mark` แล้วตั้ง `_status: "locked"` จากนั้นใช้ `--map field-map.json`
+5. เติม `section-map.json`: `section` (จาก people.json) -> ข้อความ option แผนกในฟอร์ม
+
+## 3. ยิงแบบมี map (ตรวจแล้ว)
+```text
+node upload-people.mjs --map uploader/maps/<host>.json --from ..\out\<slug>\people.json --limit 3
+node upload-people.mjs --map uploader/maps/<host>.json --from ..\out\<slug>\people.json --save   # ของจริง
+```
+- รูปหาย -> `failed` ไปต่อคนถัดไป / section ไม่ได้ map -> `skipped-no-section` (ไม่เดา)
+- ชื่อมีบนหน้าลิสต์แล้ว -> `skipped-exists`
+- เบอร์โทรลงช่อง `รายละเอียด` (`p_detail`) ถ้าไม่มีเบอร์เว้นว่างไว้ / `ตำแหน่งภาพ` <- order
+- report: `report-<slug>.json` + รูป proof `shots/<slug>/`
