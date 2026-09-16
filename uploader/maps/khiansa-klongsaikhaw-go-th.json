@@ -1,0 +1,499 @@
+{
+ "_status": "profile:sts-personnel-v1 - REVIEW then use",
+ "host": "https://khiansa.klongsaikhaw.go.th",
+ "detected_at": "2026-09-16T06:01:13.515Z",
+ "profile": "sts-personnel-v1",
+ "sections_probed": [
+  "สภาท้องถิ่น",
+  "สำนักปลัด",
+  "กองคลัง",
+  "กองช่าง",
+  "พนักงานส่วนท้องถิ่น"
+ ],
+ "filter": {
+  "title": "องค์การบริหารส่วนตำบลเคียนซา",
+  "forms": 3,
+  "filterCandidates": [
+   {
+    "action": "https://khiansa.klongsaikhaw.go.th/personal",
+    "input": "pg_name",
+    "selector": "#pg_name"
+   }
+  ]
+ },
+ "rowsAfterFilter": {
+  "url": "https://khiansa.klongsaikhaw.go.th/personal",
+  "personImgs": [],
+  "links": [
+   "https://khiansa.klongsaikhaw.go.th/personal",
+   "https://khiansa.klongsaikhaw.go.th/personal/delete/5",
+   "https://khiansa.klongsaikhaw.go.th/personal/delete/6",
+   "https://khiansa.klongsaikhaw.go.th/personal/delete/12",
+   "https://khiansa.klongsaikhaw.go.th/personal/person/5",
+   "https://khiansa.klongsaikhaw.go.th/personal/5",
+   "https://khiansa.klongsaikhaw.go.th/personal/person/6",
+   "https://khiansa.klongsaikhaw.go.th/personal/6",
+   "https://khiansa.klongsaikhaw.go.th/personal/person/12",
+   "https://khiansa.klongsaikhaw.go.th/personal/12"
+  ],
+  "bodyHead": "สำนักงานเทศบาลตำบลคลองทรายขาว\nเจ้าหน้าที่ดูแลเว็บไซต์\nหน้าแรก\nระบบควบคุมเมนู\nระบบควบคุมข่าว\nระบบควบคุมภาพสไลค์\nระบบควบคุมภาพบุคลากร\nประมวลผลภาพกิจกรรม\nวีดีโอกิจกรรม\nแหล่งท่องเที่ยว\nผลิตภัณฑ์ตำบล\nจดหมายข่าว\nส่วนควบคุมวีดีโอ\nส่วนควบคุมแบนเนอร์\nระบบควบคุมลิงค์\nOpen Data\nปฏิทินกิจกรรม\nคำถามที่พบบ่อย FAQ\nตั้งค่าเว็บไซต์\nChatbot\nจัดการสถิติ (Manual)\nระบบควบคุมภาพบุคลากร\nย้อนกลับ\n เพิ่มข้อมูลแผนกสำเร็จ\nชื่อแผนก\nเผยแพร่\n\tชื่อแผนก\tควบคุม\n\tคณะผู้บริหาร\t\n\n\tสมาชิกสภา\t\n\n\tสภาท้องถิ่น\t\n\n\nลบ",
+  "filterNote": "section \"สภาท้องถิ่น\" gave no person rows; dept rows found: 3"
+ },
+ "deptRows": [
+  {
+   "deptId": "5",
+   "personUrl": "https://khiansa.klongsaikhaw.go.th/personal/person/5",
+   "rowText": "คณะผู้บริหาร"
+  },
+  {
+   "deptId": "6",
+   "personUrl": "https://khiansa.klongsaikhaw.go.th/personal/person/6",
+   "rowText": "สมาชิกสภา"
+  },
+  {
+   "deptId": "12",
+   "personUrl": "https://khiansa.klongsaikhaw.go.th/personal/person/12",
+   "rowText": "สภาท้องถิ่น"
+  }
+ ],
+ "map": {
+  "mode": "per-section-url",
+  "fields": {
+   "photo": {
+    "selector": "input[name=\"img_path\"]",
+    "kind": "file",
+    "confidence": "profile",
+    "label": "ภาพ"
+   },
+   "name": {
+    "selector": "input[name=\"p_name\"]",
+    "kind": "text",
+    "confidence": "profile",
+    "label": "ชื่อ-สกุล"
+   },
+   "position": {
+    "selector": "input[name=\"p_position\"]",
+    "kind": "text",
+    "confidence": "profile",
+    "label": "ตำแหน่ง"
+   },
+   "phone": {
+    "selector": null,
+    "kind": null,
+    "confidence": "missing",
+    "label": "no phone field on STS form (phone goes to detail)"
+   },
+   "detail": {
+    "selector": "input[name=\"p_detail\"]",
+    "kind": "text",
+    "confidence": "profile",
+    "label": "รายละเอียด"
+   },
+   "order": {
+    "selector": "input[name=\"prarent_id\"]",
+    "kind": "text",
+    "confidence": "profile",
+    "label": "ตำแหน่งภาพ"
+   },
+   "department": {
+    "selector": null,
+    "kind": null,
+    "confidence": "missing",
+    "label": "department = the person/{id} page itself"
+   },
+   "publish": {
+    "selector": null,
+    "kind": null,
+    "confidence": "missing",
+    "label": "publish = per-row toggle"
+   },
+   "save": {
+    "strategy": "photo-form-submit",
+    "kind": "button",
+    "confidence": "profile",
+    "label": "submit in photo form"
+   }
+  },
+  "sections": {
+   "สภาท้องถิ่น": {
+    "deptId": "12",
+    "personUrl": "https://khiansa.klongsaikhaw.go.th/personal/person/12",
+    "fields": {
+     "photo": {
+      "selector": "input[name=\"img_path\"]",
+      "kind": "file",
+      "confidence": "profile",
+      "label": "ภาพ"
+     },
+     "name": {
+      "selector": "input[name=\"p_name\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ชื่อ-สกุล"
+     },
+     "position": {
+      "selector": "input[name=\"p_position\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่ง"
+     },
+     "phone": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "no phone field on STS form (phone goes to detail)"
+     },
+     "detail": {
+      "selector": "input[name=\"p_detail\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "รายละเอียด"
+     },
+     "order": {
+      "selector": "input[name=\"prarent_id\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่งภาพ"
+     },
+     "department": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "department = the person/{id} page itself"
+     },
+     "publish": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "publish = per-row toggle"
+     },
+     "save": {
+      "strategy": "photo-form-submit",
+      "kind": "button",
+      "confidence": "profile",
+      "label": "submit in photo form"
+     }
+    },
+    "ambiguous": [],
+    "profile": "sts-personnel-v1",
+    "inventory": [
+     {
+      "selector": "#file_input",
+      "tag": "INPUT",
+      "type": "file",
+      "name": "img_path",
+      "label": "ภาพ",
+      "action": "fill:photo",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "#p_name",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "p_name",
+      "label": "ชื่อ-สกุล",
+      "action": "fill:name",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "#p_position",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "p_position",
+      "label": "ตำแหน่ง",
+      "action": "fill:position",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "#p_detail",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "p_detail",
+      "label": "รายละเอียด",
+      "action": "fill:phone",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "#prarent_id",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "prarent_id",
+      "label": "ตำแหน่งภาพ",
+      "action": "fill:order",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "form[action=\"https://khiansa.klongsaikhaw.go.th/personal/person/12\"] button[type=\"submit\"]",
+      "tag": "BUTTON",
+      "type": "submit",
+      "name": null,
+      "label": "ตำแหน่งภาพ",
+      "action": "click",
+      "unmapped": false,
+      "fi": 1
+     }
+    ]
+   },
+   "คณะผู้บริหาร": {
+    "deptId": "5",
+    "personUrl": "https://khiansa.klongsaikhaw.go.th/personal/person/5",
+    "fields": {
+     "photo": {
+      "selector": "input[name=\"img_path\"]",
+      "kind": "file",
+      "confidence": "profile",
+      "label": "ภาพ"
+     },
+     "name": {
+      "selector": "input[name=\"p_name\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ชื่อ-สกุล"
+     },
+     "position": {
+      "selector": "input[name=\"p_position\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่ง"
+     },
+     "phone": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "no phone field on STS form (phone goes to detail)"
+     },
+     "detail": {
+      "selector": "input[name=\"p_detail\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "รายละเอียด"
+     },
+     "order": {
+      "selector": "input[name=\"prarent_id\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่งภาพ"
+     },
+     "department": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "department = the person/{id} page itself"
+     },
+     "publish": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "publish = per-row toggle"
+     },
+     "save": {
+      "strategy": "photo-form-submit",
+      "kind": "button",
+      "confidence": "profile",
+      "label": "submit in photo form"
+     }
+    },
+    "ambiguous": [],
+    "profile": "sts-personnel-v1",
+    "inventory": [
+     {
+      "selector": "#file_input",
+      "tag": "INPUT",
+      "type": "file",
+      "name": "img_path",
+      "label": "ภาพ",
+      "action": "fill:photo",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "#p_name",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "p_name",
+      "label": "ชื่อ-สกุล",
+      "action": "fill:name",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "#p_position",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "p_position",
+      "label": "ตำแหน่ง",
+      "action": "fill:position",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "#p_detail",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "p_detail",
+      "label": "รายละเอียด",
+      "action": "fill:phone",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "#prarent_id",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "prarent_id",
+      "label": "ตำแหน่งภาพ",
+      "action": "fill:order",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "form[action=\"https://khiansa.klongsaikhaw.go.th/personal/person/5\"] button[type=\"submit\"]",
+      "tag": "BUTTON",
+      "type": "submit",
+      "name": null,
+      "label": "ตำแหน่งภาพ",
+      "action": "click",
+      "unmapped": false,
+      "fi": 1
+     }
+    ]
+   },
+   "สมาชิกสภา": {
+    "deptId": "6",
+    "personUrl": "https://khiansa.klongsaikhaw.go.th/personal/person/6",
+    "fields": {
+     "photo": {
+      "selector": "input[name=\"img_path\"]",
+      "kind": "file",
+      "confidence": "profile",
+      "label": "ภาพ"
+     },
+     "name": {
+      "selector": "input[name=\"p_name\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ชื่อ-สกุล"
+     },
+     "position": {
+      "selector": "input[name=\"p_position\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่ง"
+     },
+     "phone": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "no phone field on STS form (phone goes to detail)"
+     },
+     "detail": {
+      "selector": "input[name=\"p_detail\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "รายละเอียด"
+     },
+     "order": {
+      "selector": "input[name=\"prarent_id\"]",
+      "kind": "text",
+      "confidence": "profile",
+      "label": "ตำแหน่งภาพ"
+     },
+     "department": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "department = the person/{id} page itself"
+     },
+     "publish": {
+      "selector": null,
+      "kind": null,
+      "confidence": "missing",
+      "label": "publish = per-row toggle"
+     },
+     "save": {
+      "strategy": "photo-form-submit",
+      "kind": "button",
+      "confidence": "profile",
+      "label": "submit in photo form"
+     }
+    },
+    "ambiguous": [],
+    "profile": "sts-personnel-v1",
+    "inventory": [
+     {
+      "selector": "#file_input",
+      "tag": "INPUT",
+      "type": "file",
+      "name": "img_path",
+      "label": "ภาพ",
+      "action": "fill:photo",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "#p_name",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "p_name",
+      "label": "ชื่อ-สกุล",
+      "action": "fill:name",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "#p_position",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "p_position",
+      "label": "ตำแหน่ง",
+      "action": "fill:position",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "#p_detail",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "p_detail",
+      "label": "รายละเอียด",
+      "action": "fill:phone",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "#prarent_id",
+      "tag": "INPUT",
+      "type": "text",
+      "name": "prarent_id",
+      "label": "ตำแหน่งภาพ",
+      "action": "fill:order",
+      "unmapped": false,
+      "fi": 1
+     },
+     {
+      "selector": "form[action=\"https://khiansa.klongsaikhaw.go.th/personal/person/6\"] button[type=\"submit\"]",
+      "tag": "BUTTON",
+      "type": "submit",
+      "name": null,
+      "label": "ตำแหน่งภาพ",
+      "action": "click",
+      "unmapped": false,
+      "fi": 1
+     }
+    ]
+   }
+  },
+  "ambiguous": [],
+  "department_options": [
+   "สภาท้องถิ่น",
+   "คณะผู้บริหาร",
+   "สมาชิกสภา"
+  ]
+ },
+ "merged_from": null
+}

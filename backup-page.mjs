@@ -24,7 +24,7 @@ function usage() {
   console.log("       node backup-page.mjs --from urls.txt [--out ./out] [--port auto] [--timeout 60] [--page-sections sections.json]");
   console.log("       node backup-page.mjs --probe --from urls.txt [--out ./out] [--port auto]");
   console.log("       node backup-page.mjs --run --from picked-links.json [--out ./out] [--port auto]");
-  console.log("       node backup-page.mjs --finalize <outdir...> | --finalize --all [--out ./out]");
+  console.log("       node backup-page.mjs --finalize <outdir...> | --finalize --all [--out ./out] [--compact-orders]");
   console.log("       node backup-page.mjs --regen-review <outdir...> | --regen-review --all [--out ./out]");
   console.log("       node backup-page.mjs --apply-master <master.json> [--out ./out]");
   console.log("  --port auto scans 9333 -> 9444 -> 9222 (explicit port still works)");
@@ -961,6 +961,25 @@ function finalize(dir) {
       const takeFree = () => { while (used.has(next)) next++; used.add(next); return next; };
       for (const p of pruned) {
         p.order = explicit.has(p.seq) ? explicit.get(p.seq) : takeFree();
+      }
+      // --compact-orders: squeeze kept orders dense (0..N) preserving ties
+      // and relative order (sparse 7,8,9,10 -> 0,1,2,3). Opt-in only.
+      if (has("--compact-orders")) {
+        const uniq = [...new Set(pruned.map((p) => p.order))].sort((a, b) => a - b);
+        const dense = new Map(uniq.map((o, i) => [o, i]));
+        let changed = false;
+        for (const p of pruned) {
+          const d = dense.get(p.order);
+          if (d !== p.order) { p.order = d; changed = true; }
+        }
+        if (changed) {
+          for (const s of sel) {
+            if (s.keep && keep.has(s.seq) && explicit.has(s.seq)) s.order = dense.get(explicit.get(s.seq));
+          }
+          writeFileSync(selPath, JSON.stringify(sel, null, 1), "utf8");
+          cj.manifest.order_compacted = true;
+          console.log(`finalize: compacted orders ${uniq.join(",")} -> 0..${uniq.length - 1} (selection.json updated)`);
+        }
       }
       // file order = selection order: upload sequence (and any insertion-ordered
       // backend list) follows what was ticked. Stable within duplicate orders.

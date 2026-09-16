@@ -1,2 +1,5 @@
-https://khiansa.go.th/manage.php
-https://khiansa.go.th/house.php
+https://khiansa.go.th/officer8.php
+https://khiansa.go.th/officer1.php
+https://khiansa.go.th/officer9.php
+https://khiansa.go.th/officer2.php
+https://khiansa.go.th/officer3.php

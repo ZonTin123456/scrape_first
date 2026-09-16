@@ -21,7 +21,8 @@ const fail = (m) => { console.error("pipeline: " + m); process.exit(1); };
 if (!argv.length || has("-h") || has("--help")) {
   console.log("Usage: node pipeline.mjs --from urls.txt [--steps probe,pick-links,master,apply-master,run,finalize,upload] [--out ./out]");
   console.log("  backup-page flags passed through: --port --timeout --via --cf-wait --no-cf-manual");
-  console.log("  upload flags passed through: --backend --map --limit --save --i-verified");
+  console.log("  upload flags passed through: --backend --map --limit --save --i-verified --strict-sections");
+  console.log("  finalize flag passed through: --compact-orders (squeeze kept orders dense 0..N)");
   console.log("  --order a,b,c: fire matching slugs first (upload step; rest keep summary order)");
   console.log("  --yes: accept defaults, skip all human pauses");
   console.log("  (pick-images step still available for per-page ticking instead of master)");
@@ -48,6 +49,7 @@ const UP = [ // flags passed to upload-people.mjs
   ...["--backend", "--map", "--limit"].flatMap((f) => argv.includes(f) ? [f, opt(f, "")] : []),
   ...(has("--save") ? ["--save"] : []),
   ...(has("--i-verified") ? ["--i-verified"] : []),
+  ...(has("--strict-sections") ? ["--strict-sections"] : []),
 ];
 const STAGING = "_staging";
 const stagingFile = (...p) => join(HERE, OUT, STAGING, ...p);
@@ -113,7 +115,7 @@ for (const s of steps) {
         if (!existsSync(join(d, "review", "selection.json"))) {
           console.log(`finalize: skip ${d} (no review/selection.json — keep-all default already written by run)`);
         }
-        sh(["backup-page.mjs", "--finalize", d]);
+        sh(["backup-page.mjs", "--finalize", d, ...(has("--compact-orders") ? ["--compact-orders"] : [])]);
       }
     } else if (s === "upload") {
       const summary = join(HERE, OUT, "summary.json");
