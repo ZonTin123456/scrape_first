@@ -38,6 +38,12 @@ const BP = [ // flags passed to backup-page.mjs
   ...["--port", "--timeout", "--via", "--cf-wait"].flatMap((f) => argv.includes(f) ? [f, opt(f, "")] : []),
   ...(has("--no-cf-manual") ? ["--no-cf-manual"] : []),
 ];
+// section overrides must reach the --run step too: backup-page.mjs only
+// auto-loads sections.json next to --from (skipped for picked-*.json),
+// so pass the repo one explicitly unless the user gave their own.
+if (!has("--page-sections") && existsSync(join(HERE, "sections.json"))) {
+  BP.push("--page-sections", join(HERE, "sections.json"));
+}
 const UP = [ // flags passed to upload-people.mjs
   ...["--backend", "--map", "--limit"].flatMap((f) => argv.includes(f) ? [f, opt(f, "")] : []),
   ...(has("--save") ? ["--save"] : []),
