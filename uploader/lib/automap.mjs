@@ -226,6 +226,30 @@ export function matchProfile(dumped, profiles) {
 
 const slugOf = (host) => host.replace(/^https?:\/\//, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
 
+// Department-link picker (pure, unit-tested). Accepts both backend URL
+// schemes — /personal/person/{id} (preferred canonical) and bare
+// /personal/{id} — dedupes by numeric id. Anything else (delete/*,
+// nav, module root) is ignored. No site-specific knowledge.
+const PERSON_RE = /\/personal\/person\/(\d+)(?:[/?#]|$)/;
+const BARE_RE = /\/personal\/(\d+)(?:[/?#]|$)/;
+export function pickDeptRows(raw) {
+  const byId = new Map();
+  for (const r of raw || []) {
+    const href = String((r && r.href) || "");
+    let m = PERSON_RE.exec(href);
+    const full = !!m;
+    if (!m) {
+      m = BARE_RE.exec(href);
+      if (!m) continue;
+    }
+    const id = m[1];
+    const prev = byId.get(id);
+    const entry = { deptId: id, personUrl: href, rowText: String((r && r.rowText) || "").slice(0, 100), full };
+    if (!prev || (!prev.full && full)) byId.set(id, entry);
+  }
+  return [...byId.values()].slice(0, 20);
+}
+
 // Full per-host auto-detect. Returns the maps/<host>.json content object.
 // opts.write=true writes it to mapsDir (detect.mjs); false keeps it ephemeral (upload-people.mjs).
 export async function automap(context, host, sections, opts = {}) {
@@ -258,19 +282,19 @@ export async function automap(context, host, sections, opts = {}) {
     const rows = await readRows();
     rows.filterNote = "unfiltered enumerate (no pre-filter by wanted section)";
     rec.rowsAfterFilter = rows;
-    const deptRows = await page.evaluate(() => {
+    const deptRaw = await page.evaluate(() => {
       const out = [];
       for (const a of document.links) {
-        const m = /\/personal\/person\/(\d+)/.exec(a.href || "");
-        if (!m) continue;
+        const href = a.href || "";
+        if (!/\/personal\//i.test(href)) continue;
         let rowText = (a.innerText || "").trim().slice(0, 40);
         const tr = a.closest("tr");
         if (tr) rowText = tr.innerText.replace(/\s+/g, " ").trim().slice(0, 100);
-        out.push({ deptId: m[1], personUrl: a.href, rowText });
+        out.push({ href, rowText });
       }
-      const seen = new Set();
-      return out.filter((d) => (seen.has(d.deptId) ? false : (seen.add(d.deptId), true))).slice(0, 20);
+      return out;
     });
+    const deptRows = pickDeptRows(deptRaw);
     rec.deptRows = deptRows;
     // prioritize rows matching requested sections (new divisions live past the cap)
     const normLo = (s) => String(s || "").trim().normalize("NFC").toLowerCase();

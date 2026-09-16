@@ -6,7 +6,9 @@
 // with no form — URL match alone is NOT sufficient.)
 // Section names/H1 are never routing decisions (secondary evidence at most).
 // Targets without a person id (e.g. single-form backends) skip with a note.
-const ID_RE = /\/personal\/person\/(\d+)/;
+// Both backend URL schemes carry the stable numeric id:
+// /personal/person/{id} (canonical) and bare /personal/{id}.
+const ID_RE = /\/personal\/(?:person\/)?(\d+)(?:[/?#]|$)/;
 
 export const extractPersonId = (url) => {
   const m = ID_RE.exec(String(url || ""));

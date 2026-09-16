@@ -54,6 +54,43 @@ export function scorePair(want, key) {
   return { score: 0, evidence: [] };
 }
 
+// Phone-digit evidence (corroboration only, never routing alone).
+// Normalization is format-agnostic, not per-site: strip every non-digit,
+// fold a leading Thai country trunk (66 + 9 digits -> 0 + 9 digits; the rule
+// is symmetric so both sides normalize identically and can never merge two
+// different people). Valid: 9-10 digits; all-identical-digit junk rejected.
+// Mirrors the repo's existing phone-text rule (7+ chars, 9+ digits).
+export function normalizePhone(s) {
+  let t = String(s ?? "").replace(/\D/g, "");
+  if (!t) return "";
+  if (/^66\d{9}$/.test(t)) t = "0" + t.slice(2);
+  if (t.length < 9 || t.length > 10) return "";
+  if (/^(\d)\1+$/.test(t)) return "";
+  return t;
+}
+// extractPhones: plausible numbers embedded in free text (names like
+// "นาง ก (065-5300535)", notes, details).
+export function extractPhones(text) {
+  const out = new Set();
+  const found = String(text ?? "").match(/\+?[\d][\d\s\-().]{7,}[\d]/g) || [];
+  for (const f of found) {
+    const n = normalizePhone(f);
+    if (n) out.add(n);
+  }
+  return out;
+}
+const flatPhones = (arr) => {
+  const out = new Set();
+  for (const s of arr || []) for (const n of extractPhones(s)) out.add(n);
+  return out;
+};
+// phoneOverlap: shared normalized numbers between two string sets.
+export function phoneOverlap(wantStrings, candStrings) {
+  const W = flatPhones(wantStrings), C = flatPhones(candStrings);
+  let shared = 0;
+  for (const n of W) if (C.has(n)) shared++;
+  return { shared, want: W.size, cand: C.size };
+}
 // Member-name evidence (cross-reference source rows vs backend page rows).
 // Normalized (parens/phones stripped); vacant/blank rows excluded — they exist
 // on every page and would fake corroboration.
@@ -77,13 +114,16 @@ export function memberScore(wantNames, candNames) {
   return { shared, want: W.size, cand: C.size, ratio: +ratio.toFixed(3) };
 }
 
-// Score wanted against all candidate keys [{key, url, memberNames, ...}].
-// opts.wantMembers: source member names for corroboration (never sufficient
-// alone: label score < MIN caps the verdict at review even with full overlap).
-// Count proximity breaks score ties (smaller |want-cand| size gap wins).
+// Score wanted against all candidate keys [{key, url, memberNames, phoneHints...}].
+// opts.wantMembers / opts.wantPhones: source evidence for corroboration (never
+// sufficient alone: label score < MIN caps the verdict at review even with
+// full overlap). Count proximity breaks score ties (smaller |want-cand| gap).
+// Phone bonus (+0.15, min 2 shared numbers) stacks under the same cap, so it
+// can corroborate but never override a strongly conflicting label into auto.
 // Returns {verdict, best, scored} where verdict is auto|review|fail.
 export function matchSection(want, candidates, opts = {}) {
   const wantMembers = opts.wantMembers || null;
+  const wantPhones = opts.wantPhones || null;
   const wantSize = wantMembers ? new Set(wantMembers.map(normalizeName).filter((n) => n && !isVacantName(n))).size : null;
   const scored = (candidates || []).map((c) => {
     const label = scorePair(want, c.key);
@@ -99,12 +139,21 @@ export function matchSection(want, candidates, opts = {}) {
       }
       evidence.push(`member:${member.shared}/${member.want}/${member.cand}`);
     }
+    let phone = null;
+    if (wantPhones && c.phoneHints) {
+      phone = phoneOverlap(wantPhones, c.phoneHints);
+      // corroboration only: min 2 shared numbers (single shared number proves nothing)
+      if (phone.shared >= 2) score = Math.min(1, score + 0.15);
+      evidence.push(`phone:${phone.shared}/${phone.want}/${phone.cand}`);
+    }
     let final = +score.toFixed(2);
     if (label.score < MIN) {
-      // member-only rescue: review band at best, never auto (renamed-page suspicion)
-      final = (member && member.shared >= 2 && member.ratio >= 0.5) ? Math.max(final, 0.55) : Math.min(final, 0.49);
+      // member/phone-only rescue: review band at best, never auto (renamed-page suspicion)
+      const memberOk = member && member.shared >= 2 && member.ratio >= 0.5;
+      const phoneOk = phone && phone.shared >= 2;
+      final = (memberOk || phoneOk) ? Math.max(final, 0.55) : Math.min(final, 0.49);
     }
-    return { ...c, score: final, labelScore: label.score, member, evidence };
+    return { ...c, score: final, labelScore: label.score, member, phone, evidence };
   });
   scored.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;

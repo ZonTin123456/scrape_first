@@ -39,7 +39,7 @@ const MAP = opt("--map", null);
 const SAVE = argv.includes("--save");
 const STRICT_SECTIONS = argv.includes("--strict-sections"); // explicit fail-fast (also the default for named sections, see pre-flight)
 const TO = (opt("--to", null) || "").replace(/\/$/, "");
-if (TO && !/\/personal\//.test(TO)) fail("bad --to (want a .../personal/... form URL)");
+if (TO && !/\/personal\/(?:person\/)?\d+(?:[/?#]|$)/.test(TO)) fail("bad --to (want a .../personal/... form URL)");
 const LIMIT = Number(opt("--limit", "0")) || 0;
 if (!FROM) fail("missing --from out/<slug>/people.json");
 if (!existsSync(FROM)) fail(`people file not found: ${FROM}`);
@@ -138,22 +138,26 @@ const detailVal = (p) => [p.phone, p.note].filter((v) => v != null && v !== "").
 // discovered sections — auto ONLY on a single unambiguous top (score>=0.8).
 const secCache = new Map();
 const secCandidates = () => Object.entries(mapMeta?.map?.sections || {})
-  .map(([key, v]) => ({ key, url: v.personUrl, deptId: v.deptId, memberNames: v.memberNames || [] }));
-// source member names per section (cross-reference evidence for the matcher)
+  .map(([key, v]) => ({ key, url: v.personUrl, deptId: v.deptId, memberNames: v.memberNames || [], phoneHints: v.memberNames || [] }));
+// source member names + phone-bearing strings per section (match evidence)
 const secMembers = new Map();
+const secPhones = new Map();
 for (const p of people) {
   if (!secMembers.has(p.section)) secMembers.set(p.section, []);
-  if (p.name) secMembers.get(p.section).push(p.name);
+  if (!secPhones.has(p.section)) secPhones.set(p.section, []);
+  if (p.name) { secMembers.get(p.section).push(p.name); secPhones.get(p.section).push(p.name); }
+  if (p.phone) secPhones.get(p.section).push(p.phone);
+  if (p.note) secPhones.get(p.section).push(p.note);
 }
 const resolveSection = (sec) => {
   if (!sec) return { empty: true };
   if (secCache.has(sec)) return secCache.get(sec);
   const ov = normSectionMap[norm(sec)];
   let out;
-  if (ov && /\/personal\/person\/\d+/.test(ov)) {
+  if (ov && /\/personal\/(?:person\/)?\d+(?:[/?#]|$)/.test(ov)) {
     out = { personUrl: ov, deptId: null, fields: null, inventory: null, via: "section-map" };
   } else {
-    const r = matchSection(sec, secCandidates(), { wantMembers: secMembers.get(sec) || [] });
+    const r = matchSection(sec, secCandidates(), { wantMembers: secMembers.get(sec) || [], wantPhones: secPhones.get(sec) || [] });
     if (r.verdict === "auto") {
       const entry = (mapMeta?.map?.sections || {})[r.best.key] || {};
       out = { personUrl: r.best.url, deptId: r.best.deptId ?? null, fields: entry.fields || null, inventory: entry.inventory || null, via: `discovery:${r.best.score}` };
