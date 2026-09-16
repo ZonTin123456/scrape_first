@@ -12,6 +12,8 @@ import { fileURLToPath } from "node:url";
 import { resolvePort, discoverBackends } from "./lib/cdp-port.mjs";
 import { automap } from "./lib/automap.mjs";
 import { matchSection, failBlock } from "./lib/match.mjs";
+import { mapHostMismatch } from "./lib/host-gate.mjs";
+import { groupSplitFailure } from "./lib/group-guard.mjs";
 import { verifyPageIdentity } from "./lib/verify-identity.mjs";
 import { createDepartment } from "./lib/target-creation.mjs";
 
@@ -37,7 +39,8 @@ if (!argv.length || argv.includes("-h") || argv.includes("--help")) {
   process.exit(2);
 }
 const FROM = opt("--from", null);
-let BACKEND = (opt("--backend", null) || "").replace(/\/$/, "");
+const BACKEND_OPT = (opt("--backend", null) || "").replace(/\/$/, ""); // explicit CLI value (may be empty)
+let BACKEND = BACKEND_OPT;
 const PORT = await resolvePort(opt("--port", "auto")).catch((e) => fail(e.message));
 const MAP = opt("--map", null);
 const SAVE = argv.includes("--save");
@@ -65,6 +68,13 @@ if (MAP) {
       fail(`map file is "${fieldMap._status}": lock it first (map-check.mjs) or use an automap maps/<host>.json`);
     }
   }
+}
+// Host-consistency gate (2B-2): explicit --backend + automap-shape map must
+// share a URL origin. Fires before derivation/discovery/resolution/upload.
+// Locked/manual maps have no mapMeta.host, so they are unaffected.
+if (BACKEND_OPT && mapMeta?.host) {
+  const mismatch = mapHostMismatch(mapMeta.host, BACKEND_OPT);
+  if (mismatch) fail(`${mismatch} — use the same host for --map and --backend, or drop --backend so the map defines it`);
 }
 if (!BACKEND && mapMeta?.host) BACKEND = mapMeta.host; // --map knows its backend
 if (!BACKEND) {
@@ -264,6 +274,20 @@ const missingSecs = []; // verdict-fail sections shared with the creation phase 
     console.log(`  rows: ${people.length} total (see report for per-row status)`);
   }
   if (emptySections) console.log(`note: ${emptySections} row(s) with no section use the default form`);
+}
+// group-integrity safety net (not a fix for bad input): one source file must
+// not fan out to multiple targets on purely heuristic, mixed-mechanism
+// evidence. Legitimate multi-group pages (heading/url evidence or a single
+// coherent mechanism) never match. --to forces one target, so it is exempt.
+if (!TO && perSection) {
+  const secEvidence = new Map();
+  for (const p of people) {
+    if (!p.section) continue;
+    if (!secEvidence.has(p.section)) secEvidence.set(p.section, new Set());
+    if (p.section_from) secEvidence.get(p.section).add(p.section_from);
+  }
+  const split = groupSplitFailure(uploadPlan, secEvidence);
+  if (split) fail(`group-integrity failure: one source file resolves to multiple targets on weak mixed evidence (sections: ${split.sections.join(" | ")} via ${split.mechanisms.join("+")}) — refusing upload because source group identity is ambiguous (fix grouping at the source, add an explicit sections.json url override, or pass --to <personUrl>)`);
 }
 // auto-create missing departments (save mode, zero-map path only).
 // Pinned --map files cannot learn new departments: refuse and point at discovery.
