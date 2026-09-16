@@ -13,6 +13,7 @@ import { resolvePort, discoverBackends } from "./lib/cdp-port.mjs";
 import { automap } from "./lib/automap.mjs";
 import { matchSection, failBlock } from "./lib/match.mjs";
 import { verifyPageIdentity } from "./lib/verify-identity.mjs";
+import { createDepartment } from "./lib/target-creation.mjs";
 
 const argv = process.argv.slice(2);
 const opt = (n, d) => {
@@ -27,6 +28,9 @@ if (!argv.length || argv.includes("-h") || argv.includes("--help")) {
   console.log("  --map is deprecated (reader kept 1 version); discovery is the default workflow");
   console.log("  --to <personUrl>: escape hatch — force every row to one form, skip section resolution");
   console.log("  default = --dry (fill + screenshot per person, never clicks save)");
+  console.log("  dry shows the plan per section: existing target URL, or WOULD-CREATE (zero writes)");
+  console.log("  --save auto-creates missing departments (explicit opt-in: needs --map or --i-verified),");
+  console.log("  then rediscovers, verifies identity, and only then uploads; any failure stops the run");
   console.log("  named-but-unresolvable sections fail closed in per-section mode (no silent misroute);");
   console.log("  rows with no section keep the old flex path (default form + partial note)");
   console.log("  --save refuses stale finalize output (people.json vs review/selection.json) unless --ignore-selection-check");
@@ -122,8 +126,7 @@ const slug = basename(fromDir);
     }
   }
 }
-const perSectionMode = () => mapMeta?.map?.mode === "per-section-url";
-const hasSel = (k) => {
+const perSectionMode = () => mapMeta?.map?.mode === "per-section-url";const hasSel = (k) => {
   const f = fieldMap.fields?.[k];
   return !!(f && (f.selector || f.strategy) && !/^TBD/.test(f.selector || ""));
 };
@@ -162,7 +165,7 @@ const resolveSection = (sec) => {
       const entry = (mapMeta?.map?.sections || {})[r.best.key] || {};
       out = { personUrl: r.best.url, deptId: r.best.deptId ?? null, fields: entry.fields || null, inventory: entry.inventory || null, via: `discovery:${r.best.score}` };
     } else {
-      out = { fail: failBlock(sec, r) };
+      out = { fail: failBlock(sec, r), verdict: r.verdict };
     }
   }
   secCache.set(sec, out);
@@ -187,43 +190,127 @@ if (!MAP) {
   fieldMap = { fields: auto.content.map.fields, create_url: firstSec?.personUrl || null, list_url: `${BACKEND}/personal`, success_mark: null };
   console.log(`auto-detect: ${auto.content.profile ? "profile:" + auto.content.profile : "full-classify"} (${Object.keys(auto.content.map.sections || {}).length} sections)`);
 }
-const perSection = perSectionMode();
+let perSection = perSectionMode();
 const need = perSection ? ["photo", "name", "position", "save"] : ["photo", "name", "position", "department", "save"];
 for (const k of need) {
   if (!hasSel(k)) fail(`map fields.${k} has no selector/strategy (ambiguous? check ${MAP || "auto-detect output"})`);
 }
 listUrl = fill(fieldMap.list_url);
-// pre-flight: section existence gate (F2). Named-but-unresolvable sections
-// fail closed in per-section mode (a silent default-form upload misroutes).
+// pre-flight: section existence gate. Named-but-unresolvable sections split by
+// matcher verdict: "review" (ambiguous) always fails closed; "fail" (missing)
+// shows WOULD-CREATE in dry-run, or triggers auto-create in --save (phase below).
 // Rows with no section keep the old flex path. --to skips resolution entirely.
+// uploadPlan feeds the dry-run plan block and the final report.
+let uploadPlan = [];
+const missingSecs = []; // verdict-fail sections shared with the creation phase below
 {
-  const missing = []; // [{sec, lines}] — fail blocks with evidence trail
+  const missing = missingSecs;   // verdict fail -> creatable (save) / would-create (dry)
+  const ambiguous = []; // verdict review -> always fail, never create
+  const singleMissing = []; // single-form mode: old strict-fail / warn semantics
   let emptySections = 0;
   const warnedSingle = new Set();
   const deptOpts = mapMeta?.map?.department_options || [];
+  const planSeen = new Set();
+  const planAdd = (sec, action, target, via) => {
+    if (planSeen.has(sec)) return;
+    planSeen.add(sec);
+    uploadPlan.push({ section: sec, action, target: target || null, via: via || null });
+  };
   if (TO) {
     console.log(`section resolution skipped (--to ${TO})`);
   } else for (const p of people) {
     if (perSection) {
       if (!p.section) { emptySections++; continue; }
       const r = resolveSection(p.section);
-      if (r.fail && !missing.some((m) => m.sec === p.section)) missing.push({ sec: p.section, lines: r.fail });
+      if (r.fail) {
+        const bucket = r.verdict === "review" ? ambiguous : missing;
+        if (!bucket.some((m) => m.sec === p.section)) bucket.push({ sec: p.section, lines: r.fail });
+        planAdd(p.section, r.verdict === "review" ? "unresolved" : "would-create", null);
+      } else {
+        planAdd(p.section, "upload", r.personUrl, r.via || null);
+      }
     } else if (p.section && !normSectionMap[norm(p.section)] && !deptOpts.includes(p.section) && fieldMap.fields.department?.selector) {
       // single-form backends can't misroute (one fixed page): strict fails, else warn once
       if (STRICT_SECTIONS) {
-        if (!missing.some((m) => m.sec === p.section)) missing.push({ sec: p.section, lines: [`section "${p.section}": unmapped department select (strict) — add to section-map or cut scope`] });
+        if (!singleMissing.some((m) => m.sec === p.section)) singleMissing.push({ sec: p.section, lines: [`section "${p.section}": unmapped department select (strict) — add to section-map or cut scope`] });
       } else if (!warnedSingle.has(p.section)) {
         warnedSingle.add(p.section);
         console.log(`warn: unmapped section (single form, select left untouched): ${p.section}`);
       }
+      planAdd(p.section, "upload", fill(fieldMap.create_url));
     }
   }
-  if (missing.length) {
-    console.error("upload-people: unresolvable sections (refusing: would misroute):");
-    for (const m of missing) for (const l of m.lines.slice(0, 8)) console.error("  " + l);
-    fail(`${missing.length} section(s) need a backend department, scope cut, or --to <personUrl>`);
+  if (ambiguous.length) {
+    console.error("upload-people: ambiguous sections (refusing to guess or create):");
+    for (const m of ambiguous) for (const l of m.lines.slice(0, 8)) console.error("  " + l);
+    fail(`ambiguous section(s): ${ambiguous.map((m) => m.sec).join(", ")} — resolve with --to <personUrl> or cut scope`);
+  }
+  if (singleMissing.length) {
+    console.error("upload-people: unmapped department select (strict):");
+    for (const m of singleMissing) for (const l of m.lines.slice(0, 8)) console.error("  " + l);
+    fail(`unmapped section(s): ${singleMissing.map((m) => m.sec).join(", ")} (strict) — add to section-map or cut scope`);
+  }
+  if (missing.length && !SAVE) {
+    console.log(`dry-run plan: ${missing.length} section(s) would be CREATED on --save (zero writes now):`);
+    for (const m of missing) console.log(`  - WOULD-CREATE department "${m.sec}"`);
+  }
+  if (!SAVE && !TO) {
+    console.log("upload plan (dry, no writes):");
+    for (const e of uploadPlan) {
+      if (e.action === "upload") console.log(`  - section "${e.section}" -> ${e.target} (existing)`);
+      else if (e.action === "would-create") console.log(`  - section "${e.section}" -> WOULD-CREATE`);
+      else console.log(`  - section "${e.section}" -> ${e.action}`);
+    }
+    console.log(`  rows: ${people.length} total (see report for per-row status)`);
   }
   if (emptySections) console.log(`note: ${emptySections} row(s) with no section use the default form`);
+}
+// auto-create missing departments (save mode, zero-map path only).
+// Pinned --map files cannot learn new departments: refuse and point at discovery.
+if (SAVE && !TO && perSection && missingSecs.length && MAP) {
+  fail(`cannot auto-create ${missingSecs.length} missing section(s) with a pinned --map (${missingSecs.map((m) => m.sec).join(", ")}) — re-run without --map (zero-map discovery) or pass --to <personUrl>`);
+}
+if (SAVE && !TO && perSection && missingSecs.length && !MAP) {
+  const cpage = await context.newPage();
+  try {
+    for (const m of missingSecs) {
+      console.log(`creating department "${m.sec}" ...`);
+      let cr;
+      try {
+        cr = await createDepartment(cpage, { host: BACKEND, name: m.sec, wantMembers: secMembers.get(m.sec) || [] });
+      } catch (e) {
+        fail(`department creation threw for "${m.sec}": ${String((e && e.message) || e).slice(0, 120)} — NOT uploading (fail-closed)`);
+      }
+      if (!cr || cr.status !== "created") {
+        if (cr && cr.evidence) for (const l of cr.evidence.slice(0, 6)) console.error("  " + l);
+        fail(`department creation failed for "${m.sec}": ${(cr && (cr.reason || cr.status)) || "unknown"} — NOT uploading (fail-closed)`);
+      }
+      console.log(`created department "${m.sec}" -> ${cr.target.personUrl} (backend id ${cr.target.deptId})`);
+      const pe = uploadPlan.find((e) => e.section === m.sec);
+      if (pe) { pe.action = "created"; pe.target = cr.target.personUrl; }
+    }
+  } finally {
+    await cpage.close().catch(() => null);
+  }
+  // rediscover from the backend (never trust computed ids), then re-resolve all
+  console.log("re-discovering backend after creation ...");
+  const probeSections = [...new Set(people.map((p) => p.section).filter(Boolean))];
+  const auto2 = await automap(context, BACKEND, probeSections, { write: false });
+  if (!auto2.ok) fail(`re-discovery failed after creation: ${auto2.error} — NOT uploading (fail-closed)`);
+  mapMeta = { host: BACKEND, map: auto2.content.map };
+  const firstSec2 = Object.values(auto2.content.map.sections || {})[0];
+  fieldMap = { fields: auto2.content.map.fields, create_url: firstSec2?.personUrl || null, list_url: `${BACKEND}/personal`, success_mark: null };
+  secCache.clear();
+  perSection = perSectionMode();
+  listUrl = fill(fieldMap.list_url);
+  const stillFailing = [];
+  for (const p of people) {
+    if (!p.section) continue;
+    const r = resolveSection(p.section);
+    if (r.fail && !stillFailing.includes(p.section)) stillFailing.push(p.section);
+  }
+  if (stillFailing.length) fail(`sections still unresolvable after creation: ${stillFailing.join(", ")} — NOT uploading (fail-closed)`);
+  console.log(`re-discovery ok (${Object.keys(auto2.content.map.sections || {}).length} sections), all rows resolved`);
 }
 const page = await context.newPage();
 const results = [];
@@ -255,13 +342,19 @@ try {
         } else {
           const r = resolveSection(p.section);
           if (r.fail) {
+            // save mode: unreachable (pre-flight created or failed closed).
+            // dry mode: skip without any writes; the plan block already showed WOULD-CREATE.
+            if (!SAVE) {
+              rec.status = "skip-would-create";
+              rec.detail = `would-create department "${p.section}" (dry: zero writes)`;
+              results.push(rec); continue;
+            }
             rec.status = "failed";
             rec.detail = r.fail[0] + " (pre-flight should have caught this)";
             results.push(rec); continue;
           }
           formUrl = r.personUrl; deptOption = r.deptId || null;
           secFields = r.fields; secInv = r.inventory;
-          if (r.via) partialNotes.push(`section via ${r.via}`);
         }
       } else {
         const deptOpts = mapMeta?.map?.department_options || [];
@@ -402,6 +495,7 @@ const report = {
   backend: BACKEND, from: FROM, slug,
   total: results.length,
   by_status: results.reduce((m, r) => ((m[r.status] = (m[r.status] || 0) + 1), m), {}),
+  plan: uploadPlan,
   results,
 };
 const reportPath = join(uploaderDir, `report-${slug}.json`);

@@ -67,10 +67,11 @@ async function readCreateForm(page) {
       (e.tag === "INPUT" && e.type === "submit"));
     if (!submitRaw) continue;
     // Live STS submit buttons carry no id/name: scope by the create form's
-    // own action (exactly one form posts to /personal — verified live).
+    // own action. Match on the action SUFFIX: real pages may use absolute
+    // or relative actions, while the discovered f.action is always absolute.
     const submit = withSel(submitRaw);
     if (!submit.selector) {
-      submit.selector = `form[action="${f.action}"] ${String(submitRaw.tag || "button").toLowerCase()}[type="${submitRaw.type}"]`;
+      submit.selector = `form[action$="/personal"] ${String(submitRaw.tag || "button").toLowerCase()}[type="${submitRaw.type}"]`;
     }
     return { action: f.action, token, nameInput, submit };
   }
