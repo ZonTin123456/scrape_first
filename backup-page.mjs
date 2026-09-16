@@ -337,9 +337,10 @@ const EXPR = `(() => {
       const lazy = (!raw || raw.startsWith("data:"))
         ? (n.getAttribute("data-src") || n.getAttribute("data-original") || n.getAttribute("data-lazy-src") || n.getAttribute("data-srcset") || "") : "";
       const srcVal = raw && !raw.startsWith("data:") ? raw : lazy;
-      const r = n.getBoundingClientRect ? n.getBoundingClientRect() : { width: 0, height: 0 };
+      const r = n.getBoundingClientRect ? n.getBoundingClientRect() : { width: 0, height: 0, top: 0 };
       out.push({ t: "img", src: abs(srcVal || ""),
         w: n.naturalWidth || Math.round(r.width) || 0, h: n.naturalHeight || Math.round(r.height) || 0,
+        top: Math.round(r.top + window.scrollY),
         alt: (n.getAttribute("alt") || "").slice(0, 200),
         chrome: chromeOf(n), full: a ? abs(a.getAttribute("href")) : null });
     } else if (n.tagName === "IFRAME") {
@@ -424,7 +425,8 @@ function buildKept(rawNodes, origin, pageSection = null) {
       if (seen.has(n.src)) return cut();
       seen.add(n.src);
       stats.image++;
-      const rec = { seq: i, type: "image", chrome: false, file: null, src: n.src, width: n.w, height: n.h };
+      const rec = { seq: i, type: "image", chrome: false, file: null, src: n.src, width: n.w, height: n.h,
+        top: (Number.isFinite(n.top) ? n.top : null) };
       if (n.alt) rec.alt = n.alt;
       if (n.full && n.full !== n.src && /\.(jpe?g|png|gif|webp)(\?|$)/i.test(n.full)) rec.fullres_candidate = n.full;
       kept.push(rec); queue.push(rec);
@@ -619,7 +621,7 @@ async function scrapeOne(c, url, timeoutMs, imageSeqFilter = null) {
     extractor_version: VERSION, counts: { ...stats, imgErrors, people: people.length },
     rules: ["text-only chrome", "image denylist + <=70B filter", "text denylist (goog-te, เลือกภาษา)",
       `dedupe by absolute URL`, `min size ${MIN_PX}px`, "cross-origin iframes -> placeholder",
-      "UTF-8 JSON output", `image retry x${RETRY}`, "caption_next = next 2 non-phone texts", "phone = first tel:/phone-pattern text in run", "note = trailing texts joined with <br> (junk tails cut)", "order = 0-based DOM sequence", "section = H1-H3 heading > --page-sections url > position inference", `slug unique (${slug})`,
+      "UTF-8 JSON output", `image retry x${RETRY}`, "caption_next = next 2 non-phone texts", "phone = first tel:/phone-pattern text in run", "note = trailing texts joined with <br> (junk tails cut)", "order = visual-row group suggestion (same row = same number, editable on review)", "section = H1-H3 heading > --page-sections url > position inference", `slug unique (${slug})`,
       `image via ${VIA}${c._cfChallenge ? " (cf-challenge seen: cdp forced)" : ""}`, `cf-wait ${CF_WAIT_S}s${CF_MANUAL ? "+manual" : ""}`, `cdp :${PORT}`] };
   if (imageSeqFilter) { manifest.picked = true; }
   writeFileSync(join(dir, "content.json"), JSON.stringify({ manifest, nodes: kept }, null, 1), "utf8");
@@ -637,6 +639,7 @@ async function probeOne(c, url, timeoutMs) {
   mkdirSync(stageDir, { recursive: true });
   const images = kept.filter((n) => n.type === "image").map((n) => ({
     seq: n.seq, src: n.src, width: n.width, height: n.height,
+    top: (Number.isFinite(n.top) ? n.top : null),
     alt: n.alt || null, fullres_candidate: n.fullres_candidate || null,
     caption_next: n.caption_next || [], caption_text: n.caption_text || "",
     name: n.caption_next?.[0] || null, position: n.caption_next?.[1] || null,
@@ -846,9 +849,23 @@ function applyMaster(masterPath) {
 // --- people shortlist: human picks which candidate photos to keep ---
 // No size filter here: every downloaded image is shown, human ticks.
 // (Small 107x127 personnel thumbnails were cut by the old 130x100 gate.)
+// Row-group suggestion: photos on the same visual row (same top ±ROW_TOL px,
+// e.g. org-chart levels) share one order number. DOM order, editable on the
+// review page (bulk-set / per-card) — suggestion only, never forced.
+const ROW_TOL = 25;
+function suggestOrders(cands) {
+  let g = -1, lastTop = null;
+  return cands.map((n) => {
+    const t = (Number.isFinite(n.top) ? n.top : null);
+    if (t === null || lastTop === null || Math.abs(t - lastTop) > ROW_TOL) g++;
+    if (t !== null) lastTop = t;
+    return g;
+  });
+}
 function writeReview(dir, nodes) {
   const cands = nodes.filter((n) => n.type === "image" && n.file);
-  const sel = cands.map((n, idx) => ({ seq: n.seq, file: n.file, keep: true, order: idx }));
+  const groups = suggestOrders(cands);
+  const sel = cands.map((n, idx) => ({ seq: n.seq, file: n.file, keep: true, order: groups[idx] }));
   mkdirSync(join(dir, "review"), { recursive: true });
   writeFileSync(join(dir, "review", "selection.json"), JSON.stringify(sel, null, 1), "utf8");
   writeFileSync(join(dir, "review", "index.html"), reviewHTML(sel, nodes, basename(dir)), "utf8");

@@ -82,7 +82,7 @@ node backup-page.mjs --finalize <outdir>   # ตัดรูปตาม review/
 
 เอาเฉพาะรูปคนชัด: โปรแกรมไม่ detect คนเอง แต่โชว์รูปที่โหลดได้ทั้งหมด (`n.type==="image" && n.file`, ไม่กรองขนาด) มาให้คนเลือก
 
-1. หลังดึงเสร็จ โปรแกรมเขียน `review/selection.json` (`[{seq, file, keep:true}]`) + `review/index.html` (contact sheet เปิดด้วยเบราว์เซอร์)
+1. หลังดึงเสร็จ โปรแกรมเขียน `review/selection.json` (`[{seq, file, keep:true, order}]`, order = เลขกลุ่มแถวภาพที่แนะนำอัตโนมัติ: รูปแถวเดียวกันเลขเดียวกัน แก้ได้) + `review/index.html` (contact sheet เปิดด้วยเบราว์เซอร์)
 2. คนเปิด `review/index.html` ติ๊กเฉพาะรูปคนชัด → กดบันทึก → เอาไฟล์ทับ `review/selection.json`
 3. รัน `--finalize`: ลบไฟล์รูป + node ที่ไม่ถูกเลือก, อัปเดต counts, `manifest.reviewed=true`
 
