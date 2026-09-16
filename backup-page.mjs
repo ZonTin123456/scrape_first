@@ -16,7 +16,6 @@ const VERSION = "1.3.0";
 const IMG_DENY = /(cleardot|blank\.gif|j1\.gif|rblue\.gif|spacer|pixel)/i;
 const TEXT_DENY_EXACT = new Set(["เลือกภาษา"]);
 const MIN_PX = 12, RETRY = 2;
-const CAND_MIN_W = 130, CAND_MIN_H = 100;
 const STAGING = "_staging";
 
 function usage() {
@@ -26,6 +25,7 @@ function usage() {
   console.log("       node backup-page.mjs --probe --from urls.txt [--out ./out] [--port auto]");
   console.log("       node backup-page.mjs --run --from picked-links.json [--out ./out] [--port auto]");
   console.log("       node backup-page.mjs --finalize <outdir...> | --finalize --all [--out ./out]");
+  console.log("       node backup-page.mjs --regen-review <outdir...> | --regen-review --all [--out ./out]");
   console.log("       node backup-page.mjs --apply-master <master.json> [--out ./out]");
   console.log("  --port auto scans 9333 -> 9444 -> 9222 (explicit port still works)");
   console.log("  --via auto|cdp|fetch (default auto; cdp forced on Cloudflare/403)");
@@ -844,8 +844,10 @@ function applyMaster(masterPath) {
 }
 
 // --- people shortlist: human picks which candidate photos to keep ---
+// No size filter here: every downloaded image is shown, human ticks.
+// (Small 107x127 personnel thumbnails were cut by the old 130x100 gate.)
 function writeReview(dir, nodes) {
-  const cands = nodes.filter((n) => n.type === "image" && n.file && n.width >= CAND_MIN_W && n.height >= CAND_MIN_H);
+  const cands = nodes.filter((n) => n.type === "image" && n.file);
   const sel = cands.map((n, idx) => ({ seq: n.seq, file: n.file, keep: true, order: idx }));
   mkdirSync(join(dir, "review"), { recursive: true });
   writeFileSync(join(dir, "review", "selection.json"), JSON.stringify(sel, null, 1), "utf8");
@@ -975,6 +977,30 @@ function writeSummary(outDir, results) {
 }
 
 // ---------- CLI dispatch ----------
+if (argv[0] === "--regen-review") {
+  // rebuild review/selection.json + review/index.html from content.json
+  // with current writeReview rules (no re-scrape). Overwrites review files.
+  let dirs = argv.slice(1).filter((a) => !a.startsWith("--") && a !== OUT);
+  if (has("--all")) {
+    dirs = [];
+    try {
+      for (const d of readdirSync(OUT).sort()) {
+        if (existsSync(join(OUT, d, "content.json")))
+          dirs.push(join(OUT, d));
+      }
+    } catch { /* unreadable OUT */ }
+    if (!dirs.length) fail(`--all found nothing to regen under ${OUT}`);
+  }
+  if (!dirs.length) fail("usage: node backup-page.mjs --regen-review <outdir...> | --regen-review --all [--out ./out]");
+  for (const d of dirs) {
+    if (!existsSync(join(d, "content.json"))) fail(`missing content.json in ${d}`);
+    const cj = JSON.parse(readFileSync(join(d, "content.json"), "utf8"));
+    const n = writeReview(d, cj.nodes || []);
+    console.log(`regen-review ${d}: ${n} candidates`);
+  }
+  if (dirs.length > 1) console.log(`regen-review ${dirs.length} dirs`);
+  process.exit(0);
+}
 if (argv[0] === "--finalize") {
   // single dir, several dirs, or --all (every OUT subdir with review/selection.json)
   let dirs = argv.slice(1).filter((a) => !a.startsWith("--") && a !== OUT);

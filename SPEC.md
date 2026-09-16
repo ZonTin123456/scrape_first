@@ -80,7 +80,7 @@ node backup-page.mjs --finalize <outdir>   # ตัดรูปตาม review/
 
 ## 8. People shortlist (เลือกรูปคน — คนนั่งจิ้มเอง)
 
-เอาเฉพาะรูปคนชัด: โปรแกรมไม่ detect คนเอง แต่คัด candidate ภาพถ่าย (รูปที่โหลดได้และ `width>=130 && height>=100`) มาให้คนเลือก
+เอาเฉพาะรูปคนชัด: โปรแกรมไม่ detect คนเอง แต่โชว์รูปที่โหลดได้ทั้งหมด (`n.type==="image" && n.file`, ไม่กรองขนาด) มาให้คนเลือก
 
 1. หลังดึงเสร็จ โปรแกรมเขียน `review/selection.json` (`[{seq, file, keep:true}]`) + `review/index.html` (contact sheet เปิดด้วยเบราว์เซอร์)
 2. คนเปิด `review/index.html` ติ๊กเฉพาะรูปคนชัด → กดบันทึก → เอาไฟล์ทับ `review/selection.json`
