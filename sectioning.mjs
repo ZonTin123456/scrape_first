@@ -138,3 +138,69 @@ export function attachCaptions(kept, pageSection = null) {
   }
   return kept;
 }
+
+export const IMG_DENY = /(cleardot|blank\.gif|j1\.gif|rblue\.gif|spacer|pixel)/i;
+export const TEXT_DENY_EXACT = new Set(["เลือกภาษา"]);
+export const MIN_PX = 12;
+
+export function providerOf(src) {  if (/google\.com\/maps|maps\/embed/.test(src)) return ["maps", "แผนที่ Google Maps"];
+  if (/sharethis/.test(src)) return ["sharethis", "ปุ่มแชร์ (sharethis)"];
+  if (/cjworld.*hotmenu/.test(src)) return ["hotmenu", "เมนูลัดจังหวัด (hotmenu)"];
+  return ["other", "เนื้อหาฝังภายนอก"];
+}
+
+// Person-slot identity for image dedupe (generic, structural).
+// The same image URL may legitimately repeat across person slots (shared
+// placeholders such as a vacancy gif): image-URL identity is NOT person
+// identity. Dedupe only repeats at the same page position (the same card
+// rendered twice), keyed by document coordinates the extractor already
+// records. Nodes without coordinates fall back to the legacy src-only key.
+// Deliberate bias: over-keep (a visible duplicate is unticked in review)
+// beats over-drop (a missing person is a silent loss).
+export const imgSlotKey = (src, left, top) =>
+  (left == null || top == null) ? `src:${src}` : `src:${src}@${left}x${top}`;
+
+export function buildKept(rawNodes, origin, pageSection = null) {
+  const stats = { text: 0, image: 0, placeholder: 0, "iframe-sameorigin": 0, cut: 0 };
+  const kept = [], queue = [], seen = new Set();
+  const cut = () => stats.cut++;
+  rawNodes.forEach((n, i) => {
+    if (n.t === "text") {
+      if (n.goog || TEXT_DENY_EXACT.has(n.text)) return cut();
+      stats.text++;
+      const rec = { seq: i, type: "text", chrome: n.chrome, text: n.text };
+      if (n.h) rec.h = n.h;
+      if (n.tel) rec.tel = n.tel;
+      if (n.link) rec.link = true;
+      kept.push(rec);
+    } else if (n.t === "img") {
+      if (!n.src || n.src.startsWith("data:")) return cut(); // inline data-URI icons, not content
+      if (IMG_DENY.test(n.src)) return cut();
+      if (n.w < MIN_PX || n.h < MIN_PX) return cut();
+      if (n.chrome) return cut();
+      const key = imgSlotKey(n.src, n.left, n.top);
+      if (seen.has(key)) return cut();
+      seen.add(key);
+      stats.image++;
+      const rec = { seq: i, type: "image", chrome: false, file: null, src: n.src, width: n.w, height: n.h,
+        top: (Number.isFinite(n.top) ? n.top : null), left: (Number.isFinite(n.left) ? n.left : null) };
+      if (n.alt) rec.alt = n.alt;
+      if (n.full && n.full !== n.src && /\.(jpe?g|png|gif|webp)(\?|$)/i.test(n.full)) rec.fullres_candidate = n.full;
+      kept.push(rec); queue.push(rec);
+    } else if (n.t === "iframe") {
+      if (!n.abs || n.abs === "about:blank") return cut();
+      let cross = true;
+      try { cross = new URL(n.abs).origin !== origin; } catch { /* placeholder */ }
+      if (!cross) {
+        stats["iframe-sameorigin"]++;
+        kept.push({ seq: i, type: "iframe-sameorigin", chrome: n.chrome, src: n.abs });
+        return;
+      }
+      const [provider, label] = providerOf(n.abs);
+      stats.placeholder++;
+      kept.push({ seq: i, type: "placeholder", kind: "iframe", provider, label, src: n.abs, title: n.title || null });
+    }
+  });
+  attachCaptions(kept, pageSection);
+  return { kept, queue, stats };
+}

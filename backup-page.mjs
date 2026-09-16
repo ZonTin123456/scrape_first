@@ -13,9 +13,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFile
 import { join, basename } from "node:path";
 
 const VERSION = "1.3.0";
-const IMG_DENY = /(cleardot|blank\.gif|j1\.gif|rblue\.gif|spacer|pixel)/i;
-const TEXT_DENY_EXACT = new Set(["เลือกภาษา"]);
-const MIN_PX = 12, RETRY = 2;
+const RETRY = 2;
 const STAGING = "_staging";
 
 function usage() {
@@ -100,7 +98,7 @@ function resolveSlug(url, outDir = OUT) {
   }
   return `${base}-${Date.now()}`;
 }
-import { attachCaptions } from "./sectioning.mjs";
+import { attachCaptions, buildKept, MIN_PX } from "./sectioning.mjs";
 // Personnel records for the Playwright uploader: [{photo, name, position, phone, section, order, ...}]
 function buildPeople(kept, url, photoKey) {
   const imgs = kept.filter((n) => n.type === "image");
@@ -239,7 +237,7 @@ const EXPR = `(() => {
       const r = n.getBoundingClientRect ? n.getBoundingClientRect() : { width: 0, height: 0, top: 0 };
       out.push({ t: "img", src: abs(srcVal || ""),
         w: n.naturalWidth || Math.round(r.width) || 0, h: n.naturalHeight || Math.round(r.height) || 0,
-        top: Math.round(r.top + window.scrollY),
+        top: Math.round(r.top + window.scrollY), left: Math.round(r.left || 0),
         alt: (n.getAttribute("alt") || "").slice(0, 200),
         chrome: chromeOf(n), full: a ? abs(a.getAttribute("href")) : null });
     } else if (n.tagName === "IFRAME") {
@@ -253,11 +251,6 @@ const EXPR = `(() => {
 
 function sameOrigin(src, origin) {
   try { return new URL(src).origin === origin; } catch { return false; }
-}
-function providerOf(src) {  if (/google\.com\/maps|maps\/embed/.test(src)) return ["maps", "แผนที่ Google Maps"];
-  if (/sharethis/.test(src)) return ["sharethis", "ปุ่มแชร์ (sharethis)"];
-  if (/cjworld.*hotmenu/.test(src)) return ["hotmenu", "เมนูลัดจังหวัด (hotmenu)"];
-  return ["other", "เนื้อหาฝังภายนอก"];
 }
 async function fetchBuf(u, referer, tries = RETRY + 1) {
   let last = "unknown";
@@ -302,50 +295,6 @@ const extOf = (buf, ct, u) => {
   return ct.includes("png") ? "png" : ct.includes("gif") ? "gif" : ct.includes("webp") ? "webp"
   : /\.png($|\?)/i.test(u) ? "png" : /\.gif($|\?)/i.test(u) ? "gif" : /\.webp($|\?)/i.test(u) ? "webp" : "jpg";
 };
-
-function buildKept(rawNodes, origin, pageSection = null) {
-  const stats = { text: 0, image: 0, placeholder: 0, "iframe-sameorigin": 0, cut: 0 };
-  const kept = [], queue = [], seen = new Set();
-  const cut = () => stats.cut++;
-  rawNodes.forEach((n, i) => {
-    if (n.t === "text") {
-      if (n.goog || TEXT_DENY_EXACT.has(n.text)) return cut();
-      stats.text++;
-      const rec = { seq: i, type: "text", chrome: n.chrome, text: n.text };
-      if (n.h) rec.h = n.h;
-      if (n.tel) rec.tel = n.tel;
-      if (n.link) rec.link = true;
-      kept.push(rec);
-    } else if (n.t === "img") {
-      if (!n.src || n.src.startsWith("data:")) return cut(); // inline data-URI icons, not content
-      if (IMG_DENY.test(n.src)) return cut();
-      if (n.w < MIN_PX || n.h < MIN_PX) return cut();
-      if (n.chrome) return cut();
-      if (seen.has(n.src)) return cut();
-      seen.add(n.src);
-      stats.image++;
-      const rec = { seq: i, type: "image", chrome: false, file: null, src: n.src, width: n.w, height: n.h,
-        top: (Number.isFinite(n.top) ? n.top : null) };
-      if (n.alt) rec.alt = n.alt;
-      if (n.full && n.full !== n.src && /\.(jpe?g|png|gif|webp)(\?|$)/i.test(n.full)) rec.fullres_candidate = n.full;
-      kept.push(rec); queue.push(rec);
-    } else if (n.t === "iframe") {
-      if (!n.abs || n.abs === "about:blank") return cut();
-      let cross = true;
-      try { cross = new URL(n.abs).origin !== origin; } catch { /* placeholder */ }
-      if (!cross) {
-        stats["iframe-sameorigin"]++;
-        kept.push({ seq: i, type: "iframe-sameorigin", chrome: n.chrome, src: n.abs });
-        return;
-      }
-      const [provider, label] = providerOf(n.abs);
-      stats.placeholder++;
-      kept.push({ seq: i, type: "placeholder", kind: "iframe", provider, label, src: n.abs, title: n.title || null });
-    }
-  });
-  attachCaptions(kept, pageSection);
-  return { kept, queue, stats };
-}
 
 // ---------- Cloudflare challenge handling ----------
 // Detects IUAM / Turnstile / "Just a moment" walls so we wait (or pause for a
@@ -522,7 +471,7 @@ async function scrapeOne(c, url, timeoutMs, imageSeqFilter = null) {
   const manifest = { source_url: url, source_title: title, captured_at: new Date().toISOString(),
     extractor_version: VERSION, counts: { ...stats, imgErrors, people: people.length },
     rules: ["text-only chrome", "image denylist + <=70B filter", "text denylist (goog-te, เลือกภาษา)",
-      `dedupe by absolute URL`, `min size ${MIN_PX}px`, "cross-origin iframes -> placeholder",
+      `dedupe by image URL + page slot position`, `min size ${MIN_PX}px`, "cross-origin iframes -> placeholder",
       "UTF-8 JSON output", `image retry x${RETRY}`, "caption_next = next 2 non-phone texts", "phone = first tel:/phone-pattern text in run", "note = trailing texts joined with <br> (junk tails cut)", "order = visual-row group suggestion (same row = same number, editable on review)", "section = H1-H3 heading > --page-sections url > scoped division / position evidence > page fallback", `slug unique (${slug})`,
       `image via ${VIA}${c._cfChallenge ? " (cf-challenge seen: cdp forced)" : ""}`, `cf-wait ${CF_WAIT_S}s${CF_MANUAL ? "+manual" : ""}`, `cdp :${PORT}`] };
   if (imageSeqFilter) { manifest.picked = true; }
