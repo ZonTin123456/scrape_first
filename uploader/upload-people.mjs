@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { resolvePort, discoverBackends } from "./lib/cdp-port.mjs";
 import { automap } from "./lib/automap.mjs";
 import { matchSection, failBlock } from "./lib/match.mjs";
+import { verifyPageIdentity } from "./lib/verify-identity.mjs";
 
 const argv = process.argv.slice(2);
 const opt = (n, d) => {
@@ -281,8 +282,17 @@ try {
           rec.detail = ((rec.detail ? rec.detail + "; " : "") + "duplicate: name already on list page (uploading anyway)");
         }
       } catch { /* list check failed -> proceed */ }
-      // 4. fill person form: inventory-driven when available, legacy fields fallback
+      // 4. fill person form: inventory-driven when available, legacy fields fallback.
+      // Identity guard: the page AND its photo form must carry the target
+      // person id before any fill. No name-based routing anywhere here.
       await page.goto(formUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+      const ident = await verifyPageIdentity(page, { personUrl: formUrl });
+      if (!ident.ok) {
+        rec.status = "failed";
+        rec.detail = ((rec.detail ? rec.detail + "; " : "") + `target identity: ${ident.reason}`);
+        results.push(rec); continue;
+      }
+      if (ident.detail) rec.detail = ((rec.detail ? rec.detail + "; " : "") + ident.detail);
       const F = (secFields?.photo?.selector) ? secFields : fieldMap.fields;
       const inv = (secInv && secInv.length) ? secInv : null;
       const unmapped = [];
