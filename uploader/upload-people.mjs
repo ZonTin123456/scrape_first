@@ -137,7 +137,13 @@ const detailVal = (p) => [p.phone, p.note].filter((v) => v != null && v !== "").
 // discovered sections — auto ONLY on a single unambiguous top (score>=0.8).
 const secCache = new Map();
 const secCandidates = () => Object.entries(mapMeta?.map?.sections || {})
-  .map(([key, v]) => ({ key, url: v.personUrl, deptId: v.deptId }));
+  .map(([key, v]) => ({ key, url: v.personUrl, deptId: v.deptId, memberNames: v.memberNames || [] }));
+// source member names per section (cross-reference evidence for the matcher)
+const secMembers = new Map();
+for (const p of people) {
+  if (!secMembers.has(p.section)) secMembers.set(p.section, []);
+  if (p.name) secMembers.get(p.section).push(p.name);
+}
 const resolveSection = (sec) => {
   if (!sec) return { empty: true };
   if (secCache.has(sec)) return secCache.get(sec);
@@ -146,7 +152,7 @@ const resolveSection = (sec) => {
   if (ov && /\/personal\/person\/\d+/.test(ov)) {
     out = { personUrl: ov, deptId: null, fields: null, inventory: null, via: "section-map" };
   } else {
-    const r = matchSection(sec, secCandidates());
+    const r = matchSection(sec, secCandidates(), { wantMembers: secMembers.get(sec) || [] });
     if (r.verdict === "auto") {
       const entry = (mapMeta?.map?.sections || {})[r.best.key] || {};
       out = { personUrl: r.best.url, deptId: r.best.deptId ?? null, fields: entry.fields || null, inventory: entry.inventory || null, via: `discovery:${r.best.score}` };

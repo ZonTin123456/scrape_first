@@ -1,6 +1,8 @@
 // match.mjs — scored section matching for zero-map runtime discovery.
-// Pure + deterministic (no fs, no network). Scores: exact 1.0 > alias 0.75 >
-// substring 0.7 > token-overlap (<=0.65). Auto ONLY on a single unambiguous
+// Pure + deterministic (no fs, no network). Label: exact 1.0 > alias 0.75 >
+// substring 0.7 > token-overlap (<=0.65). Member overlap is corroboration
+// only (+0.25/+0.15, min 2 shared names, vacant excluded) and can never
+// auto-match alone (caps at review band). Auto ONLY on a single unambiguous
 // top at >= AUTO (0.8); ties or mid band (0.5-0.8) -> review/fail with the
 // candidate list (non-interactive: caller fails closed and reports them).
 // Below MIN (0.5) -> fail. Never guesses silently.
@@ -52,11 +54,66 @@ export function scorePair(want, key) {
   return { score: 0, evidence: [] };
 }
 
-// Score wanted against all candidate keys [{key, url, ...}].
+// Member-name evidence (cross-reference source rows vs backend page rows).
+// Normalized (parens/phones stripped); vacant/blank rows excluded — they exist
+// on every page and would fake corroboration.
+const VACANT_NAME_RE = /^(ว่าง|-ว่าง-|ตำแหน่งว่าง|ไม่มีข้อมูล|-+|n\/a|none|null)$/i;
+export function normalizeName(s) {
+  return norm(s).replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+}
+export const isVacantName = (s) => {
+  const t = normalizeName(s);
+  return t.length < 2 || VACANT_NAME_RE.test(t);
+};
+// memberScore: overlap between source member names and a candidate page's
+// memberNames. {shared, want, cand, ratio} with ratio = shared/min(sizes).
+export function memberScore(wantNames, candNames) {
+  const W = new Set((wantNames || []).map(normalizeName).filter((n) => n && !isVacantName(n)));
+  const C = new Set((candNames || []).map(normalizeName).filter((n) => n && !isVacantName(n)));
+  let shared = 0;
+  for (const n of W) if (C.has(n)) shared++;
+  const denom = Math.min(W.size, C.size);
+  const ratio = denom ? shared / denom : 0;
+  return { shared, want: W.size, cand: C.size, ratio: +ratio.toFixed(3) };
+}
+
+// Score wanted against all candidate keys [{key, url, memberNames, ...}].
+// opts.wantMembers: source member names for corroboration (never sufficient
+// alone: label score < MIN caps the verdict at review even with full overlap).
+// Count proximity breaks score ties (smaller |want-cand| size gap wins).
 // Returns {verdict, best, scored} where verdict is auto|review|fail.
-export function matchSection(want, candidates) {
-  const scored = (candidates || []).map((c) => ({ ...c, ...scorePair(want, c.key) }));
-  scored.sort((a, b) => b.score - a.score || String(a.key).localeCompare(String(b.key, undefined)));
+export function matchSection(want, candidates, opts = {}) {
+  const wantMembers = opts.wantMembers || null;
+  const wantSize = wantMembers ? new Set(wantMembers.map(normalizeName).filter((n) => n && !isVacantName(n))).size : null;
+  const scored = (candidates || []).map((c) => {
+    const label = scorePair(want, c.key);
+    let score = label.score;
+    const evidence = [...label.evidence];
+    let member = null;
+    if (wantMembers && c.memberNames) {
+      member = memberScore(wantMembers, c.memberNames);
+      // corroboration only: min 2 shared names (common-name guard)
+      if (member.shared >= 2) {
+        if (member.ratio >= 0.5) score = Math.min(1, score + 0.25);
+        else if (member.ratio >= 0.2) score = Math.min(1, score + 0.15);
+      }
+      evidence.push(`member:${member.shared}/${member.want}/${member.cand}`);
+    }
+    let final = +score.toFixed(2);
+    if (label.score < MIN) {
+      // member-only rescue: review band at best, never auto (renamed-page suspicion)
+      final = (member && member.shared >= 2 && member.ratio >= 0.5) ? Math.max(final, 0.55) : Math.min(final, 0.49);
+    }
+    return { ...c, score: final, labelScore: label.score, member, evidence };
+  });
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (wantSize !== null && a.member && b.member) {
+      const da = Math.abs(wantSize - a.member.cand), db = Math.abs(wantSize - b.member.cand);
+      if (da !== db) return da - db;
+    }
+    return String(a.key).localeCompare(String(b.key));
+  });
   const best = scored[0] || null;
   if (!best || best.score < MIN) return { verdict: "fail", best, scored };
   const tied = scored.filter((c) => c.score === best.score);

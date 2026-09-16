@@ -42,6 +42,43 @@ export async function dumpForm(page) {
       forms,
       selects: [...document.querySelectorAll("select")].map((s) => ({ selector: selOf(s), label: labelOf(s), options: [...s.options].map((o) => o.text.trim()).filter(Boolean).slice(0, 40) })),
       buttons: [...document.querySelectorAll("button, input[type=submit]")].slice(0, 15).map((e) => ({ selector: selOf(e), text: (e.innerText || e.value || "").trim().slice(0, 40), type: e.type || null, formAction: (e.closest("form") || {}).action || null, fi: formIndexOf(e) })),
+      // memberNames: person names listed on a section page (evidence for
+      // cross-referencing source rows; also harvested on pages we only read).
+      // Picks the table holding the most person photos; name column = header
+      // containing ชื่อ, else the most Thai-letter-dense cell per row.
+      memberNames: (() => {
+        const VAC = /^(ว่าง|-ว่าง-|ตำแหน่งว่าง|ไม่มีข้อมูล|-+|n\/a|)$/i;
+        const tables = [...document.querySelectorAll("table")];
+        let best = [], bestScore = -1;
+        for (const t of tables) {
+          const imgs = [...t.querySelectorAll("img")].length;
+          const rows = [...t.querySelectorAll("tr")].map((tr) => [...tr.querySelectorAll("td,th")].map((td) => (td.innerText || "").replace(/\s+/g, " ").trim()));
+          let nameIdx = -1;
+          const hi = rows.findIndex((r) => r.some((c) => /ชื่อ/.test(c)));
+          if (hi >= 0) nameIdx = rows[hi].findIndex((c) => /ชื่อ/.test(c));
+          const names = [];
+          for (let i = 0; i < rows.length; i++) {
+            if (i === hi) continue;
+            const cells = rows[i];
+            let cand = nameIdx >= 0 ? (cells[nameIdx] || "") : "";
+            if (!cand) {
+              let bs = -1, bt = "";
+              for (const c of cells) {
+                if (!c || VAC.test(c) || c.length > 80) continue;
+                const th = (c.match(/[ก-๛]/g) || []).length;
+                const dg = (c.match(/\d/g) || []).length;
+                if (th >= 4 && dg <= th && th > bs) { bs = th; bt = c; }
+              }
+              cand = bt;
+            }
+            cand = cand.slice(0, 80);
+            if (cand && !VAC.test(cand)) names.push(cand);
+          }
+          const score = imgs * 10 + names.length;
+          if (score > bestScore) { bestScore = score; best = names; }
+        }
+        return [...new Set(best)].slice(0, 40);
+      })(),
     };
   });
 }
@@ -208,32 +245,18 @@ export async function automap(context, host, sections, opts = {}) {
       return { title: document.title, forms: forms.length, filterCandidates: cands };
     });
     rec.filter = filterProbe;
-    let rows = [];
-    if (filterProbe.filterCandidates.length && filterProbe.filterCandidates[0].selector) {
-      const fc = filterProbe.filterCandidates[0];
-      const readRows = () => page.evaluate(() => {
-        const links = [...document.links].map((a) => a.href).filter((h) => /personal/i.test(h));
-        const body = document.body.innerText.slice(0, 3000);
-        const imgs = [...document.images].filter((i) => /person_/i.test(i.src)).map((i) => i.src.slice(-60));
-        return { url: location.href, links: [...new Set(links)].slice(0, 20), personImgs: imgs.slice(0, 10), bodyHead: body.slice(0, 500) };
-      });
-      const submitFilter = async (value) => {
-        await page.fill(fc.selector, value, { timeout: 10000 });
-        await Promise.all([
-          page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => null),
-          page.locator(fc.selector).press("Enter").catch(() => null),
-        ]);
-        await page.waitForTimeout(2500);
-      };
-      await submitFilter(sections[0]);
-      rows = await readRows();
-      if (!rows.personImgs.length) {
-        await submitFilter("");
-        const all = await readRows();
-        if (all.personImgs.length > rows.personImgs.length) { rows = all; rows.filterNote = "empty-filter fallback"; }
-        else rows.filterNote = `section "${sections[0]}" gave no person rows; dept rows found: ${(all.links || []).filter((h) => /person\/\d+/.test(h)).length}`;
-      }
-    }
+    // Enumerate departments UNFILTERED. Never narrow the index by a wanted
+    // section name first: filtering hid departments (including the wanted one
+    // itself on label mismatch) and made discovery non-deterministic across
+    // runs. The filter form is only probed, never submitted.
+    const readRows = () => page.evaluate(() => {
+      const links = [...document.links].map((a) => a.href).filter((h) => /personal/i.test(h));
+      const body = document.body.innerText.slice(0, 3000);
+      const imgs = [...document.images].filter((i) => /person_/i.test(i.src)).map((i) => i.src.slice(-60));
+      return { url: location.href, links: [...new Set(links)].slice(0, 20), personImgs: imgs.slice(0, 10), bodyHead: body.slice(0, 500) };
+    });
+    const rows = await readRows();
+    rows.filterNote = "unfiltered enumerate (no pre-filter by wanted section)";
     rec.rowsAfterFilter = rows;
     const deptRows = await page.evaluate(() => {
       const out = [];
@@ -278,7 +301,7 @@ export async function automap(context, host, sections, opts = {}) {
         const c = classify(host, dumped);
         fields = c.fields; ambiguous = c.ambiguous;
       }
-      sectionsMap[d.rowText || `dept-${d.deptId}`] = { deptId: d.deptId, personUrl: dumped.url, fields, ambiguous, profile: matched?.name || null, inventory: buildInventory(dumped, fields) };
+      sectionsMap[d.rowText || `dept-${d.deptId}`] = { deptId: d.deptId, personUrl: dumped.url, fields, ambiguous, profile: matched?.name || null, inventory: buildInventory(dumped, fields), memberNames: dumped.memberNames || [] };
     }
     const firstKey = Object.keys(sectionsMap)[0];
     const firstFields = firstKey ? sectionsMap[firstKey].fields : classify(host, { forms: [], selects: [], buttons: [] }).fields;
