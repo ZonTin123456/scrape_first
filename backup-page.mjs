@@ -945,6 +945,9 @@ function finalize(dir) {
       for (const p of pruned) {
         p.order = explicit.has(p.seq) ? explicit.get(p.seq) : takeFree();
       }
+      // file order = selection order: upload sequence (and any insertion-ordered
+      // backend list) follows what was ticked. Stable within duplicate orders.
+      pruned.sort((a, b) => (a.order - b.order) || (a.seq - b.seq));
       const dupGroups = new Map();
       for (const p of pruned) {
         if (!dupGroups.has(p.order)) dupGroups.set(p.order, []);

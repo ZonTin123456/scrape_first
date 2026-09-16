@@ -67,7 +67,10 @@ if (!MAP) {
 const sectionMap = readJson("section-map.json").map || {};
 const peopleAll = JSON.parse(readFileSync(FROM, "utf8"));
 if (!Array.isArray(peopleAll) || !peopleAll.length) fail("people.json is empty");
-const people = LIMIT > 0 ? peopleAll.slice(0, LIMIT) : peopleAll;
+// creation sequence follows selection order (backend may list by insertion,
+// not by the order field). Stable within duplicate orders.
+const orderedAll = [...peopleAll].sort((a, b) => ((a.order ?? 0) - (b.order ?? 0)) || ((a.seq ?? 0) - (b.seq ?? 0)));
+const people = LIMIT > 0 ? orderedAll.slice(0, LIMIT) : orderedAll;
 const fromDir = dirname(resolve(FROM));
 const slug = basename(fromDir);
 const perSectionMode = () => mapMeta?.map?.mode === "per-section-url";
