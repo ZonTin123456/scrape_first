@@ -11,6 +11,7 @@ import { dirname, join, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolvePort, discoverBackends } from "./lib/cdp-port.mjs";
 import { automap } from "./lib/automap.mjs";
+import { matchSection, failBlock } from "./lib/match.mjs";
 
 const argv = process.argv.slice(2);
 const opt = (n, d) => {
@@ -21,9 +22,13 @@ const fail = (m) => { console.error("upload-people: " + m); process.exit(1); };
 if (!argv.length || argv.includes("-h") || argv.includes("--help")) {
   console.log("Usage: node upload-people.mjs --from out/<slug>/people.json [--backend https://host] [--port auto] [--save] [--limit N] [--map uploader/maps/<host>.json] [--i-verified]");
   console.log("  --port auto scans 9333 -> 9444 -> 9222; backend auto-discovered from open tabs when omitted");
-  console.log("  no --map: profile auto-detect runs inline (dry free, --save needs --map or --i-verified)");
+  console.log("  no --map: zero-map runtime discovery runs inline (dry free, --save needs --map or --i-verified)");
+  console.log("  --map is deprecated (reader kept 1 version); discovery is the default workflow");
+  console.log("  --to <personUrl>: escape hatch — force every row to one form, skip section resolution");
   console.log("  default = --dry (fill + screenshot per person, never clicks save)");
-  console.log("  ticked rows always upload; missing name/section uploads with blanks (created-partial) unless --strict-sections");
+  console.log("  named-but-unresolvable sections fail closed in per-section mode (no silent misroute);");
+  console.log("  rows with no section keep the old flex path (default form + partial note)");
+  console.log("  --save refuses stale finalize output (people.json vs review/selection.json) unless --ignore-selection-check");
   process.exit(2);
 }
 const FROM = opt("--from", null);
@@ -31,7 +36,9 @@ let BACKEND = (opt("--backend", null) || "").replace(/\/$/, "");
 const PORT = await resolvePort(opt("--port", "auto")).catch((e) => fail(e.message));
 const MAP = opt("--map", null);
 const SAVE = argv.includes("--save");
-const STRICT_SECTIONS = argv.includes("--strict-sections"); // restore old fail-fast on unmapped sections
+const STRICT_SECTIONS = argv.includes("--strict-sections"); // explicit fail-fast (also the default for named sections, see pre-flight)
+const TO = (opt("--to", null) || "").replace(/\/$/, "");
+if (TO && !/\/personal\//.test(TO)) fail("bad --to (want a .../personal/... form URL)");
 const LIMIT = Number(opt("--limit", "0")) || 0;
 if (!FROM) fail("missing --from out/<slug>/people.json");
 if (!existsSync(FROM)) fail(`people file not found: ${FROM}`);
@@ -73,6 +80,47 @@ const orderedAll = [...peopleAll].sort((a, b) => ((a.order ?? 0) - (b.order ?? 0
 const people = LIMIT > 0 ? orderedAll.slice(0, LIMIT) : orderedAll;
 const fromDir = dirname(resolve(FROM));
 const slug = basename(fromDir);
+// F1: refuse stale finalize output (people.json must match human ticks).
+// Escape hatch: --ignore-selection-check (loudly logged, your responsibility).
+{
+  const selPath = join(fromDir, "review", "selection.json");
+  const cjPath = join(fromDir, "content.json");
+  if (!existsSync(selPath)) {
+    console.log("warn: no review/selection.json — stale-finalize check skipped");
+  } else {
+    const issues = [];
+    let sel = null;
+    try { sel = JSON.parse(readFileSync(selPath, "utf8")); }
+    catch (e) { issues.push(`selection.json unreadable: ${String(e.message || e).slice(0, 80)}`); }
+    if (sel) {
+      const keepSel = new Map(sel.filter((s) => s && s.keep).map((s) => [Number(s.seq), s]));
+      const ppl = new Map(peopleAll.map((p) => [Number(p.seq), p]));
+      for (const [seq, s] of keepSel) {
+        const p = ppl.get(seq);
+        if (!p) issues.push(`seq ${seq} ticked-keep but missing in people.json`);
+        else if (s.order !== undefined && s.order !== null && s.order !== "" && Number(p.order) !== Number(s.order))
+          issues.push(`seq ${seq} order mismatch: selection=${s.order} people=${p.order}`);
+      }
+      for (const seq of ppl.keys()) {
+        if (!keepSel.has(seq)) issues.push(`seq ${seq} in people.json but not ticked-keep in selection.json`);
+      }
+    }
+    if (existsSync(cjPath)) {
+      try {
+        if (!JSON.parse(readFileSync(cjPath, "utf8")).manifest?.reviewed)
+          issues.push("content.json not marked reviewed (finalize never ran)");
+      } catch { issues.push("content.json unreadable"); }
+    }
+    if (issues.length && !argv.includes("--ignore-selection-check")) {
+      console.error("upload-people: REFUSING stale finalize output:");
+      for (const i of issues.slice(0, 15)) console.error("  - " + i);
+      if (issues.length > 15) console.error(`  ... +${issues.length - 15} more`);
+      fail(`re-run: node backup-page.mjs --finalize ${fromDir} (or pass --ignore-selection-check)`);
+    } else if (issues.length) {
+      console.log(`warn: ignoring ${issues.length} stale-finalize issue(s) (--ignore-selection-check)`);
+    }
+  }
+}
 const perSectionMode = () => mapMeta?.map?.mode === "per-section-url";
 const hasSel = (k) => {
   const f = fieldMap.fields?.[k];
@@ -84,10 +132,30 @@ const norm = (s) => String(s || "").trim().normalize("NFC");
 const normSectionMap = Object.fromEntries(Object.entries(sectionMap).map(([k, v]) => [norm(k), v]));
 // detail (รายละเอียด) = phone + trailing note lines; backend renders <br> as breaks.
 const detailVal = (p) => [p.phone, p.note].filter((v) => v != null && v !== "").join("<br>") || null;
-const sectionEntry = (sec) => {
-  if (!sec || !mapMeta?.map?.sections) return null;
-  const keys = Object.keys(mapMeta.map.sections);
-  return mapMeta.map.sections[keys.find((k) => norm(k) === norm(sec))];
+// Scored section resolution (zero-map discovery). Explicit user alias
+// (section-map.json personUrl) wins; otherwise scored match over live
+// discovered sections — auto ONLY on a single unambiguous top (score>=0.8).
+const secCache = new Map();
+const secCandidates = () => Object.entries(mapMeta?.map?.sections || {})
+  .map(([key, v]) => ({ key, url: v.personUrl, deptId: v.deptId }));
+const resolveSection = (sec) => {
+  if (!sec) return { empty: true };
+  if (secCache.has(sec)) return secCache.get(sec);
+  const ov = normSectionMap[norm(sec)];
+  let out;
+  if (ov && /\/personal\/person\/\d+/.test(ov)) {
+    out = { personUrl: ov, deptId: null, fields: null, inventory: null, via: "section-map" };
+  } else {
+    const r = matchSection(sec, secCandidates());
+    if (r.verdict === "auto") {
+      const entry = (mapMeta?.map?.sections || {})[r.best.key] || {};
+      out = { personUrl: r.best.url, deptId: r.best.deptId ?? null, fields: entry.fields || null, inventory: entry.inventory || null, via: `discovery:${r.best.score}` };
+    } else {
+      out = { fail: failBlock(sec, r) };
+    }
+  }
+  secCache.set(sec, out);
+  return out;
 };
 const shotsDir = join(uploaderDir, "shots", slug);
 mkdirSync(shotsDir, { recursive: true });
@@ -114,22 +182,37 @@ for (const k of need) {
   if (!hasSel(k)) fail(`map fields.${k} has no selector/strategy (ambiguous? check ${MAP || "auto-detect output"})`);
 }
 listUrl = fill(fieldMap.list_url);
-// pre-flight: report unmapped sections. Default (flex): warn and upload anyway with
-// blanks. --strict-sections restores the old fail-fast refusal.
+// pre-flight: section existence gate (F2). Named-but-unresolvable sections
+// fail closed in per-section mode (a silent default-form upload misroutes).
+// Rows with no section keep the old flex path. --to skips resolution entirely.
 {
-  const missing = new Set();
+  const missing = []; // [{sec, lines}] — fail blocks with evidence trail
+  let emptySections = 0;
+  const warnedSingle = new Set();
   const deptOpts = mapMeta?.map?.department_options || [];
-  for (const p of people) {
+  if (TO) {
+    console.log(`section resolution skipped (--to ${TO})`);
+  } else for (const p of people) {
     if (perSection) {
-      const ent = p.section ? sectionEntry(p.section) : null;
-      const ov = p.section ? normSectionMap[norm(p.section)] : null;
-      if (!ent && !(ov && /\/personal\/person\/\d+/.test(ov))) missing.add(p.section || "(none)");
+      if (!p.section) { emptySections++; continue; }
+      const r = resolveSection(p.section);
+      if (r.fail && !missing.some((m) => m.sec === p.section)) missing.push({ sec: p.section, lines: r.fail });
     } else if (p.section && !normSectionMap[norm(p.section)] && !deptOpts.includes(p.section) && fieldMap.fields.department?.selector) {
-      missing.add(p.section);
+      // single-form backends can't misroute (one fixed page): strict fails, else warn once
+      if (STRICT_SECTIONS) {
+        if (!missing.some((m) => m.sec === p.section)) missing.push({ sec: p.section, lines: [`section "${p.section}": unmapped department select (strict) — add to section-map or cut scope`] });
+      } else if (!warnedSingle.has(p.section)) {
+        warnedSingle.add(p.section);
+        console.log(`warn: unmapped section (single form, select left untouched): ${p.section}`);
+      }
     }
   }
-  if (missing.size && STRICT_SECTIONS) fail(`unmapped sections, refusing to start: ${[...missing].join(", ")} (add to section-map or detected map)`);
-  if (missing.size) console.log(`warn: unmapped sections (uploading anyway, fields blank): ${[...missing].join(", ")}`);
+  if (missing.length) {
+    console.error("upload-people: unresolvable sections (refusing: would misroute):");
+    for (const m of missing) for (const l of m.lines.slice(0, 8)) console.error("  " + l);
+    fail(`${missing.length} section(s) need a backend department, scope cut, or --to <personUrl>`);
+  }
+  if (emptySections) console.log(`note: ${emptySections} row(s) with no section use the default form`);
 }
 const page = await context.newPage();
 const results = [];
@@ -145,27 +228,29 @@ try {
         rec.status = "failed"; rec.detail = `photo missing: ${p.photo}`;
         results.push(rec); continue;
       }
-      // 2. resolve section: per-section-url mode (STS template) or department select.
-      // Flex default: ticked rows upload even when section is missing — blanks left empty,
-      // record marked created-partial. --strict-sections restores fail.
+      // 2. resolve section: scored discovery (resolveSection). Pre-flight already
+      // failed closed on named-but-unresolvable sections, so a fail here is
+      // defensive only — never fall back to the default form silently.
       const F0 = fieldMap.fields;
       const partialNotes = [];
       if (!p.name) partialNotes.push("name blank");
-      let deptOption = null, formUrl = fill(fieldMap.create_url);
-      if (perSection) {
-        const ent = p.section ? sectionEntry(p.section) : null;
-        if (!ent) {
-          // try manual section-map override: value may be a deptId or personUrl
-          const ov = p.section ? normSectionMap[norm(p.section)] : null;
-          if (ov && /\/personal\/person\/\d+/.test(ov)) { formUrl = ov; }
-          else if (STRICT_SECTIONS) {
-            rec.status = "failed"; rec.detail = `section unresolved: ${p.section || "(none)"}`; results.push(rec); continue;
-          } else {
-            partialNotes.push(`section unresolved: ${p.section || "(none)"} (used default form)`);
-          }
+      let deptOption = null, formUrl = TO || fill(fieldMap.create_url);
+      let secFields = null, secInv = null;
+      if (TO) {
+        partialNotes.push(`forced target (--to)`);
+      } else if (perSection) {
+        if (!p.section) {
+          partialNotes.push("no section (used default form)");
         } else {
-          formUrl = ent.personUrl;
-          deptOption = ent.deptId;
+          const r = resolveSection(p.section);
+          if (r.fail) {
+            rec.status = "failed";
+            rec.detail = r.fail[0] + " (pre-flight should have caught this)";
+            results.push(rec); continue;
+          }
+          formUrl = r.personUrl; deptOption = r.deptId || null;
+          secFields = r.fields; secInv = r.inventory;
+          if (r.via) partialNotes.push(`section via ${r.via}`);
         }
       } else {
         const deptOpts = mapMeta?.map?.department_options || [];
@@ -181,6 +266,7 @@ try {
         if (autoDept) rec.detail = "section auto-matched to department option";
       }
       if (!formUrl) { rec.status = "failed"; rec.detail = "no form URL resolved"; results.push(rec); continue; }
+      rec.form = formUrl;
       // 3. duplicate note (informational only — ticked rows upload anyway)
       try {
         await page.goto(listUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
@@ -191,9 +277,8 @@ try {
       } catch { /* list check failed -> proceed */ }
       // 4. fill person form: inventory-driven when available, legacy fields fallback
       await page.goto(formUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
-      const F = perSection && p.section && sectionEntry(p.section)?.fields?.photo?.selector
-        ? sectionEntry(p.section).fields : fieldMap.fields;
-      const inv = perSection && p.section ? sectionEntry(p.section)?.inventory : null;
+      const F = (secFields?.photo?.selector) ? secFields : fieldMap.fields;
+      const inv = (secInv && secInv.length) ? secInv : null;
       const unmapped = [];
       if (inv && inv.length) {
         for (const item of inv) {

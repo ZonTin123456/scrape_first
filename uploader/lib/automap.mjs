@@ -252,11 +252,14 @@ export async function automap(context, host, sections, opts = {}) {
     // prioritize rows matching requested sections (new divisions live past the cap)
     const normLo = (s) => String(s || "").trim().normalize("NFC").toLowerCase();
     const wanted = sections.map(normLo);
+    // probe every discovered department link (no top-N cap: a cap silently drops
+    // sections and caused non-deterministic routing across runs). Wanted
+    // (requested) sections first so their failures surface early.
     const ranked = [...deptRows].sort((a, b) => {
       const am = wanted.some((w) => w && normLo(a.rowText).includes(w)) ? 0 : 1;
       const bm = wanted.some((w) => w && normLo(b.rowText).includes(w)) ? 0 : 1;
       return am - bm;
-    }).slice(0, 6);
+    });
     // profile-first: dump first dept form, match profiles before full classify
     const profiles = loadProfiles();
     const sectionsMap = {};

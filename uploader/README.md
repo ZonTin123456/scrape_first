@@ -1,5 +1,8 @@
 # uploader — Playwright: people.json -> ฟอร์มบุคลากรหลังบ้าน STS
 
+> ZERO-MAP workflow (default): ไม่ต้องมี map ไฟล์ — discovery ตอนรัน + scored section match + fail-closed.
+> `maps/` deprecated (reader เก็บไว้ 1 version เพื่อของเก่า) ห้ามใช้ใน normal workflow ใหม่.
+
 อ่าน `out/<slug>/people.json` อย่างเดียว **ไม่เขียนทับ `out/` เด็ดขาด**
 login ด้วย Chrome ที่ login ค้าง (connect CDP) ไม่เก็บรหัส
 `--port auto` (default): หา CDP เอง `9333 -> 9444 -> 9222`
