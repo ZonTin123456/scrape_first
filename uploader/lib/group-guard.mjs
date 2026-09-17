@@ -34,6 +34,17 @@ export function sourceIdentityFailure(people, slugOf) {
   }
   return null;
 }
+// Field-shape check (pure): which required field keys lack a usable
+// selector/strategy (null, missing, or TBD placeholder). Returns the missing
+// keys (empty = satisfied). Used by the upload field gate, including the
+// post-rediscovery re-gate on bootstrapped backends.
+export function fieldsSatisfy(fields, need) {
+  const f = fields || {};
+  return (need || []).filter((k) => {
+    const v = f[k];
+    return !(v && (v.selector || v.strategy) && !/^TBD/.test(v.selector || ""));
+  });
+}
 // NOTE: groupSplitFailure (weak mixed-evidence multi-target) was retired with
 // the source-group architecture: target identity is the source URL's own key
 // now, never an HTML label contest, so that failure mode cannot occur.

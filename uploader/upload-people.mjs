@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { resolvePort, discoverBackends } from "./lib/cdp-port.mjs";
 import { automap } from "./lib/automap.mjs";
 import { mapHostMismatch } from "./lib/host-gate.mjs";
-import { sourceIdentityFailure } from "./lib/group-guard.mjs";
+import { sourceIdentityFailure, fieldsSatisfy } from "./lib/group-guard.mjs";
 import { slugBaseOf, resolveTargetGroup } from "../sectioning.mjs";
 import { verifyPageIdentity } from "./lib/verify-identity.mjs";
 import { createDepartment } from "./lib/target-creation.mjs";
@@ -146,10 +146,6 @@ const perSectionMode = () => mapMeta?.map?.mode === "per-section-url";
   const ifail = sourceIdentityFailure(peopleAll, slugBaseOf);
   if (ifail) fail(`source identity: ${ifail}`);
 }
-const hasSel = (k) => {
-  const f = fieldMap.fields?.[k];
-  return !!(f && (f.selector || f.strategy) && !/^TBD/.test(f.selector || ""));
-};
 const fill = (s) => String(s || "").replace("{backend}", BACKEND);
 let listUrl = null; // set after fieldMap final (ephemeral automap may fill it)
 const norm = (s) => String(s || "").trim().normalize("NFC");
@@ -205,9 +201,17 @@ if (!MAP) {
 }
 let perSection = perSectionMode();
 const need = perSection ? ["photo", "name", "position", "save"] : ["photo", "name", "position", "department", "save"];
-for (const k of need) {
-  if (!hasSel(k)) fail(`map fields.${k} has no selector/strategy (ambiguous? check ${MAP || "auto-detect output"})`);
-}
+const checkFields = () => {
+  const lacking = fieldsSatisfy(fieldMap.fields, need);
+  if (lacking.length) fail(`map fields.${lacking[0]} has no selector/strategy (ambiguous? check ${MAP || "auto-detect output"})`);
+};
+// Empty-backend bootstrap (generic, discovery-result only): zero discovered
+// departments defers the field gate until after creation + rediscovery —
+// otherwise no empty tenant could ever be bootstrapped (chicken-and-egg).
+// Non-empty backends keep the existing gate unchanged.
+const emptyBackend = Object.keys(mapMeta?.map?.sections || {}).length === 0;
+if (emptyBackend) console.log("empty backend (0 departments discovered): deferring field check until after bootstrap");
+else checkFields();
 listUrl = fill(fieldMap.list_url);
 // pre-flight: every distinct source target group resolves to exactly one
 // backend department by exact name. Missing groups show WOULD-CREATE in
@@ -295,6 +299,10 @@ if (SAVE && !TO && missingGroups.length && !MAP) {
     if (r.missing && !stillFailing.includes(g)) stillFailing.push(g);
   }
   if (stillFailing.length) fail(`groups still unresolvable after creation: ${stillFailing.join(", ")} — NOT uploading (fail-closed)`);
+  // Bootstrap re-gate: person-form fields are required from here on. If the
+  // freshly created department yields no usable form, fail closed instead of
+  // uploading blind. (Non-empty backends passed the same gate up front.)
+  checkFields();
   console.log(`re-discovery ok (${Object.keys(auto2.content.map.sections || {}).length} departments), all rows resolved`);
 }
 const page = await context.newPage();
