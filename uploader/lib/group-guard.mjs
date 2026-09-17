@@ -1,4 +1,19 @@
-// group-guard: safety net against accidental source-group splits.
+// group-guard: safety nets for source-group integrity (pure, no I/O).
+// URL-boundary guard: one people file, one source. Every row must carry the
+// source_url of the file that created it, and all rows must agree. Catches
+// cross-URL contamination (a record inheriting another URL's context) before
+// any backend mutation. Returns null (pass) or a fail-closed reason.
+export function sourceUniformityFailure(people) {
+  if (!Array.isArray(people) || !people.length) return "no people rows to upload";
+  const missing = people.filter((p) => !p || !p.source_url);
+  if (missing.length) {
+    const seqs = missing.map((p) => (p && p.seq) ?? "?").slice(0, 8).join(",");
+    return `${missing.length} row(s) without source_url (seq ${seqs}) — provenance untraceable`;
+  }
+  const srcs = [...new Set(people.map((p) => String(p.source_url)))];
+  if (srcs.length > 1) return `cross-URL contamination: ${srcs.length} distinct source_url in one file (${srcs.join(" | ")}) — refusing`;
+  return null;
+}
 // Pure function, no I/O. Fires only when ONE people file resolves to MULTIPLE
 // targets resting ENTIRELY on weak heuristic evidence (division / position
 // inference) reached via DIFFERENT mechanisms, with no heading/url evidence

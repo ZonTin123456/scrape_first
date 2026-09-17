@@ -11,9 +11,9 @@ import { dirname, join, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolvePort, discoverBackends } from "./lib/cdp-port.mjs";
 import { automap } from "./lib/automap.mjs";
-import { matchSection, failBlock } from "./lib/match.mjs";
+import { matchSection, failBlock, findExactSection } from "./lib/match.mjs";
 import { mapHostMismatch } from "./lib/host-gate.mjs";
-import { groupSplitFailure } from "./lib/group-guard.mjs";
+import { groupSplitFailure, sourceUniformityFailure } from "./lib/group-guard.mjs";
 import { verifyPageIdentity } from "./lib/verify-identity.mjs";
 import { createDepartment } from "./lib/target-creation.mjs";
 
@@ -136,7 +136,13 @@ const slug = basename(fromDir);
     }
   }
 }
-const perSectionMode = () => mapMeta?.map?.mode === "per-section-url";const hasSel = (k) => {
+const perSectionMode = () => mapMeta?.map?.mode === "per-section-url";
+// URL boundary: one file, one source. Fail before any planning/resolution.
+{
+  const ufail = sourceUniformityFailure(peopleAll);
+  if (ufail) fail(`source_url boundary: ${ufail}`);
+}
+const hasSel = (k) => {
   const f = fieldMap.fields?.[k];
   return !!(f && (f.selector || f.strategy) && !/^TBD/.test(f.selector || ""));
 };
@@ -175,7 +181,15 @@ const resolveSection = (sec) => {
       const entry = (mapMeta?.map?.sections || {})[r.best.key] || {};
       out = { personUrl: r.best.url, deptId: r.best.deptId ?? null, fields: entry.fields || null, inventory: entry.inventory || null, via: `discovery:${r.best.score}` };
     } else {
-      out = { fail: failBlock(sec, r), verdict: r.verdict };
+      // immutability net: scoring must never overrule an existing exact
+      // source_group label — take it directly instead of failing or guessing.
+      const ex = findExactSection(sec, secCandidates());
+      if (ex) {
+        const entry = (mapMeta?.map?.sections || {})[ex.key] || {};
+        out = { personUrl: ex.url, deptId: ex.deptId ?? null, fields: entry.fields || null, inventory: entry.inventory || null, via: "exact" };
+      } else {
+        out = { fail: failBlock(sec, r), verdict: r.verdict };
+      }
     }
   }
   secCache.set(sec, out);

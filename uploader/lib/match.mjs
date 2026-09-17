@@ -33,6 +33,16 @@ function aliasHit(want, key) {
   return null;
 }
 
+// Exact-label lookup: source_group immutability net. Returns the candidate
+// whose key normalizes exactly to the wanted section, or null. The resolver
+// uses this when scoring fails to auto-pick an existing exact label, so the
+// backend can never re-classify a person away from their source group on a
+// fuzzy score while the exact target exists.
+export function findExactSection(want, cands) {
+  const w = normLo(want);
+  if (!w) return null;
+  return (cands || []).find((c) => normLo(c && c.key) === w) || null;
+}
 // Score ONE wanted label against ONE candidate key. Returns {score, evidence[]}.
 export function scorePair(want, key) {
   const w = norm(want), k = norm(key);

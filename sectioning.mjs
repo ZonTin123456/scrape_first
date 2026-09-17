@@ -8,11 +8,13 @@
 //   H1-H3 heading > --page-sections url override > scoped division context
 //   > current-person position inference > page fallback (first section seen).
 // A division-like text captured from the *trailing extras of the previous
-// person* (e.g. a "รับผิดชอบ<br>สำนักปลัด" note tail) is marked TAINTED: it
-// may still serve persons with no conflicting evidence, but it loses to the
-// current person's own position evidence. This keeps legitimate mid-page
-// division groups (bare names under a heading) working while stopping one
-// person's note tail from re-sectioning the next person.
+// person* (e.g. a "รับผิดชอบ<br>สำนักปลัด" note tail) is marked TAINTED, and
+// the second-and-later distinct division texts since the last person block
+// mark a MENU/ENUMERATION region: neither is a group heading. Suspect
+// divisions still serve persons with no conflicting evidence, but lose to
+// the current person's own position evidence. This keeps legitimate mid-page
+// division groups (bare names under a heading) working while stopping note
+// tails and menu lists from re-sectioning the next person.
 
 // caption = next 2 non-phone texts (name, position). phone = first tel:-flagged
 // (or phone-pattern) text in the same run. extras = every trailing text after
@@ -50,27 +52,43 @@ export function inferSection(position, name) {
   for (const [re, sec] of SEC_FROM_POSITION) if (re.test(t)) return sec;
   return null;
 }
+// URL isolation: this module holds NO mutable cross-call state (only frozen
+// patterns). Every attachCaptions()/buildKept() call creates a fresh source
+// context (lastHeading/lastDivision/extras/enumeration window are locals),
+// so state from URL A can never leak into URL B. One call = one source URL.
 export function attachCaptions(kept, pageSection = null) {
-  let lastHeading = null, lastDivision = null; // lastDivision: { text, tainted }
+  let lastHeading = null, lastDivision = null; // { text, seq, tainted?, enumerated? }
   let lastExtras = null; // text nodes consumed as trailing extras by the most recent image
   let prevSection = null; // section of the most recent image (diagnostic context)
+  let divsSincePerson = new Set(); // DISTINCT division texts since the last person block
+  // Provenance for audit/debug: every assignment records its evidence.
+  // { by, setter_seq, state, demoted_from?, reason? } — additive only;
+  // guards and matching use section/section_from, never this field.
+  const ev = (by, setter_seq, state, extra) => ({ by, setter_seq: setter_seq ?? null, state, ...(extra || {}) });
   for (let i = 0; i < kept.length; i++) {
     const n = kept[i];
     if (n.type === "text") {
-      if (n.h && (n.h === "H1" || n.h === "H2" || n.h === "H3") && !n.chrome) lastHeading = n.text;
+      if (n.h && (n.h === "H1" || n.h === "H2" || n.h === "H3") && !n.chrome) lastHeading = { text: n.text, seq: n.seq };
       // division headers are plain texts, not menu links — but a division-like
       // text sitting inside the previous person's trailing extras (their note
       // tail, e.g. "รับผิดชอบ / สำนักปลัด") is tainted: it describes the
-      // previous person, it is not a heading for the next one.
+      // previous person, it is not a heading for the next one. Likewise, the
+      // second-and-later DISTINCT division texts since the last person block
+      // mark a menu/enumeration region (e.g. สำนักปลัด/กองคลัง/กองช่าง listed
+      // together): enumerations are not group headings either.
       if (!n.chrome && !n.link && isDivisionText(n.text)) {
+        const dt = n.text.replace(/\s+/g, " ").trim();
+        divsSincePerson.add(dt);
         lastDivision = {
-          text: n.text.replace(/\s+/g, " ").trim(),
+          text: dt, seq: n.seq,
           tainted: !!(lastExtras && lastExtras.has(n)),
+          enumerated: divsSincePerson.size >= 2,
         };
       }
       continue;
     }
     if (n.type !== "image") continue;
+    divsSincePerson = new Set(); // new person block: enumeration window restarts
     const texts = [];
     for (let j = i + 1; j < kept.length; j++) {
       const m = kept[j];
@@ -105,25 +123,41 @@ export function attachCaptions(kept, pageSection = null) {
     const headName = n.caption_next[0];
     if (headName && !n.caption_next[1] && !phone && isDivisionText(headName)) {
       n.likely_header = true;
-      lastDivision = { text: headName, tainted: false };
+      lastDivision = { text: headName, seq: n.seq, tainted: false, enumerated: false };
     }
     if (VACANT_RE.test(n.caption_next[0] || "")) n.vacant = true;
     const inferred = inferSection(n.caption_next[1], n.caption_next[0]);
-    if (lastHeading) { n.section = lastHeading; n.section_from = "heading"; }
-    else if (pageSection) { n.section = pageSection; n.section_from = "url"; }
+    if (lastHeading) {
+      n.section = lastHeading.text; n.section_from = "heading";
+      n.section_evidence = ev("heading", lastHeading.seq, "clean");
+    }
+    else if (pageSection) {
+      n.section = pageSection; n.section_from = "url";
+      n.section_evidence = ev("url", null, "clean");
+    }
     else if (lastDivision && !n.likely_header) {
-      // Tainted division (previous person's note tail) loses to the current
-      // person's own conflicting position evidence; otherwise it still
-      // applies (bare names under a mid-page heading keep their group).
-      if (lastDivision.tainted && inferred && inferred !== lastDivision.text) {
+      // Suspect division (previous person's note tail, or a menu enumeration)
+      // loses to the current person's own conflicting position evidence;
+      // otherwise it still applies (bare names under a heading keep group).
+      const suspect = lastDivision.tainted || lastDivision.enumerated;
+      const state = lastDivision.tainted ? "tainted" : (lastDivision.enumerated ? "enumerated" : "clean");
+      if (suspect && inferred && inferred !== lastDivision.text) {
         n.section = inferred; n.section_from = "position";
-        n.group_warn = { previous: prevSection, demoted: lastDivision.text, reason: "division from trailing person text" };
-      } else { n.section = lastDivision.text; n.section_from = "division"; }
+        n.group_warn = { previous: prevSection, demoted: lastDivision.text, reason: lastDivision.tainted ? "division from trailing person text" : "division from menu enumeration" };
+        n.section_evidence = ev("position", null, "position", { demoted_from: { value: lastDivision.text, setter_seq: lastDivision.seq, state }, reason: n.group_warn.reason });
+      } else {
+        n.section = lastDivision.text; n.section_from = "division";
+        n.section_evidence = ev("division", lastDivision.seq, state);
+      }
     }
     else {
       n.section = inferred; n.section_from = inferred ? "position" : null;
+      n.section_evidence = inferred ? ev("position", null, "position") : ev(null, null, null);
     }
-    if (n.likely_header && !n.section) { n.section = lastDivision ? lastDivision.text : null; n.section_from = "division"; }
+    if (n.likely_header && !n.section) {
+      n.section = lastDivision ? lastDivision.text : null; n.section_from = "division";
+      n.section_evidence = ev("division", lastDivision ? lastDivision.seq : null, "clean");
+    }
     if (n.type === "image" && n.section) prevSection = n.section;
   }
   // guarantee: every named image leaves with a section (first section seen on page)

@@ -110,7 +110,7 @@ function buildPeople(kept, url, photoKey) {
     position: n.caption_next?.[1] || null,
     phone: n.phone || null,
     note: n.note || null,
-    section: n.section || null, section_from: n.section_from || null, group_warn: n.group_warn || null,
+    section: n.section || null, section_from: n.section_from || null, group_warn: n.group_warn || null, section_evidence: n.section_evidence || null,
     likely_header: !!n.likely_header, vacant: !!n.vacant,
     width: n.width, height: n.height,
     alt: n.alt || null,
