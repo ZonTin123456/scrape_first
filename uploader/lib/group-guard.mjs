@@ -1,4 +1,4 @@
-// group-guard: safety nets for source-group integrity (pure, no I/O).
+// group-guard: safety nets for source identity (pure, no I/O).
 // URL-boundary guard: one people file, one source. Every row must carry the
 // source_url of the file that created it, and all rows must agree. Catches
 // cross-URL contamination (a record inheriting another URL's context) before
@@ -14,32 +14,26 @@ export function sourceUniformityFailure(people) {
   if (srcs.length > 1) return `cross-URL contamination: ${srcs.length} distinct source_url in one file (${srcs.join(" | ")}) — refusing`;
   return null;
 }
-// Pure function, no I/O. Fires only when ONE people file resolves to MULTIPLE
-// targets resting ENTIRELY on weak heuristic evidence (division / position
-// inference) reached via DIFFERENT mechanisms, with no heading/url evidence
-// anywhere. Legitimate multi-group pages (H1-H3 headings, url overrides,
-// single-mechanism division groups) never match: they carry strong evidence
-// or a single coherent mechanism.
-// plan: [{ section, action }] with action in upload/would-create/created.
-// evidence: Map (or plain object) section -> iterable of section_from strings.
-// Returns null (pass) or { sections, mechanisms } (fail-closed).
-const TARGET_ACTIONS = new Set(["upload", "would-create", "created"]);
-const STRONG = new Set(["heading", "url"]);
-const WEAK = new Set(["division", "position"]);
-export function groupSplitFailure(plan, evidence) {
-  const secs = [...new Set((plan || [])
-    .filter((e) => e && TARGET_ACTIONS.has(e.action) && e.section)
-    .map((e) => e.section))];
-  if (secs.length < 2) return null;
-  const get = (s) => {
-    if (!evidence) return [];
-    if (typeof evidence.get === "function") return [...(evidence.get(s) || [])];
-    return [...(evidence[s] || [])];
-  };
-  const mechs = new Set();
-  for (const s of secs) for (const f of get(s)) mechs.add(f);
-  if ([...mechs].some((m) => STRONG.has(m))) return null;
-  const weak = [...new Set([...mechs].filter((m) => WEAK.has(m)))];
-  if (weak.length < 2) return null;
-  return { sections: secs, mechanisms: weak };
+// Source-identity gate (1 URL = 1 source group): uniformity PLUS every row
+// present source_group PLUS every row's group equal to its own source URL's
+// stable key (slugOf). A row whose group belongs to another URL (tampered or
+// cross-contaminated) fails here, before any planning or backend mutation.
+export function sourceIdentityFailure(people, slugOf) {
+  const u = sourceUniformityFailure(people);
+  if (u) return u;
+  const nogroup = people.filter((p) => !p.source_group);
+  if (nogroup.length) {
+    const seqs = nogroup.map((p) => p.seq ?? "?").slice(0, 8).join(",");
+    return `${nogroup.length} row(s) without source_group (seq ${seqs}) — source identity incomplete`;
+  }
+  for (const p of people) {
+    const want = slugOf(p.source_url);
+    if (String(p.source_group) !== String(want)) {
+      return `row seq ${p.seq ?? "?"} claims source_group ${JSON.stringify(p.source_group)} but its source_url ${p.source_url} owns ${JSON.stringify(want)} — cross-source contamination`;
+    }
+  }
+  return null;
 }
+// NOTE: groupSplitFailure (weak mixed-evidence multi-target) was retired with
+// the source-group architecture: target identity is the source URL's own key
+// now, never an HTML label contest, so that failure mode cannot occur.

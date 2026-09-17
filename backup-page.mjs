@@ -67,14 +67,6 @@ function readUrlList(file) {
   }
   return urls;
 }
-function slugBaseOf(u) {
-  try {
-    const x = new URL(u);
-    const host = x.hostname.replace(/^www\./, "").split(".").slice(0, -1).join("") || x.hostname.replace(/\./g, "");
-    const path = (x.pathname + (x.search ? `-${x.search}` : "")).replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 50) || "index";
-    return `${host}-${path}`.toLowerCase();
-  } catch { return "page-index"; }
-}
 function dirSourceUrl(dir, kind) {
   try {
     const p = kind === "probe" ? join(dir, "probe.json") : join(dir, "content.json");
@@ -98,25 +90,8 @@ function resolveSlug(url, outDir = OUT) {
   }
   return `${base}-${Date.now()}`;
 }
-import { attachCaptions, buildKept, MIN_PX } from "./sectioning.mjs";
-// Personnel records for the Playwright uploader: [{photo, name, position, phone, section, order, ...}]
-function buildPeople(kept, url, photoKey) {
-  const imgs = kept.filter((n) => n.type === "image");
-  return imgs.map((n, idx) => ({
-    seq: n.seq,
-    order: idx, // 0-based DOM sequence: backend ตำแหน่งภาพ starts at 0
-    photo: (photoKey === "file" ? (n.file || n.src || null) : (n.src || null)),
-    name: n.caption_next?.[0] || null,
-    position: n.caption_next?.[1] || null,
-    phone: n.phone || null,
-    note: n.note || null,
-    section: n.section || null, section_from: n.section_from || null, group_warn: n.group_warn || null, section_evidence: n.section_evidence || null,
-    likely_header: !!n.likely_header, vacant: !!n.vacant,
-    width: n.width, height: n.height,
-    alt: n.alt || null,
-    source_url: url,
-  }));
-}
+import { attachCaptions, buildKept, buildPeople, slugBaseOf, MIN_PX } from "./sectioning.mjs";
+// Personnel records: see buildPeople() in sectioning.mjs (shared core).
 
 async function cdp(path, method = "GET") {
   const r = await fetch(`http://127.0.0.1:${PORT}${path}`, { method });

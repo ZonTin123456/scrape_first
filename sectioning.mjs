@@ -52,8 +52,39 @@ export function inferSection(position, name) {
   for (const [re, sec] of SEC_FROM_POSITION) if (re.test(t)) return sec;
   return null;
 }
+// ---- Source identity (1 URL = 1 source group) ----
+// source_key is derived deterministically from the normalized source URL
+// (slugBaseOf: pure, no counters, no timestamps), so the same URL always
+// yields the same key regardless of batch order or batch membership.
+// Backend target departments are named by source group; intentional merges
+// of several URLs into one group go through source-groups.json, never HTML.
+export function slugBaseOf(u) {
+  try {
+    const x = new URL(u);
+    const host = x.hostname.replace(/^www\./, "").split(".").slice(0, -1).join("") || x.hostname.replace(/\./g, "");
+    const path = (x.pathname + (x.search ? `-${x.search}` : "")).replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 50) || "index";
+    return `${host}-${path}`.toLowerCase();
+  } catch { return "page-index"; }
+}
+// SourceContext: the isolated identity of one source URL. Fresh object per
+// URL — never shared, never mutated downstream (rows copy its values).
+export function newSourceContext(source_url) {
+  return { source_url, source_key: slugBaseOf(source_url) };
+}
+// Resolve the backend target group for a row: an explicit registry alias for
+// the row's source URL wins (intentional merge); otherwise the row's own
+// source identity. Registry shape: { map: { "<url substring>": "<group>" } }.
+export function resolveTargetGroup(source_url, source_group, registry) {
+  const map = (registry && registry.map) || {};
+  const url = String(source_url || "");
+  for (const [sub, g] of Object.entries(map)) {
+    if (sub && !sub.startsWith("_") && url.includes(sub)) return g;
+  }
+  return source_group;
+}
+
 // URL isolation: this module holds NO mutable cross-call state (only frozen
-// patterns). Every attachCaptions()/buildKept() call creates a fresh source
+// patterns). Every attachCaptions()/buildKept()/buildPeople() call creates a fresh source
 // context (lastHeading/lastDivision/extras/enumeration window are locals),
 // so state from URL A can never leak into URL B. One call = one source URL.
 export function attachCaptions(kept, pageSection = null) {
@@ -237,4 +268,28 @@ export function buildKept(rawNodes, origin, pageSection = null) {
   });
   attachCaptions(kept, pageSection);
   return { kept, queue, stats };
+}
+
+// Personnel records for the uploader. Every row carries its SourceContext
+// (source_url + source_group = the URL's own stable key). HTML-derived
+// section/division/position stay as evidence/debug metadata only — they are
+// NEVER the upload target identity.
+export function buildPeople(kept, url, photoKey) {
+  const ctx = newSourceContext(url);
+  const imgs = kept.filter((n) => n.type === "image");
+  return imgs.map((n, idx) => ({
+    seq: n.seq,
+    order: idx, // 0-based DOM sequence: backend ตำแหน่งภาพ starts at 0
+    photo: (photoKey === "file" ? (n.file || n.src || null) : (n.src || null)),
+    name: n.caption_next?.[0] || null,
+    position: n.caption_next?.[1] || null,
+    phone: n.phone || null,
+    note: n.note || null,
+    section: n.section || null, section_from: n.section_from || null, group_warn: n.group_warn || null, section_evidence: n.section_evidence || null,
+    likely_header: !!n.likely_header, vacant: !!n.vacant,
+    width: n.width, height: n.height,
+    alt: n.alt || null,
+    source_url: ctx.source_url,
+    source_group: ctx.source_key,
+  }));
 }
