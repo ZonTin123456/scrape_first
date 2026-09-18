@@ -1,0 +1,341 @@
+<!doctype html>
+<!-- PROTOTYPE (throwaway, NOT production) for issue #14, part of Wayfinder map #10.
+Plan: "Three variants of the Dark Honey Job Workspace, switchable via ?variant=, in one
+double-clickable file." Sub-shape B (no web app exists yet; CLI + file:// builders only).
+Question: does the layout hypothesis — 3-pane workspace (workflow steps | current step |
+source/target/safety/evidence context) + bottom activity log, stepper, people-review grid,
+upload safety screen — hold up when driven through the LOCKED state spine (#12), the LOCKED
+safety trinity (#15), and Dark Honey tokens? Keep / adjust / reject with reasons.
+Run: double-click this file, or: npx serve prototype  (then open /job-workspace-prototype.html)
+Variants: A=hypothesis (3-pane + bottom log) | B=focus (single column + drawer) | C=ops-board (left tree, inline context, merged timeline)
+-->
+<html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PROTOTYPE #14 — Dark Honey Job Workspace (throwaway)</title>
+<style>
+:root{
+  --bg0:#0E0D0B; --bg1:#15130F; --bg2:#1C1913; --line:#2C2820;
+  --honey:#F2B84B; --honey-dim:#D99A2B; --honey-hi:#FFCC66;
+  --ink:#F4F1E8; --ink2:#AAA398; --ink3:#706A61;
+  --ok:#7FB069; --warn:#E0A458; --bad:#D0604F; --info:#7FA6C9;
+}
+*{box-sizing:border-box}
+body{background:var(--bg0);color:var(--ink);font:14px/1.45 system-ui,"Segoe UI",sans-serif;margin:0;padding:0 0 90px}
+.proto-banner{background:#3a2c10;color:var(--honey-hi);padding:6px 14px;font-size:12px;letter-spacing:.04em;border-bottom:1px solid var(--honey-dim)}
+.wrap{max-width:1280px;margin:0 auto;padding:14px}
+h1{font-size:18px;margin:10px 0 2px} h2{font-size:15px;margin:14px 0 8px} h3{font-size:13px;margin:10px 0 6px;color:var(--ink2)}
+.sub{color:var(--ink2);font-size:13px;max-width:100ch}
+.card{background:var(--bg1);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:8px 0}
+.muted{color:var(--ink2)} .dim{color:var(--ink3)} .small{font-size:12px}
+/* 1-second status readability: big pill, text+color, never color alone */
+.statusline{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:10px 0}
+.pill{display:inline-block;padding:4px 12px;border-radius:999px;font-weight:700;font-size:15px;border:1px solid}
+.pill.mode-discover{color:var(--ink2);border-color:var(--ink3);background:#22201b}
+.pill.mode-dry{color:#1a1408;background:var(--honey);border-color:var(--honey-hi)}
+.pill.mode-real{color:#fff;background:#5a1f18;border-color:var(--bad)}
+.pill.stage{color:var(--ink);border-color:var(--honey-dim);background:#241d10}
+.pill.blocker{color:#fff;background:#4a2b12;border-color:var(--warn)}
+.pill.ok{color:#0f1a0d;background:var(--ok);border-color:var(--ok)}
+.pill.bad{color:#fff;background:#5a1f18;border-color:var(--bad)}
+/* stepper */
+.stepper{display:flex;gap:0;flex-wrap:wrap;align-items:center;margin:8px 0}
+.step{padding:4px 8px;border:1px solid var(--line);background:var(--bg1);font-size:12px;color:var(--ink2);white-space:nowrap}
+.step.done{color:var(--ok);border-color:#3c4a35}
+.step.cur{color:#1a1408;background:var(--honey);border-color:var(--honey-hi);font-weight:700}
+.step.wait{color:var(--honey-hi);border-color:var(--honey-dim)}
+.step.blocked{color:#fff;background:#4a2b12;border-color:var(--warn)}
+.steparrow{color:var(--ink3);padding:0 2px;font-size:12px}
+/* layout variants */
+.grid3{display:grid;grid-template-columns:220px 1fr 320px;gap:10px;align-items:start}
+@media(max-width:1000px){.grid3{grid-template-columns:1fr}}
+.focuscol{max-width:860px;margin:0 auto}
+.opslayout{display:grid;grid-template-columns:240px 1fr;gap:10px;align-items:start}
+@media(max-width:900px){.opslayout{grid-template-columns:1fr}}
+.steplist{list-style:none;margin:0;padding:0;font-size:13px}
+.steplist li{padding:5px 8px;border-radius:6px;color:var(--ink2)}
+.steplist li.done{color:var(--ok)} .steplist li.cur{background:#241d10;color:var(--honey-hi);font-weight:700}
+.steplist li.wait{color:var(--honey-hi)}
+/* review grid */
+.revgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.person{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px}
+.person.dropped{opacity:.45}
+.thumb{height:74px;border-radius:6px;background:linear-gradient(135deg,#3a2f18,#241d10 60%,#1a1a22);display:flex;align-items:center;justify-content:center;color:var(--honey-hi);font-weight:700;font-size:20px;border:1px solid var(--line)}
+.person label{display:block;margin-top:6px;font-size:13px}
+.person input[type=number]{width:4.5em;background:var(--bg0);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:2px 4px}
+.warnbox{border:1px solid var(--warn);color:var(--warn);border-radius:6px;padding:6px 8px;margin:6px 0;font-size:13px}
+.okbox{border:1px solid #3c4a35;color:var(--ok);border-radius:6px;padding:6px 8px;margin:6px 0;font-size:13px}
+.badbox{border:1px solid var(--bad);color:var(--bad);border-radius:6px;padding:6px 8px;margin:6px 0;font-size:13px}
+/* safety: three visibly different modes */
+.modeseg{display:flex;gap:8px;margin:8px 0;flex-wrap:wrap}
+.modeseg button{padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:var(--bg2);color:var(--ink2);cursor:pointer;font-weight:600}
+.modeseg button[aria-pressed=true].m-discover{background:#22201b;color:var(--ink);border-color:var(--ink3)}
+.modeseg button[aria-pressed=true].m-dry{background:var(--honey);color:#1a1408;border-color:var(--honey-hi)}
+.modeseg button[aria-pressed=true].m-real{background:#5a1f18;color:#fff;border-color:var(--bad)}
+.dangerzone{border:2px solid var(--bad);border-radius:10px;padding:10px;background:#170f0d}
+.dryzone{border:1px solid var(--honey-dim);border-radius:10px;padding:10px;background:#191410}
+.discoverzone{border:1px solid var(--ink3);border-radius:10px;padding:10px;background:var(--bg1)}
+table.bundle{width:100%;border-collapse:collapse;font-size:13px}
+table.bundle td,table.bundle th{border:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}
+.g{color:var(--ok)} .r{color:var(--bad)} .a{color:var(--warn)}
+button.act{background:var(--bg2);color:var(--ink);border:1px solid var(--honey-dim);border-radius:6px;padding:6px 10px;margin:2px;cursor:pointer;font-size:13px}
+button.act:hover:not(:disabled){border-color:var(--honey-hi);color:var(--honey-hi)}
+button.act:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:var(--honey);color:#1a1408;border:1px solid var(--honey-hi);font-weight:700}
+button.danger{background:#5a1f18;color:#fff;border-color:var(--bad);font-weight:700}
+input[type=text],input[type=number]{background:var(--bg0);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:5px 7px}
+/* log */
+.log{background:#0a0908;border:1px solid var(--line);border-radius:8px;padding:8px;height:190px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.log div{padding:1px 0;border-bottom:1px dotted #222}.log .t{color:var(--ink3)}
+/* driver */
+.driver{display:flex;gap:16px;flex-wrap:wrap}
+.driver>div{flex:1;min-width:280px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.tabs button{background:var(--bg2);color:var(--ink2);border:1px solid var(--line);border-radius:6px 6px 0 0;padding:6px 10px;cursor:pointer}
+.tabs button[aria-selected=true]{color:var(--honey-hi);border-color:var(--honey-dim);background:#241d10}
+/* floating switcher (prototype chrome, not part of design) */
+#switcher{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;background:#F4F1E8;color:#111;border-radius:999px;padding:6px 8px;display:flex;gap:10px;align-items:center;box-shadow:0 4px 18px #000;z-index:99;font-size:14px}
+#switcher button{border:1px solid #111;background:#fff;border-radius:999px;width:32px;height:32px;cursor:pointer;font-size:16px}
+#switcher b{font-size:13px}
+.drawer{border:1px dashed var(--honey-dim);border-radius:8px;padding:8px;margin:8px 0}
+pre.state{background:#0a0908;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:12px;overflow:auto;max-height:220px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:13px}
+.kv dt{color:var(--ink3)} .kv dd{margin:0}
+</style></head>
+<body data-variant="A">
+<div class="proto-banner">PROTOTYPE — throwaway for <b>#14</b> (map #10). Not production. No engine wiring, no persistence, images are gradient stand-ins. Variants: <b>?variant=A|B|C</b></div>
+<div class="wrap" id="app"></div>
+<div id="switcher" aria-label="prototype variant switcher (not part of design)">
+  <button id="sw-prev" title="previous variant (←)">←</button>
+  <b id="sw-label"></b>
+  <button id="sw-next" title="next variant (→)">→</button>
+</div>
+<script>
+"use strict";
+/* ============ pure logic module (liftable shape; page shell stays throwaway) ============ */
+const SPINE=["idle","probing","waiting_for_page_selection","scraping","waiting_for_people_review","finalizing","detecting_backend","dry_running","dry_passed","armed","uploading","done"];
+const WAIT=new Set(["waiting_for_page_selection","waiting_for_people_review"]);
+const TERMINAL=new Set(["done","failed","cancelled"]);
+function djb2(s){let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))>>>0;return h.toString(16).padStart(8,"0");}
+function snapshotOf(s){return djb2(JSON.stringify({sel:s.rows.map(r=>[r.seq,r.keep,r.order]),map:s.mapping,src:s.source,grp:s.group,be:s.backend}));}
+function mkRows(){return [
+ {seq:137,file:"images/0137-400x515.jpg",name:"นายปิยวัฒน์ ศรีมาลา",sub:"นายก อบต.ท่าข้าม · 080 109 3250",keep:true,order:0,status:"created"},
+ {seq:141,file:"images/0141-400x533.jpg",name:"นายอนันท์ พนัสนาชี",sub:"รองนายก · 080 145 2089",keep:true,order:1,status:"created"},
+ {seq:147,file:"images/0147-400x475.jpg",name:"นายธวัชชัย เนตรทองคำ",sub:"รองนายก · 095 282 4455",keep:true,order:1,status:"dry-partial"},
+ {seq:153,file:"images/0153-400x509.jpg",name:"นางสาวจุทาทิพย์ ชุมแสง",sub:"เลขานุการนายก · 083 826 5542",keep:true,order:2,status:"created"}];}
+function initialJob(){const s={jobId:"job-7f3a",slug:"obtthakhamgo-index-page-personnal8927",
+ source:"https://www.obtthakham.go.th/index/?page=personnal8927",group:"obtthakhamgo-index-page-personnal8927",
+ backend:"https://khanthuli.klongsaikhaw.go.th",mapping:"profile:thai-lao-basic → กองช่าง (4 rows)",
+ stage:"idle",blockers:[],attempts:0,mode:"discover",arm:"none",attested:false,typed:"",
+ guards:{group:"pass",host:"pass",identity:"pass",stale:"pass"},
+ rows:mkRows(),selectionRev:3,proofN:4,dryOutcome:null,saveOutcome:null,stopRequested:false,ledger:[],
+ streamId:"s1",seq:0,log:[],dry_run_id:null,save_run_id:null,note:"fresh job"};
+ s.snapshot=snapshotOf(s);return s;}
+function ev(s,type,msg){s.seq++;s.log.push({n:s.seq,stream:s.streamId,type,msg});if(s.log.length>200)s.log.shift();}
+function disarm(s,why){if(s.arm==="armed"||s.stage==="dry_passed"||s.stage==="armed"){s.arm="none";if(s.stage==="armed"||s.stage==="dry_passed")s.stage="dry_running";ev(s,"arm:consumed","disarmed — "+why);s.note=why;}}
+/* reducer: (state, action) => state — pure w.r.t. DOM */
+function reduce(s,a){
+ switch(a.t){
+  case "advance":{ // contextual next-step (happy path driver)
+   const nx={idle:"probing",probing:"waiting_for_page_selection",waiting_for_page_selection:"scraping",scraping:"waiting_for_people_review",waiting_for_people_review:"finalizing",finalizing:"detecting_backend",detecting_backend:"dry_running"}[s.stage];
+   if(nx){s.stage=nx;ev(s,"job:advanced","→ "+nx);}break;}
+  case "submitReview":s.stage="finalizing";s.selectionRev++;ev(s,"artifact:written","selection.json rev "+s.selectionRev+" (POST-only save, fingerprint re-validated)");break;
+  case "finalize":s.stage="detecting_backend";ev(s,"job:advanced","finalize ok — dup orders allowed+warned, (order,seq) sort");break;
+  case "detect":s.stage="dry_running";ev(s,"job:advanced","backend detected — "+s.backend);break;
+  case "runDry":{
+   if(a.outcome==="red"){s.dryOutcome="red";s.guards.identity="fail";ev(s,"gate:failed","G1 RED — guard regression, Real-upload disabled");s.note="guard-red blocks G1";}
+   else{s.dryOutcome=a.outcome;s.dry_run_id="dry-"+djb2(s.snapshot+s.selectionRev).slice(0,6);s.stage="dry_passed";s.arm="none";
+    ev(s,"upload:row-finished","dry "+(a.outcome==="partial"?"PARTIAL (amber, allowed w/ warnings)":"clean")+" — "+s.dry_run_id+" @ snapshot "+s.snapshot);
+    if(a.outcome==="partial")s.ledger.push("dry-partial: seq147 low-confidence identity — allowed amber");
+    ev(s,"artifact:written","report("+s.dry_run_id+") + "+s.proofN+" shots (immutable, never overwritten by save)");}
+   break;}
+  case "attest":s.attested=!s.attested;ev(s,"job:advanced","attestation "+(s.attested?"checked":"unchecked"));break;
+  case "type":s.typed=a.v;break;
+  case "mode":s.mode=a.v;ev(s,"job:advanced","mode → "+a.v);break;
+  case "arm":{s.stage="armed";s.arm="armed";ev(s,"arm:granted","armed — single-use, snapshot "+s.snapshot);break;}
+  case "upload":{
+   const usedArm=s.arm;s.arm="none"; // single-use: ANY attempt consumes
+   if(a.outcome==="ok"){s.stage="uploading";s.save_run_id="save-"+djb2(s.dry_run_id+"save").slice(0,6);
+    ev(s,"upload:row-finished","save "+s.save_run_id+" (refs dry "+s.dry_run_id+") — rows created");
+    s.stage="done";ev(s,"job:advanced","done — save proof separate from dry proof");}
+   else{s.stage="failed";s.attempts++;ev(s,"arm:consumed","upload FAILED — arm consumed (attempt "+s.attempts+"), fresh dry+confirm required");}
+   break;}
+  case "cf":s.blockers.push({type:"cloudflare",at:s.stage});ev(s,"blocker:raised","Cloudflare challenge — stage preserved ("+s.stage+"), arm preserved");s.note="CF blocker orthogonal";break;
+  case "cfSolve":s.blockers=s.blockers.filter(b=>b.type!=="cloudflare");ev(s,"blocker:cleared","CF solved in headed Chrome — resume same stage ("+s.stage+")");break;
+  case "cdp":s.blockers.push({type:"cdp",at:s.stage});ev(s,"blocker:raised","CDP disconnect — stage preserved, rescan 9333→9444→9222");break;
+  case "cdpBack":s.blockers=s.blockers.filter(b=>b.type!=="cdp");ev(s,"blocker:cleared","CDP reconnected — resume "+s.stage);break;
+  case "guardReg":s.guards.host="fail";ev(s,"gate:failed","host-gate REGRESSION (backend origin changed)");disarm(s,"guard regression");break;
+  case "editMap":s.mapping=a.v||s.mapping+" (edited)";{const before=s.snapshot;s.snapshot=snapshotOf(s);
+   if(before!==s.snapshot){ev(s,"arm:consumed","fingerprint change "+before+"→"+s.snapshot);disarm(s,"mapping/selection mutation invalidated dry");} }break;
+  case "retry":if(TERMINAL.has(s.stage)){s.attempts++;s.guards={group:"pass",host:"pass",identity:"pass",stale:"pass"};s.dryOutcome=null;s.attested=false;s.typed="";s.stage="dry_running";ev(s,"job:advanced","retry — attempt "+s.attempts+", re-enter at last safe checkpoint (dry_running), same validated inputs");}break;
+  case "cancel":if(s.stage==="uploading"){s.stopRequested=true;s.stage="cancelled";s.attempts++;ev(s,"job:advanced","stop_requested → current row finished truthfully → cancelled (no rollback claim). Arm consumed.");s.arm="none";}else if(!TERMINAL.has(s.stage)){s.stage="cancelled";s.arm="none";ev(s,"job:advanced","cancelled — artifacts+proofs retained");}break;
+  case "keep":s.rows.find(r=>r.seq===a.seq).keep=a.v;{const b=s.snapshot;s.snapshot=snapshotOf(s);if(b!==s.snapshot&&s.arm==="armed")disarm(s,"selection edit while armed");}ev(s,"review:edited","seq"+a.seq+" keep="+a.v);break;
+  case "order":s.rows.find(r=>r.seq===a.seq).order=(Number.isFinite(+a.v)&&+a.v>=0)?+a.v:0;ev(s,"review:edited","seq"+a.seq+" order→"+s.rows.find(r=>r.seq===a.seq).order+" (invalid→0)");break;
+  case "bulk":s.rows.forEach(r=>{if(r.keep)r.order=a.v;});{const b=s.snapshot;s.snapshot=snapshotOf(s);}ev(s,"review:edited","bulk-set checked-only → "+a.v+" (dup allowed, warned)");break;
+  case "saveSel":s.selectionRev++;s.snapshot=snapshotOf(s);ev(s,"artifact:written","selection.json rev "+s.selectionRev+" saved (server validate+atomic-write, stale-rev conflict checked)");break;
+  case "resync":ev(s,"job:resynced","GET /jobs/:id — durable job.json re-read, cursor reset ("+s.streamId+":"+s.seq+"). Missed SSE healed; terminal text never parsed.");break;
+  case "restartStream":s.streamId="s"+(parseInt(s.streamId.slice(1))+1);ev(s,"job:resynced","server epoch → new streamId "+s.streamId+" (bounded ~200-event buffer; no fake continuity)");break;
+  case "reset":return initialJob();
+ }
+ return s;}
+/* ============ shared render helpers ============ */
+let S=initialJob(), WTAB=0;
+const $=s=>document.querySelector(s);
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function spineHTML(){return '<div class="stepper" role="list">'+SPINE.map((st,i)=>{
+ let cls="step";if(TERMINAL.has(S.stage))cls+=st===S.stage?" cur":"";
+ else{const ci=SPINE.indexOf(S.stage),ii=SPINE.indexOf(st);
+  if(st===S.stage)cls+=WAIT.has(st)?" wait":" cur";else if(ii<ci)cls+=" done";}
+ return (i?'<span class="steparrow">›</span>':"")+'<span role="listitem" class="'+cls+'">'+st+"</span>";}).join("")+"</div>";}
+function statusHTML(){const b=S.blockers.map(x=>x.type).join("+");
+ return '<div class="statusline"><span class="pill mode-'+S.mode+'">'+S.mode.toUpperCase()+' MODE</span>'
+ +'<span class="pill stage">'+esc(S.stage)+'</span>'
+ +(b?'<span class="pill blocker">BLOCKED: '+esc(b)+' (stage preserved)</span>':"")
+ +(S.arm==="armed"?'<span class="pill ok">ARMED · single-use</span>':"")
+ +(S.stage==="failed"?'<span class="pill bad">FAILED · attempt '+S.attempts+'</span>':"")
+ +(S.stage==="cancelled"?'<span class="pill bad">CANCELLED</span>':"")
+ +(S.stage==="done"?'<span class="pill ok">DONE</span>':"")
+ +'<span class="dim small">snapshot '+S.snapshot+' · rev '+S.selectionRev+' · attempt '+S.attempts+'</span></div>';}
+function dupWarn(){const m={};S.rows.filter(r=>r.keep).forEach(r=>{(m[r.order]=m[r.order]||[]).push(r.seq);});
+ return Object.entries(m).filter(([k,v])=>v.length>1).map(([k,v])=>"order "+k+" ×"+v.length+" (seq "+v.join(", ")+")");}
+function reviewHTML(){const dups=dupWarn();
+ const eff=[...S.rows].filter(r=>r.keep).sort((a,b)=>a.order-b.order||a.seq-b.seq);
+ return '<div class="card"><h3>People review — waiting_for_people_review surface (review-first component)</h3>'
+ +'<div class="small muted">Behaviors preserved: keep checkbox keyed by seq · order input (invalid→0) · checked-only bulk-set · dup orders allowed+warned · (order,seq) sort preview · POST-only save w/ revision (stale → conflict, never last-wins). Picker/Blob = export only.</div>'
+ +'<div style="margin:6px 0"><label class="small">Bulk order for checked: <input id="bulk-v" type="number" min="0" value="1" style="width:4em"></label> '
+ +'<button class="act" data-do="bulkrun">Set checked</button> '
+ +'<button class="act" data-do="savesel">Save via POST (rev '+S.selectionRev+'→'+(S.selectionRev+1)+')</button></div>'
+ +(dups.length?'<div class="warnbox">Duplicate orders (allowed, warned — finalize shows same): '+esc(dups.join(" · "))+"</div>":'<div class="okbox">No duplicate orders.</div>')
+ +'<div class="revgrid">'+S.rows.map(r=>'<div class="person'+(r.keep?"":" dropped")+'"><div class="thumb">'+esc(r.name.trim()[0])+"</div>"
+  +'<div><b>'+esc(r.name)+"</b><br><span class='small muted'>seq="+r.seq+" · "+esc(r.file)+"<br>"+esc(r.sub)+"</span></div>"
+  +'<label><input type="checkbox" data-keep="'+r.seq+'"'+(r.keep?" checked":"")+"> keep (รูปคนชัด)</label>"
+  +'<label class="small">order <input type="number" min="0" data-ord="'+r.seq+'" value="'+r.order+'"></label>'
+  +'<div class="small dim">row: '+r.status+"</div></div>").join("")+"</div>"
+ +'<div class="small muted" style="margin-top:6px">Effective finalize order (order,seq): '+eff.map(r=>r.order+":seq"+r.seq).join(" → ")+"</div></div>";}
+function guardsOK(){return S.guards.group==="pass"&&S.guards.host==="pass"&&S.guards.identity==="pass"&&S.guards.stale==="pass";}
+function safetyHTML(){const g=S.guards,allGreen=guardsOK()&&S.dry_run_id&&S.dryOutcome!=="red";
+ const canArm=S.stage==="dry_passed"&&allGreen, typedOK=S.typed===S.slug;
+ return '<div class="card"><h3>Safety — mode trinity (names in headings, never color alone)</h3>'
+ +'<div class="modeseg" role="group" aria-label="mode">'
+ +["discover","dry","real"].map(m=>'<button class="m-'+m+'" data-mode="'+m+'" aria-pressed="'+(S.mode===m)+'">'+(m==="discover"?"① Discover (neutral, inspect only)":m==="dry"?"② Dry-run (safe, no saves)":"③ Real upload (clicks save)")+"</button>").join("")+"</div>"
+ +(S.mode==="discover"?'<div class="discoverzone"><b>DISCOVER</b> — inspect/detect only. No form fill, no target writes, no mutation control.</div>':"")
+ +(S.mode==="dry"?'<div class="dryzone"><b>DRY-RUN</b> <span class="a">(honey/amber)</span> — may fill + screenshot, never clicks save, never creates departments. Writes local report+shots only.<div style="margin-top:6px"><button class="act primary" data-do="dryclean">Run dry-run (safe, no saves)</button> <button class="act" data-do="drypartial">Run dry-run → partial</button> <button class="act" data-do="dryred">Run dry-run → guard red</button></div></div>':"")
+ +(S.mode==="real"?'<div class="dangerzone"><b>REAL UPLOAD — fenced danger zone</b> <span class="r">(red)</span>. Only mode that clicks save / creates departments.'
+  +'<table class="bundle" style="margin:8px 0"><tr><th>Visibility bundle (nothing droppable)</th><th>Value</th></tr>'
+  +"<tr><td>Source URL / group</td><td>"+esc(S.source)+"<br>"+esc(S.group)+"</td></tr>"
+  +"<tr><td>Destination backend</td><td>"+esc(S.backend)+"</td></tr>"
+  +"<tr><td>Target depts + WOULD-CREATE</td><td>"+esc(S.mapping)+" · WOULD-CREATE: none (pinned map)</td></tr>"
+  +"<tr><td>Guards</td><td>group-guard <b class='"+(g.group==="pass"?"g'>pass":"r'>FAIL")+"</b> · host-gate <b class='"+(g.host==="pass"?"g'>pass":"r'>FAIL")+"</b> · verify-identity <b class='"+(g.identity==="pass"?"g'>pass":"r'>FAIL")+"</b> · stale-finalize <b class='"+(g.stale==="pass"?"g'>pass":"r'>FAIL")+"</b></td></tr>"
+  +"<tr><td>Rows</td><td>created 3 · <span class='a'>dry-partial 1 (seq147, amber allowed)</span> · skipped 0 · failed 0</td></tr>"
+  +"<tr><td>Proof</td><td>snapshot <b>"+S.snapshot+"</b> · dry "+(S.dry_run_id||"— (required)")+" · "+S.proofN+" screenshots · save writes a SEPARATE proof set (never overwrites dry)</td></tr></table>"
+  +(S.dryOutcome==="red"?'<div class="badbox">G1 RED — failed guard / failed row blocks Real-upload. Fix + re-dry.</div>':"")
+  +(!S.dry_run_id?'<div class="badbox">G1: no dry-run for this snapshot — Real-upload disabled. Any material change invalidates dry (requires re-dry).</div>':"")
+  +'<label class="small"><input type="checkbox" data-attest '+(S.attested?"checked":"")+"> I reviewed dry report "+(S.dry_run_id||"&lt;none&gt;")+" and all "+S.proofN+" screenshots for snapshot "+S.snapshot.slice(0,8)+" (= verified review)</label><br>"
+  +'<label class="small">Type exact slug to arm: <input type="text" data-slug value="'+esc(S.typed)+'" placeholder="'+esc(S.slug)+'" style="width:22em"></label><br>'
+  +'<div style="margin-top:6px"><button class="act" data-do="arm" '+((canArm&&S.attested&&typedOK)?"":"disabled")+'>Arm (attested + typed slug)</button> '
+  +'<button class="act danger" data-do="uploadok" '+((S.stage==="armed")?"":"disabled")+'>Real upload — clicks save</button> '
+  +'<button class="act" data-do="uploadfail" '+((S.stage==="armed")?"":"disabled")+'>Simulate upload failure</button></div>'
+  +'<div class="small dim">Two-stage gate: G1 = all-green + fresh dry for SAME snapshot · G2 = human confirm (checkbox + typed slug + click). Armed single-use: success / failure / change / invalidation consumes it. --yes never bypasses guards.</div></div>':"")
+ +"</div>";}
+function contextHTML(){return '<div class="card"><h3>Source / target / safety / evidence</h3><dl class="kv">'
+ +"<dt>source</dt><dd>"+esc(S.source)+"</dd><dt>group</dt><dd>"+esc(S.group)+"</dd>"
+ +"<dt>target</dt><dd>"+esc(S.backend)+"<br><span class='dim'>"+esc(S.mapping)+"</span></dd>"
+ +"<dt>snapshot</dt><dd>"+S.snapshot+" (people+selection+src+group+origin+map versions)</dd>"
+ +"<dt>dry/save</dt><dd>"+(S.dry_run_id||"—")+" / "+(S.save_run_id||"—")+"</dd>"
+ +"<dt>job.json</dt><dd class='dim'>out/"+esc(S.slug)+"/jobs/"+S.jobId+"/job.json = truth · pointer out/"+esc(S.slug)+"/job.json = convenience only</dd>"
+ +"<dt>ledger</dt><dd>"+(S.ledger.length?esc(S.ledger.join(" · ")):"<span class='dim'>clean</span>")+"</dd>"
+ +"<dt>note</dt><dd>"+esc(S.note)+"</dd></dl>"
+ +(S.blockers.length?'<div class="warnbox">Blockers (orthogonal, stage+resume preserved, arm kept): '+esc(S.blockers.map(b=>b.type+"@"+b.at).join(", "))+"</div>":"")
+ +"</div>";}
+function logHTML(){return '<div class="card"><h3>Activity log — ephemeral SSE view <span class="dim small">(stream '+S.streamId+' · cursor (job,'+S.streamId+','+S.seq+') · GET heals gaps · terminal text never parsed)</span></h3>'
+ +'<div class="log">'+S.log.slice().reverse().map(e=>"<div><span class='t'>"+e.stream+":"+e.n+" "+esc(e.type)+"</span> — "+esc(e.msg)+"</div>").join("")+"</div>"
+ +'<div style="margin-top:6px"><button class="act" data-do="resync">GET resync</button> <button class="act" data-do="restart">Restart server (new stream epoch)</button></div></div>';}
+function driverHTML(){const blocked=S.blockers.length>0,term=TERMINAL.has(S.stage);
+ const B=(do_,label,dis)=>'<button class="act" data-do="'+do_+'"'+(dis?" disabled":"")+">"+label+"</button>";
+ const WT=[
+  {t:"Happy path",steps:[["advance","probe done"],["advance","pages picked"],["advance","scraped"],["submitReview","review submitted"],["finalize","finalized"],["detect","backend detected"],["dryclean","dry clean → dry_passed"],["attest","attest"],["autotype","type slug"],["arm","arm"],["uploadok","real upload → done"]]},
+  {t:"CF preserves arm",steps:[["dryclean","dry clean"],["attest","attest"],["autotype","type slug"],["arm","armed"],["cf","CF challenge hits"],["cfSolve","solved → resume armed"]]},
+  {t:"Dry-partial amber",steps:[["drypartial","dry → partial (amber allowed)"],["attest","attest"],["autotype","type"],["arm","arm ok (partial≠block)"]]},
+  {t:"Guard-red blocks",steps:[["dryred","dry → guard RED"],["arm","try arm (stays disabled)"]]},
+  {t:"Arm single-use",steps:[["dryclean","dry clean"],["attest","attest"],["autotype","type"],["arm","arm"],["uploadfail","upload FAILS → arm consumed"],["retry","retry → must re-dry (arm gone)"]]}];
+ return '<div class="card"><h3>Driver — free-play + guided walkthroughs (state in memory, nothing persists)</h3><div class="driver">'
+ +'<div><h3>Free-play (one button per action)</h3>'
+ +B("advance","Advance ▸",term||blocked)+B("submitReview","Submit review",s_stageNot("waiting_for_people_review")||term||blocked)+B("finalize","Finalize",s_stageNot("finalizing")&&s_stageNot("waiting_for_people_review")||term||blocked)
+ +B("detect","Detect backend",s_stageNot("detecting_backend")||term||blocked)
+ +B("cf",blocked?"CF already":"CF challenge",term)+B("cfSolve","CF solved",!S.blockers.some(b=>b.type==="cloudflare"))
+ +B("cdp","CDP drop",term)+B("cdpBack","CDP back",!S.blockers.some(b=>b.type==="cdp"))
+ +B("guardReg","Guard regression",term)+B("editMap","Edit mapping (fingerprint change)",term)
+ +B("retry","Retry (explicit, attempt++)",!term||S.stage==="done")+B("cancel","Cancel job",term)
+ +B("reset","Reset demo",false)+"</div>"
+ +'<div><h3>Guided walkthroughs</h3><div class="tabs">'+WT.map((w,i)=>'<button data-wtab="'+i+'" aria-selected="'+(i===WTAB)+'">'+w.t+"</button>").join("")+"</div>"
+ +'<div class="small muted" style="margin-bottom:6px">Tab resets to a known state, then each step is a real button.</div>'
+ +WT[WTAB].steps.map((st,i)=>B("w_"+WTAB+"_"+i,"Step "+(i+1)+": "+st[1],false)).join("")
+ +"</div></div></div>";}
+function s_stageNot(){return false;} // free-play gating kept permissive on purpose (prototype explores illegal moves too)
+function stateHTML(){return '<div class="card"><h3>Full state (surfaced after every action)</h3><pre class="state">'+esc(JSON.stringify({stage:S.stage,mode:S.mode,arm:S.arm,blockers:S.blockers,attempts:S.attempts,snapshot:S.snapshot,dry:S.dry_run_id,save:S.save_run_id,attested:S.attested,guards:S.guards,ledger:S.ledger,note:S.note},null,1))+"</pre></div>";}
+/* variant compositions — structurally different, same state */
+const VNAMES={A:"A · hypothesis (3-pane + bottom log)",B:"B · focus (single column + drawer)",C:"C · ops-board (left tree, merged timeline)"};
+function viewA(){return statusHTML()+spineHTML()
+ +'<div class="grid3"><div><div class="card"><h3>Workflow steps</h3><ul class="steplist">'
+ +SPINE.map(st=>'<li class="'+(st===S.stage?"cur":(SPINE.indexOf(st)<SPINE.indexOf(S.stage)?"done":"")+(WAIT.has(st)?" wait":""))+'">'+st+"</li>").join("")
+ +"</ul></div>"+contextHTML()+"</div>"
+ +'<div>'+currentStepHTML()+reviewHTML()+safetyHTML()+"</div>"
+ +'<div>'+evidenceHTML()+stateHTML()+"</div></div>"
+ +logHTML()+driverHTML();}
+function viewB(){return statusHTML()+spineHTML()
+ +'<div class="focuscol">'+currentStepHTML()+reviewHTML()+safetyHTML()
+ +'<div class="drawer"><b>Context drawer</b> (collapsed in this variant — open only when needed):<div id="drawer-body" style="display:none">'+contextHTML()+evidenceHTML()+'</div><div><button class="act" id="drawer-t">Toggle drawer</button></div></div>'
+ +logHTML()+stateHTML()+driverHTML()+"</div>";}
+function viewC(){return statusHTML()
+ +'<div class="opslayout"><div><div class="card"><h3>Jobs</h3><div class="small"><b>'+S.jobId+"</b> · "+esc(S.slug)+'<br><span class="dim">+ 5 queued (single-flight v1: one active op globally)</span></div><h3>Step tree</h3><ul class="steplist">'
+ +SPINE.map(st=>'<li class="'+(st===S.stage?"cur":(SPINE.indexOf(st)<SPINE.indexOf(S.stage)?"done":""))+'">'+st+"</li>").join("")+"</ul></div></div>"
+ +'<div>'+currentStepHTML()+reviewHTML()+safetyHTML()+'<div class="card"><h3>Context (inline cards, no right pane)</h3>'+contextHTML()+evidenceHTML()+"</div>"
+ +'<div class="card"><h3>Timeline (merged — no separate bottom strip)</h3><div class="log" style="height:150px">'+S.log.slice().reverse().map(e=>"<div><span class='t'>"+e.stream+":"+e.n+" "+esc(e.type)+"</span> — "+esc(e.msg)+"</div>").join("")+'</div><div style="margin-top:6px"><button class="act" data-do="resync">GET resync</button></div></div>'
+ +stateHTML()+driverHTML()+"</div></div>";}
+function currentStepHTML(){const hint={idle:"New URL-scoped Job. Start probing.",probing:"Probing source… (resolvePort 9333→9444→9222, CF preflight)",waiting_for_page_selection:"Human picks pages (persisted wait — never a TTY block).",scraping:"Scraping in DOM order… (image errors allowed per stage policy)",waiting_for_people_review:"Human review below — keep/order, then submit.",finalizing:"Finalizing selection…",detecting_backend:"Detecting backend origin (host-gate)…",dry_running:"Dry-run (safe, no saves)…",dry_passed:"Dry passed. Attest + type slug to arm.",armed:"ARMED single-use. Real upload available.",uploading:"Uploading… (stop = finish row truthfully)",done:"Done — all required clean, rest explicitly allowed.",failed:"Failed (blocking). Explicit retry re-enters at checkpoint.",cancelled:"Cancelled. Artifacts + proofs retained."}[S.stage]||S.stage;
+ return '<div class="card"><h3>Current step: '+esc(S.stage)+'</h3><div>'+esc(hint)+"</div>"
+ +(S.stopRequested?'<div class="warnbox">stop_requested (transient upload flag)</div>':"")+"</div>";}
+function evidenceHTML(){return '<div class="card"><h3>Evidence</h3><div class="small">report(dry '+(S.dry_run_id||"—")+') + '+S.proofN+' shots/ PNGs (paths live in report) · per-row table: created / <span class="a">dry-partial</span> / skip-would-create / failed · save proof separate.<br><span class="dim">Artifact events are pointer-only {kind,url,sha256,byteLength} — browser never reads disk, events never embed bytes.</span></div></div>';}
+/* walkthrough runner */
+const WTDEF=[
+ [["advance"],["advance"],["advance"],["submitReview"],["finalize"],["detect"],["runDry:clean"],["attest"],["autotype"],["arm"],["upload:ok"]],
+ [["runDry:clean"],["attest"],["autotype"],["arm"],["cf"],["cfSolve"]],
+ [["runDry:partial"],["attest"],["autotype"],["arm"]],
+ [["runDry:red"],["arm"]],
+ [["runDry:clean"],["attest"],["autotype"],["arm"],["upload:fail"],["retry"]]];
+function wReset(i){S=initialJob();if(i>=1){["advance","advance","advance","submitReview","finalize","detect"].forEach(t=>doAct(t,true));}render();}
+function doAct(t,silent){let m;
+ if(t==="dryclean")m={t:"runDry",outcome:"clean"};else if(t==="drypartial")m={t:"runDry",outcome:"partial"};
+ else if(t==="dryred")m={t:"runDry",outcome:"red"};else if(t==="autotype"){S=reduce(S,{t:"type",v:S.slug});render();return;}
+ else if(t==="uploadok")m={t:"upload",outcome:"ok"};else if(t==="uploadfail")m={t:"upload",outcome:"fail"};
+ else if(t==="bulkrun"){const v=parseInt(($("#bulk-v")||{}).value||"1",10);S=reduce(S,{t:"bulk",v});render();return;}
+ else if(t==="savesel"){S=reduce(S,{t:"saveSel"});render();return;}
+ else if(t.startsWith("runDry:"))m={t:"runDry",outcome:t.split(":")[1]};
+ else if(t.startsWith("upload:"))m={t:"upload",outcome:t.split(":")[1]};
+ else m={t};
+ S=reduce(S,m);if(!silent)render();}
+/* render + events */
+function variant(){return new URLSearchParams(location.search).get("variant")||"A";}
+function render(){const v=variant();document.body.dataset.variant=v;
+ $("#sw-label").textContent=VNAMES[v]||VNAMES.A;
+ $("#app").innerHTML='<h1>Dark Honey Job Workspace — prototype <span class="dim small">job '+S.jobId+" · "+esc(S.slug)+"</span></h1>"
+ +'<p class="sub">Question: does the 3-pane + bottom-log hypothesis hold? Flip A/B/C, drive the locked spine (idle→…→dry_passed→armed→uploading→done, CF/CDP orthogonal blockers, single-use arm) and the safety trinity (Discover neutral / Dry honey / Real red fenced). Tokens: charcoal #0E0D0B/#15130F/#1C1913 · honey #F2B84B/#D99A2B/#FFCC66 (active/primary/focus/progress only) · text #F4F1E8/#AAA398/#706A61. Status readable in 1s by text, never color alone.</p>'
+ +(v==="B"?viewB():v==="C"?viewC():viewA());
+ $("#drawer-t")&&($("#drawer-t").onclick=()=>{const d=$("#drawer-body");d.style.display=d.style.display==="none"?"block":"none";});
+ document.querySelectorAll("[data-do]").forEach(b=>b.onclick=()=>{const d=b.dataset.do;
+  if(d.startsWith("w_")){const[,w,i]=d.split("_").map(Number);WTDEF[w][i].forEach(t=>doAct(t,true));render();}
+  else doAct(d);});
+ document.querySelectorAll("[data-wtab]").forEach(b=>b.onclick=()=>{WTAB=+b.dataset.wtab;wReset(WTAB);});
+ document.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>{S=reduce(S,{t:"mode",v:b.dataset.mode});render();});
+ document.querySelectorAll("[data-keep]").forEach(c=>c.onchange=()=>{S=reduce(S,{t:"keep",seq:+c.dataset.keep,v:c.checked});render();});
+ document.querySelectorAll("[data-ord]").forEach(o=>o.onchange=()=>{S=reduce(S,{t:"order",seq:+o.dataset.ord,v:o.value});render();});
+ document.querySelectorAll("[data-attest]").forEach(c=>c.onchange=()=>{S=reduce(S,{t:"attest"});render();});
+ document.querySelectorAll("[data-slug]").forEach(i=>i.oninput=()=>{S=reduce(S,{t:"type",v:i.value});const lbl=document.querySelector("[data-do=arm]");});
+ window.scrollTo(0,0);}
+function cycle(d){const order=["A","B","C"];let v=variant();if(!order.includes(v))v="A";
+ const n=order[(order.indexOf(v)+d+3)%3];const u=new URL(location.href);u.searchParams.set("variant",n);history.replaceState(null,"","?variant="+n);render();}
+$("#sw-prev").onclick=()=>cycle(-1);$("#sw-next").onclick=()=>cycle(1);
+addEventListener("keydown",e=>{if(e.key!=="ArrowLeft"&&e.key!=="ArrowRight")return;
+ const t=document.activeElement;if(t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.isContentEditable))return;
+ cycle(e.key==="ArrowRight"?1:-1);});
+render();
+</script>
