@@ -8,7 +8,7 @@
 // Never imports CLI entries (reuse boundary: UI imports Lift + Wrap cores only).
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { advance, appendLedger, canAdvance, claimEngineOp, failJob, finishUpload, releaseEngineOp, SPINE, writeJob } from "./store.mjs";
+import { advance, appendLedger, canAdvance, claimEngineOp, failJob, finishUpload, finishUploadRowAndCancel, notifyGuardRegression, notifyProofLost, readJob, releaseEngineOp, SPINE, writeJob } from "./store.mjs";
 import {
   beginUploadWithProof,
   grantArmFromSafety,
@@ -91,6 +91,23 @@ function emit(hub, jobId, type, payload) {
   } catch {
     return null;
   }
+}
+
+// Shared ledger + persist + notify triple for pipeline steps.
+function commitStep(outDir, job, hub, { ledgerKind, ledgerMessage, ledgerExtra, emitType, emitPayload }) {
+  if (ledgerKind) appendLedger(job, ledgerKind, ledgerMessage, ledgerExtra ?? {});
+  writeJob(outDir, job);
+  if (emitType) emit(hub, job.jobId, emitType, emitPayload ?? {});
+}
+
+// Same-job re-entry guard (finding 5): claimEngineOp is re-entrant for the
+// same job by primitive contract (tests/jobs-state.test.mjs), so the engine
+// entry point tracks active pipeline runs itself and refuses a second run on
+// the same job while one holds the claim. Released in finally, even on throw.
+const activePipelineJobs = new Set();
+
+export function currentPipelineJobs() {
+  return [...activePipelineJobs];
 }
 
 // Step selection, mirrors pipeline.mjs:32-33. Unknown steps fail closed.
@@ -210,9 +227,12 @@ function stagingPaths(outDir) {
 async function gateStep({ outDir, job, step, autoApprove, hub, approvals }) {
   emit(hub, job.jobId, "job:advanced", { step, stage: job.stage, awaitingApproval: true });
   if (autoApprove) {
-    appendLedger(job, "pipeline:auto-approved", `${step} (maps --yes: non-interactive confirm only; safety gates still enforced)`);
-    writeJob(outDir, job);
-    emit(hub, job.jobId, "job:advanced", { step, stage: job.stage, approved: true, autoApproved: true });
+    commitStep(outDir, job, hub, {
+      ledgerKind: "pipeline:auto-approved",
+      ledgerMessage: `${step} (maps --yes: non-interactive confirm only; safety gates still enforced)`,
+      emitType: "job:advanced",
+      emitPayload: { step, stage: job.stage, approved: true, autoApproved: true },
+    });
     return { step, status: "auto-approved" };
   }
   const approve = approvals?.[step];
@@ -226,9 +246,12 @@ async function gateStep({ outDir, job, step, autoApprove, hub, approvals }) {
   if (!ok) {
     fail("approval-required", `pipeline:${step}: approval refused (job waits at ${job.stage})`, { step, stage: job.stage });
   }
-  appendLedger(job, "pipeline:approved", step);
-  writeJob(outDir, job);
-  emit(hub, job.jobId, "job:advanced", { step, stage: job.stage, approved: true });
+  commitStep(outDir, job, hub, {
+    ledgerKind: "pipeline:approved",
+    ledgerMessage: step,
+    emitType: "job:advanced",
+    emitPayload: { step, stage: job.stage, approved: true },
+  });
   return { step, status: "approved" };
 }
 
@@ -257,15 +280,21 @@ async function machineStep({ outDir, rootDir, job, step, hub, runners, from }) {
   }
   const run = runners?.[step];
   if (typeof run !== "function") {
-    appendLedger(job, "pipeline:deferred", `${step}: contract validated, no in-process runner (browser work deferred)`);
-    writeJob(outDir, job);
-    emit(hub, job.jobId, "job:advanced", { step, stage: job.stage, deferred: true });
+    commitStep(outDir, job, hub, {
+      ledgerKind: "pipeline:deferred",
+      ledgerMessage: `${step}: contract validated, no in-process runner (browser work deferred)`,
+      emitType: "job:advanced",
+      emitPayload: { step, stage: job.stage, deferred: true },
+    });
     return { step, status: "deferred" };
   }
   const detail = await run(ctx);
-  appendLedger(job, "pipeline:step", `${step}: in-process runner ok`);
-  writeJob(outDir, job);
-  emit(hub, job.jobId, "job:advanced", { step, stage: job.stage });
+  commitStep(outDir, job, hub, {
+    ledgerKind: "pipeline:step",
+    ledgerMessage: `${step}: in-process runner ok`,
+    emitType: "job:advanced",
+    emitPayload: { step, stage: job.stage },
+  });
   return { step, status: "ran", detail: detail ?? null };
 }
 
@@ -285,6 +314,59 @@ function readSummaryOrFail(summaryPath, step) {
 
 function finalizeDirs(outDir, rootDir, summary) {
   return summary.results.filter((r) => !r.error && r.dir).map((r) => resolveSubDir(outDir, rootDir, r.dir));
+}
+
+// Per-row regression guard (finding 3): the job layer cannot observe the
+// backend mid-upload, so the injected runner may report guardStatus:"red"
+// (or runners.guardCheck may return {regression:true}) when group/host/field/
+// identity gates flip after the dry. Regression records guard:regression via
+// notifyGuardRegression, consumes the arm via failJob, and fails closed —
+// written rows kept truthfully, exactly like a failed row.
+function failOnGuardRegression(outDir, job, hub, { queue, rowResults, detail }) {
+  notifyGuardRegression(job, { detail: detail ?? "guard regression mid-upload" });
+  failJob(job, { reason: `upload:guard-regression:${job.slug}` });
+  commitStep(outDir, job, hub, {
+    emitType: "gate:failed",
+    emitPayload: { gate: "G1", step: "upload", reasons: ["guard-regression"] },
+  });
+  emit(hub, job.jobId, "job:advanced", { step: "upload", to: "failed", stage: job.stage });
+  fail("guard-regression", `upload: guard regressed mid-upload (written rows kept truthfully)`, { queue, rowResults });
+}
+
+// Operator stop arrives via POST cancel, which writes the record to disk while
+// the upload loop holds a stale in-memory copy. Re-read at every row boundary
+// so a stop finishes the current row truthfully, then cancels with the arm
+// consumed (finding 8). Returns true when the run must stop now.
+function syncStopAndProof(outDir, job, hub, { queue, rowResults }) {
+  try {
+    Object.assign(job, readJob(outDir, job.slug, job.jobId));
+  } catch {
+    // Unreadable record mid-run: fail closed rather than upload blind.
+    failJob(job, { reason: "upload:record-unreadable" });
+    writeJob(outDir, job);
+    emit(hub, job.jobId, "job:advanced", { step: "upload", to: "failed", stage: job.stage });
+    fail("record-unreadable", "upload: job record unreadable mid-upload (fail closed)", { queue, rowResults });
+  }
+  if (job.stopRequested) {
+    finishUploadRowAndCancel(job, { reason: "stop_requested: row boundary" });
+    commitStep(outDir, job, hub, {
+      emitType: "job:advanced",
+      emitPayload: { step: "upload", to: "cancelled", stage: job.stage },
+    });
+    return true;
+  }
+  const pv = verifyDryReport(outDir, job);
+  if (!pv.ok) {
+    notifyProofLost(job, { detail: pv.reasons.join("; ").slice(0, 200) });
+    failJob(job, { reason: "upload:proof-lost-mid-queue" });
+    commitStep(outDir, job, hub, {
+      emitType: "gate:failed",
+      emitPayload: { gate: "G1", step: "upload", reasons: pv.reasons },
+    });
+    emit(hub, job.jobId, "job:advanced", { step: "upload", to: "failed", stage: job.stage });
+    fail("missing-proof", `upload: dry proof lost mid-queue — ${pv.reasons.join("; ")}`, { queue, rowResults });
+  }
+  return false;
 }
 
 // Upload as job ops. Staging files stay the contract; the job-layer dry proof
@@ -331,9 +413,12 @@ async function uploadStep({ outDir, rootDir, job, hub, runners, order, autoAppro
   // nor the group/host/field/identity guards nor the failed-row policy.
   const pre = verifyDryReport(outDir, job);
   if (!pre.ok) {
-    appendLedger(job, "gate:failed", `upload refused: ${pre.reasons.join("; ").slice(0, 200)}`);
-    writeJob(outDir, job);
-    emit(hub, job.jobId, "gate:failed", { gate: "G1", step: "upload", reasons: pre.reasons });
+    commitStep(outDir, job, hub, {
+      ledgerKind: "gate:failed",
+      ledgerMessage: `upload refused: ${pre.reasons.join("; ").slice(0, 200)}`,
+      emitType: "gate:failed",
+      emitPayload: { gate: "G1", step: "upload", reasons: pre.reasons },
+    });
     fail("missing-proof", `upload refused: prerequisite dry invalid — ${pre.reasons.join("; ")}`, { reasons: pre.reasons });
   }
   // G2 arm: explicit triple via armInputs, or a prior arm. Never auto-minted.
@@ -355,9 +440,12 @@ async function uploadStep({ outDir, rootDir, job, hub, runners, order, autoAppro
   if (typeof uploadRow !== "function") {
     // Validate-only: proof threads (missing-proof thrown above) but the
     // single-use arm stays untouched until real row work runs.
-    appendLedger(job, "pipeline:deferred", "upload: queue + dry proof validated, no uploadRow runner (arm untouched)");
-    writeJob(outDir, job);
-    emit(hub, job.jobId, "job:advanced", { step: "upload", stage: job.stage, deferred: true });
+    commitStep(outDir, job, hub, {
+      ledgerKind: "pipeline:deferred",
+      ledgerMessage: "upload: queue + dry proof validated, no uploadRow runner (arm untouched)",
+      emitType: "job:advanced",
+      emitPayload: { step: "upload", stage: job.stage, deferred: true },
+    });
     return { step: "upload", status: "deferred", queue, skipped, warnings };
   }
   const started = beginUploadWithProof(outDir, job, {});
@@ -366,12 +454,28 @@ async function uploadStep({ outDir, rootDir, job, hub, runners, order, autoAppro
   emit(hub, job.jobId, "job:advanced", { step: "upload", to: "uploading", stage: job.stage, save_run_id: started.saveRunId });
   emit(hub, job.jobId, "artifact:written", { kind: "save-report", relPath: started.relPath, sha256: started.sha256, byteLength: started.byteLength });
   const rowResults = [];
+  const guardCheck = runners?.guardCheck;
   for (const q of queue) {
+    // Row boundary: observe operator stop (fresh record), re-verify the dry
+    // proof, and stop-now when requested — previous rows finished truthfully,
+    // the arm is consumed into cancelled.
+    if (syncStopAndProof(outDir, job, hub, { queue, rowResults })) {
+      return { step: "upload", status: "cancelled", queue, skipped, warnings, saveRunId: started.saveRunId, rowResults };
+    }
+    if (typeof guardCheck === "function") {
+      const gc = await guardCheck({ outDir, job, entry: q, dir: q.dir });
+      if (gc && (gc.regression === true || gc.guardStatus === "red")) {
+        failOnGuardRegression(outDir, job, hub, { queue, rowResults, detail: gc.detail ?? "guardCheck red" });
+      }
+    }
     let result = null;
     try {
       result = await uploadRow({ outDir, job, entry: q, dir: q.dir });
     } catch (e) {
       result = { slug: q.slug, dir: q.dir, status: "failed", detail: String(e?.message ?? e).slice(0, 200) };
+    }
+    if (result?.guardStatus === "red") {
+      failOnGuardRegression(outDir, job, hub, { queue, rowResults, detail: result?.detail ?? "row reported guard red" });
     }
     const status = result?.status === "failed" ? "failed" : "done";
     rowResults.push({ ...q, status, detail: result?.detail ?? null });
@@ -382,6 +486,11 @@ async function uploadStep({ outDir, rootDir, job, hub, runners, order, autoAppro
       emit(hub, job.jobId, "job:advanced", { step: "upload", to: "failed", stage: job.stage });
       fail("row-failed", `upload: row failed for ${q.slug ?? q.dir} (written rows kept truthfully)`, { queue, rowResults });
     }
+  }
+  // A stop that landed during the final row still cancels instead of done:
+  // finishUpload throws stop-requested, so check the fresh record first.
+  if (syncStopAndProof(outDir, job, hub, { queue, rowResults })) {
+    return { step: "upload", status: "cancelled", queue, skipped, warnings, saveRunId: started.saveRunId, rowResults };
   }
   finishUpload(job, { reason: `pipeline:upload:${started.saveRunId}` });
   writeJob(outDir, job);
@@ -398,8 +507,13 @@ async function uploadStep({ outDir, rootDir, job, hub, runners, order, autoAppro
 // - autoApprove: maps old --yes (skips human pauses only; safety gates,
 //   dry proof, guards, row policy still enforced — never bypassed).
 // - runners: injected in-process step work {probe, apply-master, run,
-//   finalize, uploadRow}. Absent runners validate the staging contract and
-//   defer with ledger audit (browser work deferred, arms untouched).
+//   finalize, uploadRow, guardCheck}. Absent runners validate the staging
+//   contract and defer with ledger audit (browser work deferred, arms
+//   untouched). guardCheck({outDir, job, entry, dir}) is the per-row guard
+//   re-check seam ({regression:true} or {guardStatus:"red"} fails closed);
+//   uploadRow results may also carry guardStatus:"red" with the same effect.
+//   The upload loop re-reads the record per row: operator stop cancels after
+//   the current row (status "cancelled"), lost dry proof fails closed.
 // - approvals: per-human-step callbacks ({job, step, outDir}) -> truthy.
 //   Without autoApprove and without a callback the job waits (throws
 //   approval-required; resume/approve later — never blocks stdin).
@@ -424,14 +538,21 @@ export async function runPipelineAsJobOps({
   if (!outDir || typeof outDir !== "string") fail("bad-outDir", "runPipelineAsJobOps: outDir required");
   if (!job || typeof job !== "object" || !job.jobId) fail("bad-job", "runPipelineAsJobOps: job record required");
   // P8 single-flight v1: one active engine op globally. A second pipeline run
-  // while one holds the claim is refused (code single-flight). Waits may sit:
-  // the claim covers execution only and releases in finally (even on throw).
+  // while one holds the claim is refused (code single-flight) — cross-job via
+  // claimEngineOp, same-job via the active set (the store primitive stays
+  // re-entrant for the same job by contract). Waits may sit: the claim covers
+  // execution only and releases in finally (even on throw).
+  if (activePipelineJobs.has(job.jobId)) {
+    fail("single-flight", `pipeline:${job.jobId} already running (same-job re-entry refused)`, { jobId: job.jobId });
+  }
   claimEngineOp(job.jobId, "pipeline");
+  activePipelineJobs.add(job.jobId);
   try {
     return await runPipelineClaimed({
       outDir, job, steps, order, autoApprove, hub, runners, approvals, dryInputs, armInputs, rootDir, from,
     });
   } finally {
+    activePipelineJobs.delete(job.jobId);
     releaseEngineOp(job.jobId);
   }
 }

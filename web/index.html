@@ -455,17 +455,18 @@
     grid.textContent = "";
     const b = model.bundle;
     // Undroppable: all 10 sections always render; pending ones say so loudly.
+    const PENDING = "pending — no dry yet";
     const secs = [
-      ["source", b ? esc(b.source) : "pending — no dry yet"],
-      ["group", b ? esc(b.group) : "pending — no dry yet"],
-      ["destination origin", b ? esc(b.destinationOrigin || "—") : "pending — no dry yet"],
-      ["target departments", b ? esc((b.targetDepts || []).join(", ") || "—") : "pending — no dry yet"],
-      ["would-create", b ? esc((b.wouldCreate || []).join(", ") || "none") : "pending — no dry yet"],
-      ["identity", b ? esc(JSON.stringify(b.identity)) : "pending — no dry yet"],
-      ["unmapped / TBD", b ? esc((b.unmapped || []).join(", ") || "none") + " · count " + b.counts.unmapped : "pending — no dry yet"],
-      ["counts (partial/skipped/failed)", b ? ("partial " + b.counts.partial + " · skipped " + b.counts.skipped + " · failed " + b.counts.failed + " · total " + b.counts.total) : "pending — no dry yet"],
-      ["per-row table", b ? (b.rows.length + " rows below") : "pending — no dry yet"],
-      ["report + screenshot links", b ? ((b.proofs || []).map((p) => esc(p.kind + " " + (p.relPath || p.url || ""))).join("<br>") || "none") : "pending — no dry yet"],
+      ["source", b ? esc(b.source) : PENDING],
+      ["group", b ? esc(b.group) : PENDING],
+      ["destination origin", b ? esc(b.destinationOrigin || "—") : PENDING],
+      ["target departments", b ? esc((b.targetDepts || []).join(", ") || "—") : PENDING],
+      ["would-create", b ? esc((b.wouldCreate || []).join(", ") || "none") : PENDING],
+      ["identity", b ? esc(JSON.stringify(b.identity)) : PENDING],
+      ["unmapped / TBD", b ? esc((b.unmapped || []).join(", ") || "none") + " · count " + b.counts.unmapped : PENDING],
+      ["counts (partial/skipped/failed)", b ? ("partial " + b.counts.partial + " · skipped " + b.counts.skipped + " · failed " + b.counts.failed + " · total " + b.counts.total) : PENDING],
+      ["per-row table", b ? (b.rows.length + " rows below") : PENDING],
+      ["report + screenshot links", b ? ((b.proofs || []).map((p) => esc(p.kind + " " + (p.relPath || p.url || ""))).join("<br>") || "none") : PENDING],
     ];
     for (const [t, html] of secs) grid.appendChild(secDiv(t, html, !b));
     const tb = $("row-body");
