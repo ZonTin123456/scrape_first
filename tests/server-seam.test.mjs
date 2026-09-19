@@ -89,7 +89,7 @@ describe("startServer stub roundtrip", () => {
     const r = await fetch(`${app.url}/jobs/demo-1/commands`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ commandId: "cmd-1", type: "probe", payload: {} }),
+      body: JSON.stringify({ commandId: "cmd-1", type: "bogus-type-xyz", payload: {} }),
     });
     assert.equal(r.status, 200);
     assert.deepEqual(await r.json(), {
@@ -97,6 +97,21 @@ describe("startServer stub roundtrip", () => {
       reason: "not-implemented",
       jobId: "demo-1",
       commandId: "cmd-1",
+    });
+  });
+
+  it("POST probe on missing job fails job-not-found (wired, not stub)", async () => {
+    const r = await fetch(`${app.url}/jobs/demo-1/commands`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ commandId: "cmd-probe-1", type: "probe", payload: {} }),
+    });
+    assert.equal(r.status, 200);
+    assert.deepEqual(await r.json(), {
+      accepted: false,
+      reason: "job-not-found",
+      jobId: "demo-1",
+      commandId: "cmd-probe-1",
     });
   });
 

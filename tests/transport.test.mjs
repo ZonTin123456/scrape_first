@@ -248,9 +248,9 @@ describe("P3 POST commandId idempotency", () => {
     const outDir = tmpOut();
     const app = await startServer({ outDir, port: 0 });
     try {
-      const d1 = await postCommand(app.url, "ghost-1", { commandId: "cmd-P", type: "probe", payload: {} });
+      const d1 = await postCommand(app.url, "ghost-1", { commandId: "cmd-P", type: "bogus-type-xyz", payload: {} });
       assert.deepEqual(d1.json, { accepted: false, reason: "not-implemented", jobId: "ghost-1", commandId: "cmd-P" });
-      const d2 = await postCommand(app.url, "ghost-1", { commandId: "cmd-P", type: "probe", payload: {} });
+      const d2 = await postCommand(app.url, "ghost-1", { commandId: "cmd-P", type: "bogus-type-xyz", payload: {} });
       assert.deepEqual(d2.json, d1.json);
     } finally {
       await app.close();
@@ -387,7 +387,9 @@ describe("P3 unknown cursor resets via GET", () => {
       assert.ok(fa.frames.some((f) => f.data.type === "job:advanced"));
       assert.ok(fb.frames.every((f) => f.data.jobId === "iso-b"), "one stream per selected Job");
       const list = await (await fetch(`${app.url}/jobs`)).json();
-      assert.deepEqual(list, { jobs: [] });
+      assert.ok(Array.isArray(list.jobs), "GET /jobs returns real list");
+      const ids = list.jobs.map((j) => j.jobId).sort();
+      assert.deepEqual(ids, ["iso-a", "iso-b"]);
     } finally {
       await app.close();
     }

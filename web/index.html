@@ -34,6 +34,8 @@
   #bulk-bar, #save-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
   #job-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
   #job-bar input { background: #0E0D0B; color: #F4F1E8; border: 1px solid #2a261e; border-radius: 4px; padding: 4px 8px; min-width: 220px; }
+  #create-bar, #steps-bar, #recovery-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  #create-bar input, #recovery-bar input, #recovery-bar select { background: #0E0D0B; color: #F4F1E8; border: 1px solid #2a261e; border-radius: 4px; padding: 4px 8px; }
   /* P6 Safety trinity: names in headings, never color alone. */
   #mode-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; font-size: 12px; }
   #mode-bar .mode { padding: 2px 10px; border: 1px solid #2a261e; border-radius: 999px; cursor: pointer; color: #AAA398; }
@@ -67,6 +69,31 @@
     <button id="load-btn" class="ghost">Load review</button>
     <button id="safety-btn" class="ghost">Load safety</button>
     <span class="muted" id="rev-label"></span>
+  </div>
+  <div id="create-bar" aria-label="create job">
+    <label>Source URL <input id="src-url" type="text" placeholder="https://..." size="32" /></label>
+    <label>Slug <input id="src-slug" type="text" placeholder="auto from URL" size="16" /></label>
+    <label>Group <input id="src-group" type="text" placeholder="group" size="12" /></label>
+    <button id="create-btn">Create Job</button>
+    <button id="jobs-btn" class="ghost">List jobs</button>
+    <span class="muted" id="create-msg" role="status"></span>
+  </div>
+  <div id="steps-bar" role="group" aria-label="pipeline steps">
+    <span class="muted">Steps:</span>
+    <button id="probe-btn" class="ghost">Probe</button>
+    <button id="approve-btn" class="ghost">Approve pages</button>
+    <button id="scrape-btn" class="ghost">Scrape</button>
+    <button id="finalize-btn" class="ghost">Finalize</button>
+    <button id="detect-btn" class="ghost">Detect</button>
+    <span class="muted" id="steps-msg" role="status"></span>
+  </div>
+  <div id="recovery-bar" role="group" aria-label="retry resume cancel">
+    <span class="muted">Recovery:</span>
+    <label>Retry to <select id="retry-to"></select></label>
+    <button id="retry-btn" class="ghost">Retry</button>
+    <button id="resume-btn" class="ghost">Resume</button>
+    <button id="cancel-btn" class="ghost">Cancel</button>
+    <span class="muted" id="recovery-msg" role="status"></span>
   </div>
   <div id="mode-bar" role="group" aria-label="safety mode">
     <span class="muted">Mode:</span>
@@ -367,6 +394,94 @@
   function newCommandId() {
     return "cmd_" + Date.now().toString(36) + "_" + Math.floor(Math.random() * 1e9).toString(36);
   }
+
+  async function postCommand(type, payload) {
+    if (!state.jobId) return { accepted: false, reason: "no-job" };
+    const r = await fetch("/jobs/" + encodeURIComponent(state.jobId) + "/commands", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ commandId: newCommandId(), type, payload: payload || {} }),
+    });
+    return r.json();
+  }
+
+  /* ---- PR #30 gap fix: Create + normal workflow steps + recovery ---- */
+
+  (function initRetryTargets() {
+    const sel = $("retry-to");
+    if (!sel) return;
+    for (const s of SPINE) {
+      const o = document.createElement("option");
+      o.value = s;
+      o.textContent = s;
+      sel.appendChild(o);
+    }
+  })();
+
+  $("create-btn").onclick = async () => {
+    const source = $("src-url").value.trim();
+    const slug = $("src-slug").value.trim();
+    const group = $("src-group").value.trim();
+    if (!source) { $("create-msg").textContent = "enter a Source URL"; return; }
+    const body = { source, group };
+    if (slug) body.slug = slug;
+    const r = await fetch("/jobs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (!r.ok || !data.job) {
+      $("create-msg").textContent = "create refused: " + (data.error?.code || r.status);
+      logLine("create job refused: " + JSON.stringify(data));
+      return;
+    }
+    $("job-id").value = data.jobId;
+    state.jobId = data.jobId;
+    $("create-msg").textContent = "created " + data.jobId;
+    logLine("created job " + data.jobId + " slug " + data.job.slug);
+    connectLog();
+    await tickStatus();
+  };
+
+  $("jobs-btn").onclick = async () => {
+    const r = await fetch("/jobs");
+    const data = await r.json();
+    const n = (data.jobs || []).length;
+    $("create-msg").textContent = n + " job(s)";
+    logLine("jobs list: " + JSON.stringify((data.jobs || []).map((j) => j.jobId + "@" + j.stage)));
+  };
+
+  async function driveStep(type, payload, msgEl) {
+    if (!state.jobId && !$("job-id").value.trim()) {
+      if (msgEl) $(msgEl).textContent = "enter or create a Job first";
+      return;
+    }
+    if (!state.jobId) {
+      state.jobId = $("job-id").value.trim();
+      connectLog();
+    }
+    const d = await postCommand(type, payload || {});
+    if (msgEl) {
+      $(msgEl).textContent = d.accepted ? (type + ": " + d.reason) : ("refused: " + d.reason);
+      $(msgEl).className = d.accepted ? "pass" : "err";
+    }
+    logLine(type + " command: " + JSON.stringify(d));
+    await tickStatus();
+  }
+
+  $("probe-btn").onclick = () => driveStep("probe", {}, "steps-msg");
+  $("approve-btn").onclick = () => driveStep("approve-page", {}, "steps-msg");
+  $("scrape-btn").onclick = () => driveStep("scrape", {}, "steps-msg");
+  $("finalize-btn").onclick = () => driveStep("finalize", {}, "steps-msg");
+  $("detect-btn").onclick = () => driveStep("detect", {}, "steps-msg");
+
+  $("retry-btn").onclick = async () => {
+    const to = $("retry-to").value;
+    await driveStep("retry", { to, reason: "ui retry" }, "recovery-msg");
+  };
+  $("resume-btn").onclick = () => driveStep("resume", { reason: "ui resume" }, "recovery-msg");
+  $("cancel-btn").onclick = () => driveStep("cancel", { prompted: true, reason: "ui cancel" }, "recovery-msg");
 
   document.querySelectorAll("#mode-bar .mode").forEach((b) => {
     b.onclick = () => {

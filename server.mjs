@@ -7,7 +7,7 @@ import { createServer } from "node:http";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { assessRestart, findJobById, loadForRestart, writeJob } from "./jobs/store.mjs";
+import { assessRestart, createJob, findJobById, getPointer, loadForRestart, readJob, writeJob } from "./jobs/store.mjs";
 import { createHub, formatSSE } from "./jobs/events.mjs";
 import { createCommandStore } from "./jobs/commands.mjs";
 import {
@@ -140,6 +140,54 @@ function resolveThumbFile(outDir, job, seq) {
     }
   }
   return null;
+}
+
+// PR #30 gap fix: real job listing for the workspace (no fake empty list).
+// Scans out/<slug>/jobs/<jobId>/job.json, validates via readJob, returns
+// pointer projections. Corrupt/unreadable records skipped (explicit read path
+// still errors). Never infers stage from stray files.
+export function listJobs(outDir) {
+  let slugs = [];
+  try {
+    slugs = readdirSync(outDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const ent of slugs) {
+    if (!ent.isDirectory()) continue;
+    if (ent.name.startsWith(".") || ent.name.startsWith("_")) continue;
+    const slug = ent.name;
+    let jobs = [];
+    try {
+      jobs = readdirSync(join(outDir, slug, "jobs"), { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const j of jobs) {
+      if (!j.isDirectory()) continue;
+      try {
+        const job = readJob(outDir, slug, j.name);
+        out.push(getPointer(job));
+      } catch {
+        // Skip corrupt records here; GET /jobs/:id reports them explicitly.
+      }
+    }
+  }
+  out.sort((a, b) => String(a.updated_at || "").localeCompare(String(b.updated_at || "")));
+  return out;
+}
+
+function slugFromSource(source) {
+  try {
+    const u = new URL(String(source));
+    const host = u.hostname.toLowerCase().replace(/^www\./, "") || "page";
+    const path = u.pathname.replace(/\/+$/, "").split("/").filter(Boolean).slice(-2).join("-");
+    const base = `${host}${path ? `-${path}` : ""}`;
+    return base.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "page-index";
+  } catch {
+    return "page-index";
+  }
 }
 
 async function handleWith(req, res, ctx) {
@@ -513,8 +561,69 @@ async function handleWith(req, res, ctx) {
   }
 
   if (path === "/jobs" && (req.method === "GET" || req.method === "HEAD")) {
-    sendJson(res, 200, { jobs: [] });
+    sendJson(res, 200, { jobs: listJobs(outDir) });
     return;
+  }
+
+  // PR #30 gap fix: create a Job from a source URL in the workspace.
+  // Body {slug?, source, group?, jobId?}. Slug defaults from source URL when
+  // omitted (same 1 URL = 1 group identity, no engine import on server path).
+  // Idempotent by explicit jobId: existing jobId returns current record.
+  if (path === "/jobs" && req.method === "POST") {
+    let body = null;
+    try {
+      body = await readJsonBody(req);
+    } catch (e) {
+      if (e?.code === 413) {
+        sendJson(res, 413, { error: { code: "body-too-large", message: "body too large" } });
+        return;
+      }
+      sendJson(res, 400, { error: { code: "invalid-json", message: "invalid JSON" } });
+      return;
+    }
+    const source = body?.source ?? null;
+    const group = body?.group ?? "";
+    let slug = body?.slug ?? null;
+    const wantedId = body?.jobId ?? null;
+    if (!source || typeof source !== "string") {
+      sendJson(res, 400, { error: { code: "bad-source", message: "source URL required" } });
+      return;
+    }
+    if (typeof group !== "string") {
+      sendJson(res, 400, { error: { code: "bad-group", message: "group must be string" } });
+      return;
+    }
+    if (slug != null && (typeof slug !== "string" || !slug)) {
+      sendJson(res, 400, { error: { code: "bad-slug", message: "slug must be non-empty string" } });
+      return;
+    }
+    if (!slug) slug = slugFromSource(source);
+    try {
+      if (wantedId && typeof wantedId === "string") {
+        const existing = findJobById(outDir, wantedId);
+        if (existing) {
+          const same = existing.job.slug === slug && existing.job.source === source && existing.job.group === group;
+          if (!same) {
+            sendJson(res, 409, { error: { code: "job-conflict", message: "jobId exists with different slug/source/group" }, jobId: wantedId });
+            return;
+          }
+          sendJson(res, 200, { job: existing.job, jobId: existing.job.jobId, created: false });
+          return;
+        }
+      }
+      const job = createJob({ slug, source, group, jobId: wantedId && typeof wantedId === "string" ? wantedId : null });
+      writeJob(outDir, job);
+      try {
+        hub.emit(job.jobId, "job:advanced", { stage: job.stage, created: true, slug: job.slug });
+      } catch {
+        // emit never blocks create ack
+      }
+      sendJson(res, 201, { job, jobId: job.jobId, created: true });
+      return;
+    } catch (e) {
+      sendJson(res, 400, { error: { code: "bad-job", message: e?.message ?? "create failed" } });
+      return;
+    }
   }
 
   if ((m = path.match(/^\/jobs\/([^/]+)$/))) {

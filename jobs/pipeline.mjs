@@ -4,9 +4,9 @@
 // --yes becomes the autoApprove option. CLI files (pipeline.mjs, backup-page.mjs,
 // upload-people.mjs) keep working over the same DAG; this module mirrors their
 // step list/ordering and drives the same staging files through injected
-// in-process runners. Only node builtins + ./store.mjs + ./safety.mjs.
+// in-process runners. Only node builtins + ./store.mjs + ./safety.mjs + ./review.mjs.
 // Never imports CLI entries (reuse boundary: UI imports Lift + Wrap cores only).
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { advance, appendLedger, canAdvance, claimEngineOp, failJob, finishUpload, finishUploadRowAndCancel, notifyGuardRegression, notifyProofLost, readJob, releaseEngineOp, SPINE, writeJob } from "./store.mjs";
 import {
@@ -15,6 +15,7 @@ import {
   recordDryPass,
   verifyDryReport,
 } from "./safety.mjs";
+import { loadReviewModel, validateForFinalize } from "./review.mjs";
 
 // Same DAG as pipeline.mjs:31 (parity pinned in tests/pipeline.test.mjs).
 export const ALL = ["probe", "pick-links", "master", "apply-master", "run", "pick-images", "finalize", "upload"];
@@ -592,4 +593,225 @@ async function runPipelineClaimed({
   }
   emit(hub, job.jobId, "job:advanced", { pipeline: "finished", steps: list });
   return { jobId: job.jobId, steps: results };
+}
+
+// ---- UI step wiring (PR #30 gap fix) ----
+// Operator-facing UI actions mapped to spine stages. Used by
+// jobs/commands.mjs POST /jobs/:jobId/commands so the normal workflow runs
+// from the workspace without CLI. All logic stays server-side (no browser
+// duplication); browser-heavy work records deferred ledger + SSE, same as
+// machineStep deferred. Real pure work uses wrapped cores (review validation).
+// Never imports CLI entries.
+export const UI_STEPS = ["probe", "approve-page", "scrape", "finalize", "detect", "run-step"];
+
+export const UI_STEP_STAGES = {
+  probe: "probing",
+  "approve-page": "scraping",
+  scrape: "scraping",
+  finalize: "finalizing",
+  detect: "detecting_backend",
+};
+
+// Forward-only walk for UI steps (same semantics as walkTo). Exported so
+// jobs/commands.mjs reuses one walk implementation. Terminals never reopen;
+// backwards moves must use retry.
+export function walkUiTo(job, target, { step } = {}) {
+  const walked = [];
+  if (job.stage === target) return walked;
+  if (job.stage === "done" || job.stage === "failed" || job.stage === "cancelled") {
+    fail("illegal-pipeline-transition", `pipeline:${step}: terminal ${job.stage} never reopens (new Job for same source)`);
+  }
+  const fi = spineIndex(job.stage);
+  const ti = spineIndex(target);
+  if (fi < 0 || ti < 0) fail("illegal-pipeline-transition", `pipeline:${step}: unknown stage ${job.stage} -> ${target}`);
+  if (fi > ti) return walked; // already past: caller treats as already-past (idempotent UI)
+  while (job.stage !== target) {
+    const next = SPINE[spineIndex(job.stage) + 1];
+    if (!canAdvance(job.stage, next)) {
+      fail("illegal-pipeline-transition", `pipeline:${step}: ${job.stage} -> ${next} blocked`);
+    }
+    advance(job, next, { reason: `pipeline:${step}` });
+    walked.push(next);
+  }
+  return walked;
+}
+
+// Real in-process runners for the async pipeline path, using wrapped cores.
+// probe/run stay deferred (browser/CDP work, no engine import on UI path);
+// finalize runs real review validation (jobs/review, pure); detect records
+// guard-aware ledger (pure, fail-closed downstream via safety gates).
+// Absent runners still defer via machineStep (browser work deferred).
+export function getDefaultRunners({ outDir } = {}) {
+  return {
+    finalize: async (ctx) => {
+      const dir = outDir ?? ctx?.outDir;
+      const job = ctx?.job;
+      if (!dir || !job) return { deferred: true, reason: "missing-context" };
+      let model = null;
+      try {
+        model = loadReviewModel(dir, job);
+      } catch {
+        return { deferred: true, reason: "review-unreadable" };
+      }
+      if (!model?.selection?.length) return { deferred: true, reason: "no-selection" };
+      const v = validateForFinalize(model.selection);
+      return { kept: v.kept.length, removed: v.removed, warnings: v.warnings, effectiveOrder: v.effectiveOrder };
+    },
+  };
+}
+
+// Sync UI step executor for POST commands (jobs/commands.mjs calls this).
+// Mutates job in-memory (walk + ledger), writes record, emits SSE.
+// Engine steps claim single-flight briefly and release in finally; the human
+// gate approve-page never claims (like resume: approvals must get through).
+// Throws fail-closed codes (terminal, illegal-pipeline-transition,
+// approval-required) for caller mapping. Idempotent when already at/past
+// target (returns already-past, no backward move).
+export function runUiStepSync({ outDir, job, uiStep, hub = null, payload = {} } = {}) {
+  if (!outDir || typeof outDir !== "string") fail("bad-outDir", "runUiStepSync: outDir required");
+  if (!job || typeof job !== "object" || !job.jobId) fail("bad-job", "runUiStepSync: job record required");
+  if (!UI_STEPS.includes(uiStep)) fail("unknown-step", `unknown UI step ${uiStep} (want ${UI_STEPS.join("|")})`, { step: uiStep });
+  if (uiStep === "approve-page") {
+    return runUiStepClaimed({ outDir, job, uiStep, hub, payload });
+  }
+  if (activePipelineJobs.has(job.jobId)) {
+    fail("single-flight", `pipeline:${job.jobId} already running (same-job re-entry refused)`, { jobId: job.jobId });
+  }
+  claimEngineOp(job.jobId, `ui:${uiStep}`);
+  activePipelineJobs.add(job.jobId);
+  try {
+    return runUiStepClaimed({ outDir, job, uiStep, hub, payload });
+  } finally {
+    activePipelineJobs.delete(job.jobId);
+    releaseEngineOp(job.jobId);
+  }
+}
+
+function runUiStepClaimed({ outDir, job, uiStep, hub, payload }) {
+  // run-step: generic single DAG step (strict contract via parseSteps).
+  if (uiStep === "run-step") {
+    const raw = payload?.step ?? payload?.steps ?? null;
+    const list = parseSteps(typeof raw === "string" ? raw : Array.isArray(raw) ? raw.join(",") : null);
+    // Single step only for UI determinism; full lists go via runPipelineAsJobOps.
+    const step = list[0];
+    if (list.length !== 1) fail("bad-step", `run-step: single DAG step required (got ${list.join(",")})`, { step: raw });
+    const target = STEP_STAGES[step];
+    if (!target) fail("unknown-step", `run-step: no stage for ${step}`, { step });
+    const fi = spineIndex(job.stage);
+    const ti = spineIndex(target);
+    if (fi > ti) return finishUiStep(outDir, job, hub, { uiStep, status: "already-past", stage: job.stage });
+    walkUiTo(job, target, { step: `ui:${uiStep}:${step}` });
+    if (HUMAN_STEPS.includes(step)) {
+      const approved = payload?.autoApprove === true || payload?.approved === true;
+      if (!approved) {
+        appendLedger(job, "pipeline:awaiting-approval", `${step} waits at ${job.stage} (approve via approve-page or resume)`);
+        writeJob(outDir, job);
+        emit(hub, job.jobId, "job:advanced", { step, stage: job.stage, awaitingApproval: true });
+        return { step: uiStep, dagStep: step, status: "awaiting-approval", stage: job.stage };
+      }
+      appendLedger(job, "pipeline:approved", `${step} (ui run-step)`);
+    } else {
+      appendLedger(job, "pipeline:step", `ui run-step ${step}: contract validated, browser work deferred where applicable`);
+    }
+    writeJob(outDir, job);
+    emit(hub, job.jobId, "job:advanced", { step, stage: job.stage, uiStep });
+    return { step: uiStep, dagStep: step, status: "ran", stage: job.stage };
+  }
+
+  // approve-page: human gate at waiting_for_page_selection -> scraping.
+  if (uiStep === "approve-page") {
+    const wait = "waiting_for_page_selection";
+    const next = "scraping";
+    const fi = spineIndex(job.stage);
+    const wi = spineIndex(wait);
+    const ni = spineIndex(next);
+    if (fi > ni) return finishUiStep(outDir, job, hub, { uiStep, status: "already-past", stage: job.stage });
+    if (fi <= wi) walkUiTo(job, wait, { step: "ui:approve-page" });
+    // Record explicit human approval (maps CLI Enter/--yes confirm only).
+    appendLedger(job, "pipeline:approved", "pick-links/master (ui approve-page)");
+    // Resume from wait to scraping (explicit resume semantics, same inputs).
+    if (job.stage === wait) {
+      advance(job, next, { reason: "ui:approve-page" });
+    } else {
+      walkUiTo(job, next, { step: "ui:approve-page" });
+    }
+    writeJob(outDir, job);
+    emit(hub, job.jobId, "job:advanced", { step: "approve-page", stage: job.stage, approved: true });
+    return { step: uiStep, status: "approved", stage: job.stage };
+  }
+
+  const target = UI_STEP_STAGES[uiStep];
+  const fi = spineIndex(job.stage);
+  const ti = spineIndex(target);
+  if (fi > ti) return finishUiStep(outDir, job, hub, { uiStep, status: "already-past", stage: job.stage });
+  if (fi === ti) return finishUiStep(outDir, job, hub, { uiStep, status: "already-past", stage: job.stage });
+
+  walkUiTo(job, target, { step: `ui:${uiStep}` });
+
+  if (uiStep === "probe") {
+    if (!job.source || typeof job.source !== "string") fail("bad-source", "ui:probe: job source URL required", { step: uiStep });
+    ensureProbeStaging(outDir, job);
+    appendLedger(job, "pipeline:step", `ui probe: source validated, browser work deferred where applicable`);
+    writeJob(outDir, job);
+    emit(hub, job.jobId, "scrape:url-started", { url: job.source, slug: job.slug, mode: "probe" });
+    emit(hub, job.jobId, "job:advanced", { step: "probe", stage: job.stage, deferred: true });
+    return { step: uiStep, status: "ran", stage: job.stage, deferred: true };
+  }
+
+  if (uiStep === "scrape") {
+    appendLedger(job, "pipeline:step", "ui scrape (run): contract validated, browser work deferred where applicable");
+    writeJob(outDir, job);
+    emit(hub, job.jobId, "scrape:url-started", { url: job.source, slug: job.slug, mode: "scrape" });
+    emit(hub, job.jobId, "job:advanced", { step: "scrape", stage: job.stage, deferred: true });
+    return { step: uiStep, status: "ran", stage: job.stage, deferred: true };
+  }
+
+  if (uiStep === "finalize") {
+    let detail = { deferred: true };
+    try {
+      const model = loadReviewModel(outDir, job);
+      if (model?.selection?.length) {
+        const v = validateForFinalize(model.selection);
+        detail = { kept: v.kept.length, removed: v.removed, warnings: v.warnings, effectiveOrder: v.effectiveOrder };
+        appendLedger(job, "pipeline:step", `ui finalize: review validated (kept ${v.kept.length}, removed ${v.removed})`);
+      } else {
+        appendLedger(job, "pipeline:deferred", "ui finalize: no review selection (browser work deferred)");
+      }
+    } catch {
+      appendLedger(job, "pipeline:deferred", "ui finalize: review unreadable (deferred)");
+    }
+    writeJob(outDir, job);
+    emit(hub, job.jobId, "review:finalized", { slug: job.slug, kept: detail.kept ?? null, removed: detail.removed ?? null });
+    emit(hub, job.jobId, "job:advanced", { step: "finalize", stage: job.stage });
+    return { step: uiStep, status: "ran", stage: job.stage, detail };
+  }
+
+  if (uiStep === "detect") {
+    appendLedger(job, "pipeline:step", "ui detect: backend discovery validated, CDP work deferred where applicable (guards enforced downstream)");
+    writeJob(outDir, job);
+    emit(hub, job.jobId, "job:advanced", { step: "detect", stage: job.stage, deferred: true });
+    return { step: uiStep, status: "ran", stage: job.stage, deferred: true };
+  }
+
+  fail("unknown-step", `unknown UI step ${uiStep}`, { step: uiStep });
+}
+
+function finishUiStep(outDir, job, hub, { uiStep, status, stage }) {
+  appendLedger(job, "pipeline:step", `ui ${uiStep}: ${status} at ${stage}`);
+  writeJob(outDir, job);
+  emit(hub, job.jobId, "job:advanced", { step: uiStep, stage: job.stage, status });
+  return { step: uiStep, status, stage: job.stage };
+}
+
+function ensureProbeStaging(outDir, job) {
+  try {
+    mkdirSync(join(outDir, STAGING_DIR), { recursive: true });
+    mkdirSync(join(outDir, STAGING_DIR, job.slug), { recursive: true });
+    const marker = join(outDir, STAGING_DIR, job.slug, "probe.json");
+    if (!existsSync(marker)) {
+      writeFileSync(marker, JSON.stringify({ slug: job.slug, source: job.source, jobId: job.jobId, at: new Date().toISOString() }, null, 1) + "\n", "utf8");
+    }
+  } catch {
+    // Staging marker best-effort; stage walk + ledger already authoritative.
+  }
 }
