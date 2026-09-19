@@ -17,6 +17,7 @@ import {
   selectionPathFor,
   validateSelectionShape,
 } from "./jobs/review.mjs";
+import { safetyModel } from "./jobs/safety.mjs";
 
 const CLIENT_DIR = join(dirname(fileURLToPath(import.meta.url)), "web");
 
@@ -358,6 +359,34 @@ async function handleWith(req, res, ctx) {
       }
     }
     sendJson(res, 405, { error: { code: "method-not-allowed", message: "GET or POST only" } });
+    return;
+  }
+
+  // P6 Safety: undroppable visibility bundle + live G1/G2 status (read-only).
+  // Mutations go through POST /jobs/:jobId/commands (dry/arm/begin-upload)
+  // so commandId idempotency covers arm/upload single-use. This GET never
+  // mutates and never infers rows from logs or stray files.
+  if ((m = path.match(/^\/jobs\/([^/]+)\/safety$/))) {
+    const jobId = decodeURIComponent(m[1]);
+    if (req.method !== "GET") {
+      sendJson(res, 405, { error: { code: "method-not-allowed", message: "GET only" } });
+      return;
+    }
+    let found = null;
+    try {
+      found = findJobById(outDir, jobId);
+    } catch {
+      found = null;
+    }
+    if (!found) {
+      sendJson(res, 404, { error: { code: "not-found", message: "job not found" } });
+      return;
+    }
+    try {
+      sendJson(res, 200, safetyModel(outDir, found.job));
+    } catch (e) {
+      sendJson(res, 500, { error: { code: e?.code ?? "internal", message: e?.message ?? "failure" } });
+    }
     return;
   }
 
