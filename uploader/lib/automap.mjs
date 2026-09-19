@@ -7,14 +7,26 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const profilesDir = join(here, "..", "profiles");
 
-export function loadProfiles() {
+let _profilesLoader = null;
+export function setProfilesLoader(fn) {
+  _profilesLoader = typeof fn === "function" ? fn : null;
+}
+export function resetProfilesLoader() {
+  _profilesLoader = null;
+}
+export function loadProfiles(loader) {
+  if (typeof loader === "function") return loader();
+  if (Array.isArray(loader)) return loader;
+  if (_profilesLoader) return _profilesLoader();
   let files = [];
   try { files = readdirSync(profilesDir).filter((f) => f.endsWith(".json")); } catch { return []; }
   return files.map((f) => JSON.parse(readFileSync(join(profilesDir, f), "utf8")));
 }
 
-export async function dumpForm(page) {
-  return page.evaluate(() => {
+// Browser-evaluated form dump. Lives as a named function so the UI can lift
+// it verbatim as an evaluate string (DUMP_FORM_SOURCE) or call dumpForm(page).
+// Body is the page-context probe: forms + selects + buttons + memberNames.
+export const dumpFormEvaluate = () => {
     const labelOf = (e) => {
       if (e.id) { const l = document.querySelector(`label[for="${e.id}"]`); if (l) return { text: l.innerText.trim().slice(0, 60), via: "for" }; }
       const w = e.closest("label"); if (w) return { text: w.innerText.trim().slice(0, 60), via: "wrap" };
@@ -80,7 +92,12 @@ export async function dumpForm(page) {
         return [...new Set(best)].slice(0, 40);
       })(),
     };
-  });
+  };
+
+export const DUMP_FORM_SOURCE = dumpFormEvaluate.toString();
+
+export async function dumpForm(page) {
+  return page.evaluate(dumpFormEvaluate);
 }
 
 // Field inventory: every fillable element on the person form becomes DATA
@@ -133,7 +150,7 @@ export function buildInventory(dumped, fields) {
 }
 
 // match a known field selector against a dumped element (exact, name-attr, or id form)
-function fieldMatchesSel(fieldSel, e) {
+export function fieldMatchesSel(fieldSel, e) {
   if (!fieldSel) return false;
   if (fieldSel === e.selector) return true;
   let m = /^([a-z]+)\[name="([^"]+)"\]$/i.exec(fieldSel);
@@ -147,7 +164,7 @@ function invEntry(e, action, unmapped) {
   return { selector: e.selector || null, tag: e.tag, type: e.type || null, name: e.name || null, label: (e.label && e.label.text) || null, action, unmapped: !!unmapped, fi: e.fi ?? null };
 }
 
-function actionFor(key, m) {
+export function actionFor(key, m) {
   switch (key) {
     case "photo": return "fill:photo";
     case "name": return "fill:name";
@@ -162,7 +179,7 @@ function actionFor(key, m) {
   }
 }
 
-function classify(host, dumped) {
+export function classify(host, dumped) {
   const els = dumped.forms.flatMap((f) => f.elements.map((e) => ({ ...e, formAction: f.action })));
   const has = (t, ...keys) => { const s = (t || "").toLowerCase(); return keys.some((k) => s.includes(k)); };
   const attr = (e) => `${e.name || ""} ${e.id || ""}`.toLowerCase();

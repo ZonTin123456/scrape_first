@@ -13,7 +13,16 @@ import { fileURLToPath } from "node:url";
 const AUTO = 0.8, MIN = 0.5;
 
 let _kw = null;
-export function keywords() {
+let _kwInjected = null;
+export function setKeywordsDict(d) {
+  _kwInjected = d || null;
+}
+export function resetKeywordsDict() {
+  _kwInjected = null;
+}
+export function keywords(dict) {
+  if (dict) return dict;
+  if (_kwInjected) return _kwInjected;
   if (!_kw) {
     _kw = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "keywords.json"), "utf8"));
   }
@@ -24,8 +33,8 @@ export const norm = (s) => String(s ?? "").trim().normalize("NFC");
 const normLo = (s) => norm(s).toLowerCase();
 const toks = (s) => normLo(s).split(/[\s_\/-]+/).filter((t) => t.length > 1);
 
-function aliasHit(want, key) {
-  const aliases = keywords().section_aliases || {};
+function aliasHit(want, key, dict) {
+  const aliases = keywords(dict).section_aliases || {};
   for (const [canon, alts] of Object.entries(aliases)) {
     const group = new Set([normLo(canon), ...alts.map(normLo)]);
     if (group.has(normLo(want)) && group.has(normLo(key))) return canon;
@@ -34,12 +43,13 @@ function aliasHit(want, key) {
 }
 
 // Score ONE wanted label against ONE candidate key. Returns {score, evidence[]}.
-export function scorePair(want, key) {
+// Optional third arg injects the keywords dict (UI path); omitted = fs/default.
+export function scorePair(want, key, dict) {
   const w = norm(want), k = norm(key);
   if (!w || !k) return { score: 0, evidence: [] };
   if (normLo(w) === normLo(k)) return { score: 1.0, evidence: ["exact"] };
   const wl = normLo(w), kl = normLo(k);
-  const alias = aliasHit(w, k);
+  const alias = aliasHit(w, k, dict);
   if (alias) return { score: 0.75, evidence: [`alias:${alias}`] };
   if (kl.includes(wl) || wl.includes(kl)) {
     const dir = kl.includes(wl) ? "key-contains-want" : "want-contains-key";
@@ -124,9 +134,10 @@ export function memberScore(wantNames, candNames) {
 export function matchSection(want, candidates, opts = {}) {
   const wantMembers = opts.wantMembers || null;
   const wantPhones = opts.wantPhones || null;
+  const dict = opts.keywordsDict ?? opts.keywords ?? opts.dict ?? undefined;
   const wantSize = wantMembers ? new Set(wantMembers.map(normalizeName).filter((n) => n && !isVacantName(n))).size : null;
   const scored = (candidates || []).map((c) => {
-    const label = scorePair(want, c.key);
+    const label = scorePair(want, c.key, dict);
     let score = label.score;
     const evidence = [...label.evidence];
     let member = null;

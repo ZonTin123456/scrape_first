@@ -9,9 +9,9 @@
 // Structured results only (existing|created|ambiguous|failed), never throws
 // for expected cases. No per-site knowledge: names/URLs come from arguments
 // and live discovery only.
-import { pickDeptRows } from "./automap.mjs";
-import { matchSection, scorePair, norm } from "./match.mjs";
-import { verifyPageIdentity } from "./verify-identity.mjs";
+import { pickDeptRows } from "../../services/automap-pure.mjs";
+import { matchSection, scorePair, norm } from "../../services/match-core.mjs";
+import { verifyPageIdentity } from "../../services/identity.mjs";
 
 const fail = (reason, evidence = []) => ({ status: "failed", reason, evidence });
 

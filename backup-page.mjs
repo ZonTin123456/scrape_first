@@ -90,7 +90,7 @@ function resolveSlug(url, outDir = OUT) {
   }
   return `${base}-${Date.now()}`;
 }
-import { attachCaptions, buildKept, buildPeople, slugBaseOf, MIN_PX } from "./sectioning.mjs";
+import { attachCaptions, buildKept, buildPeople, slugBaseOf, MIN_PX } from "./services/sectioning.mjs";
 // Personnel records: see buildPeople() in sectioning.mjs (shared core).
 
 async function cdp(path, method = "GET") {
