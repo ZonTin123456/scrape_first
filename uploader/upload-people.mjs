@@ -11,10 +11,9 @@ import { dirname, join, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolvePort, discoverBackends } from "./lib/cdp-port.mjs";
 import { automap } from "./lib/automap.mjs";
-import { mapHostMismatch } from "./lib/host-gate.mjs";
-import { sourceIdentityFailure, fieldsSatisfy } from "./lib/group-guard.mjs";
-import { slugBaseOf, resolveTargetGroup } from "../sectioning.mjs";
-import { verifyPageIdentity } from "./lib/verify-identity.mjs";
+import { mapHostMismatch, sourceIdentityFailure, fieldsSatisfy } from "../services/guards.mjs";
+import { slugBaseOf, resolveTargetGroup } from "../services/sectioning.mjs";
+import { verifyPageIdentity } from "../services/identity.mjs";
 import { createDepartment } from "./lib/target-creation.mjs";
 
 const argv = process.argv.slice(2);
