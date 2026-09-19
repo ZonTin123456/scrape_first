@@ -3,11 +3,11 @@
 // Client-generated commandId on all mutating commands.
 // Replay returns original disposition, never executes twice.
 // Cancel records intent/audit before ack via jobs/store (ledger append + write).
-import { findJobById, writeJob, requestCancel, advance, retry, resume, addArtifact } from "./store.mjs";
+import { findJobById, writeJob, requestCancel, advance, retry, resume, addArtifact, finishUploadRowAndCancel } from "./store.mjs";
 import { assertArtifactPointer } from "./events.mjs";
 import { beginUploadWithProof, grantArmFromSafety, recordDryPass } from "./safety.mjs";
 
-export const SUPPORTED = new Set(["cancel", "advance", "retry", "resume", "artifact", "dry", "arm", "begin-upload"]);
+export const SUPPORTED = new Set(["cancel", "advance", "retry", "resume", "artifact", "dry", "arm", "begin-upload", "finish-row"]);
 
 export function isSupported(type) {
   return SUPPORTED.has(type);
@@ -206,6 +206,21 @@ export function createCommandStore({ hub = null } = {}) {
           }
         }
         reason = "upload-started";
+      } else if (type === "finish-row") {
+        // P8 upload-stop path: the engine finished the current row truthfully
+        // after stop_requested; this records cancelled (consumes arm) over the
+        // transport with commandId idempotency. Repeated calls idempotent.
+        const rreason = payload?.reason ?? null;
+        finishUploadRowAndCancel(job, { reason: rreason });
+        writeJob(outDir, job);
+        if (hub) {
+          try {
+            hub.emit(jobId, "job:advanced", { to: "cancelled", stage: job.stage, reason: rreason ?? "row-finished" });
+          } catch {
+            // ignore
+          }
+        }
+        reason = "cancelled";
       } else if (type === "artifact") {
         const art = payload?.artifact ?? payload;
         assertArtifactPointer(art);
