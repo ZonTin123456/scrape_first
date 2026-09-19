@@ -11,6 +11,23 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, basename } from "node:path";
+import { createHub } from "./jobs/events.mjs";
+import { createEngineEmitter } from "./jobs/engine-events.mjs";
+
+// P4a minimal engine events: trio + artifact, behind JOB_EVENTS=1 only.
+// Disabled by default so CLI terminal/files are exactly as before.
+const __engineOn = process.env.JOB_EVENTS === "1";
+const __engineHub = __engineOn ? createHub() : null;
+const __engine = __engineOn
+  ? createEngineEmitter({ hub: __engineHub, jobId: process.env.JOB_ID || "cli", emitEvents: true })
+  : null;
+function __emitArtifact(absPath, relPath, kind, url) {
+  try {
+    return __engine?.artifactFromFile({ absPath, relPath, kind, url }) ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const VERSION = "1.3.0";
 const RETRY = 2;
@@ -452,6 +469,8 @@ async function scrapeOne(c, url, timeoutMs, imageSeqFilter = null) {
   if (imageSeqFilter) { manifest.picked = true; }
   writeFileSync(join(dir, "content.json"), JSON.stringify({ manifest, nodes: kept }, null, 1), "utf8");
   writeFileSync(join(dir, "people.json"), JSON.stringify(people, null, 1), "utf8");
+  __emitArtifact(join(dir, "content.json"), `${slug}/content.json`, "content", null);
+  __emitArtifact(join(dir, "people.json"), `${slug}/people.json`, "people", null);
   const nCands = writeReview(dir, kept);
   return { dir, slug, title, manifest, nCands, nPeople: people.length };
 }
@@ -482,6 +501,8 @@ async function probeOne(c, url, timeoutMs) {
   writeFileSync(join(stageDir, "picked-images.json"),
     JSON.stringify(images.map((im) => ({ seq: im.seq, src: im.src, keep: !!(im.name && !im.likely_header) })), null, 1), "utf8");
   writeFileSync(join(stageDir, "pick-images.html"), pickImagesHTML(url, title, slug, images), "utf8");
+  __emitArtifact(join(stageDir, "probe.json"), `_staging/${slug}/probe.json`, "probe", null);
+  __emitArtifact(join(stageDir, "picked-images.json"), `_staging/${slug}/picked-images.json`, "picked-images", null);
   return probe;
 }
 
@@ -695,6 +716,8 @@ function writeReview(dir, nodes) {
   mkdirSync(join(dir, "review"), { recursive: true });
   writeFileSync(join(dir, "review", "selection.json"), JSON.stringify(sel, null, 1), "utf8");
   writeFileSync(join(dir, "review", "index.html"), reviewHTML(sel, nodes, basename(dir)), "utf8");
+  __emitArtifact(join(dir, "review", "selection.json"), `${basename(dir)}/review/selection.json`, "selection", null);
+  __emitArtifact(join(dir, "review", "index.html"), `${basename(dir)}/review/index.html`, "review-index", null);
   return cands.length;
 }
 
@@ -833,6 +856,7 @@ function writeSummary(outDir, results) {
     failed: results.filter((r) => r.error).length,
     results };
   writeFileSync(join(outDir, "summary.json"), JSON.stringify(summary, null, 1), "utf8");
+  __emitArtifact(join(outDir, "summary.json"), "summary.json", "summary", null);
   for (const r of results) {
     if (r.error) console.log(`FAIL ${r.url} :: ${r.error}`);
     else console.log(`OK ${r.url} -> ${r.dir}`);
@@ -962,8 +986,21 @@ mkdirSync(OUT, { recursive: true });
 await ensureChrome();
 const results = [];
 for (const url of urlList) {
+  try {
+    __engine?.urlStarted({ url, mode: isProbe ? "probe" : "run" });
+  } catch {
+    // events never break CLI
+  }
   const target = await cdp("/json/new?about:blank", "PUT").catch((e) => ({ _err: String(e.message || e) }));
-  if (target._err) { results.push({ url, error: `cdp new target: ${target._err}` }); continue; }
+  if (target._err) {
+    results.push({ url, error: `cdp new target: ${target._err}` });
+    try {
+      __engine?.urlFailed({ url, error: `cdp new target: ${target._err}` });
+    } catch {
+      // ignore
+    }
+    continue;
+  }
   const c = client(target.webSocketDebuggerUrl);
   try {
     await c.open();
@@ -971,17 +1008,33 @@ for (const url of urlList) {
     if (isProbe) {
       const probe = await probeOne(c, url, timeoutMs);
       results.push({ url, slug: probe.slug, dir: join(OUT, STAGING, probe.slug), title: probe.source_title, counts: probe.counts, images: probe.images.length });
+      try {
+        __engine?.urlFinished({ url, slug: probe.slug, dir: join(OUT, STAGING, probe.slug), title: probe.source_title, counts: probe.counts });
+      } catch {
+        // ignore
+      }
     } else {
       const filter = pickedSeqMap.get(url) || null;
       const r = await scrapeOne(c, url, timeoutMs, filter);
       results.push({ url, slug: r.slug, dir: r.dir, title: r.title, counts: r.manifest.counts, candidates: r.nCands, people: r.nPeople });
+      try {
+        __engine?.urlFinished({ url, slug: r.slug, dir: r.dir, title: r.title, counts: r.manifest.counts });
+      } catch {
+        // ignore
+      }
       if (urlList.length === 1 && !fromFile) {
         console.log(r.dir);
         console.log(`review: ${r.nCands} candidates in review/ — open review/index.html, tick people photos, save selection.json, then: node backup-page.mjs --finalize ${r.dir}`);
       }
     }
   } catch (e) {
-    results.push({ url, error: String(e.message || e).slice(0, 200) });
+    const msg = String(e.message || e).slice(0, 200);
+    results.push({ url, error: msg });
+    try {
+      __engine?.urlFailed({ url, error: msg });
+    } catch {
+      // ignore
+    }
   } finally {
     try { c.close(); } catch { /* noop */ }
     await cdp(`/json/close/${target.id}`, "PUT").catch(() => null);

@@ -15,6 +15,40 @@ import { mapHostMismatch, sourceIdentityFailure, fieldsSatisfy } from "../servic
 import { slugBaseOf, resolveTargetGroup } from "../services/sectioning.mjs";
 import { verifyPageIdentity } from "../services/identity.mjs";
 import { createDepartment } from "./lib/target-creation.mjs";
+import { createHub } from "../jobs/events.mjs";
+import { createEngineEmitter } from "../jobs/engine-events.mjs";
+
+// P4a minimal engine events: row-finished + artifact, behind JOB_EVENTS=1 only.
+// Disabled by default so CLI terminal/files are exactly as before.
+const __engineOn = process.env.JOB_EVENTS === "1";
+const __engineHub = __engineOn ? createHub() : null;
+const __engine = __engineOn
+  ? createEngineEmitter({ hub: __engineHub, jobId: process.env.JOB_ID || "cli", emitEvents: true })
+  : null;
+function __pushRow(results, rec) {
+  results.push(rec);
+  try {
+    __engine?.rowFinished({
+      seq: rec.seq,
+      order: rec.order ?? null,
+      name: rec.name ?? null,
+      status: rec.status,
+      detail: rec.detail ?? null,
+      group: rec.group ?? null,
+      form: rec.form ?? null,
+    });
+  } catch {
+    // events never break CLI
+  }
+  return rec;
+}
+function __emitArtifact(absPath, relPath, kind, url) {
+  try {
+    return __engine?.artifactFromFile({ absPath, relPath, kind, url }) ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const argv = process.argv.slice(2);
 const opt = (n, d) => {
@@ -316,7 +350,7 @@ try {
       const photoAbs = p.photo && !/^https?:/.test(p.photo) ? resolve(fromDir, p.photo) : null;
       if (!photoAbs || !existsSync(photoAbs)) {
         rec.status = "failed"; rec.detail = `photo missing: ${p.photo}`;
-        results.push(rec); continue;
+        __pushRow(results, rec); continue;
       }
       // 2. resolve target group: exact backend-department lookup by source
       // identity. Pre-flight already ensured every group exists (or failed
@@ -337,17 +371,17 @@ try {
           if (!SAVE) {
             rec.status = "skip-would-create";
             rec.detail = `would-create department "${rowGroup}" (dry: zero writes)`;
-            results.push(rec); continue;
+            __pushRow(results, rec); continue;
           }
           rec.status = "failed";
           rec.detail = `group "${rowGroup}" unresolvable (pre-flight should have caught this)`;
-          results.push(rec); continue;
+          __pushRow(results, rec); continue;
         }
         formUrl = r.personUrl; deptOption = perSection ? (r.deptId || null) : rowGroup;
         secFields = r.fields; secInv = r.inventory;
       }
       rec.group = rowGroup;
-      if (!formUrl) { rec.status = "failed"; rec.detail = "no form URL resolved"; results.push(rec); continue; }
+      if (!formUrl) { rec.status = "failed"; rec.detail = "no form URL resolved"; __pushRow(results, rec); continue; }
       rec.form = formUrl;
       // 3. duplicate note (informational only — ticked rows upload anyway)
       try {
@@ -365,7 +399,7 @@ try {
       if (!ident.ok) {
         rec.status = "failed";
         rec.detail = ((rec.detail ? rec.detail + "; " : "") + `target identity: ${ident.reason}`);
-        results.push(rec); continue;
+        __pushRow(results, rec); continue;
       }
       if (ident.detail) rec.detail = ((rec.detail ? rec.detail + "; " : "") + ident.detail);
       const F = (secFields?.photo?.selector) ? secFields : fieldMap.fields;
@@ -424,10 +458,11 @@ try {
       }
       const shot = join(shotsDir, `${String(p.order).padStart(3, "0")}-seq${p.seq}.png`);
       await page.screenshot({ path: shot, fullPage: false });
+      __emitArtifact(shot, null, "shot", null);
       if (partialNotes.length) rec.detail = ((rec.detail ? rec.detail + "; " : "") + `partial: ${partialNotes.join("; ")}`);
       rec.detail = ((rec.detail ? rec.detail + "; " : "") + `shot: ${shot}`);
       if (!SAVE) {
-        rec.status = partialNotes.length ? "dry-partial" : "dry"; results.push(rec); continue;
+        rec.status = partialNotes.length ? "dry-partial" : "dry"; __pushRow(results, rec); continue;
       }
       // 5. real save (only with --save)
       const Fsave = (inv && inv.length && inv.find((i) => i.action === "click")) || F.save;
@@ -440,11 +475,11 @@ try {
       const mark = fieldMap.success_mark && !/^TBD/.test(fieldMap.success_mark) ? fieldMap.success_mark : null;
       if (mark) await page.getByText(mark, { exact: false }).first().waitFor({ timeout: 15000 });
       else await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
-      rec.status = partialNotes.length ? "created-partial" : "created"; results.push(rec);
+      rec.status = partialNotes.length ? "created-partial" : "created"; __pushRow(results, rec);
     } catch (e) {
       rec.status = rec.status || "failed";
       rec.detail = ((rec.detail ? rec.detail + "; " : "") + String(e.message || e).slice(0, 160));
-      results.push(rec);
+      __pushRow(results, rec);
     }
   }
 } finally {
@@ -478,6 +513,7 @@ const report = {
 };
 const reportPath = join(uploaderDir, `report-${slug}.json`);
 writeFileSync(reportPath, JSON.stringify(report, null, 1), "utf8");
+__emitArtifact(reportPath, `report-${slug}.json`, "upload-report", null);
 console.log(`mode=${report.mode} total=${report.total} ${JSON.stringify(report.by_status)}`);
 console.log(`report: ${reportPath}`);
 const failed = results.some((r) => r.status === "failed");
