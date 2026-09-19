@@ -21,7 +21,7 @@ const fail = (m) => { console.error("pipeline: " + m); process.exit(1); };
 if (!argv.length || has("-h") || has("--help")) {
   console.log("Usage: node pipeline.mjs --from urls.txt [--steps probe,pick-links,master,apply-master,run,finalize,upload] [--out ./out]");
   console.log("  backup-page flags passed through: --port --timeout --via --cf-wait --no-cf-manual");
-  console.log("  upload flags passed through: --backend --map --limit --save --i-verified --strict-sections");
+  console.log("  upload flags passed through: --backend --map --limit --save --i-verified --dry-proof --strict-sections");
   console.log("  finalize flag passed through: --compact-orders (squeeze kept orders dense 0..N)");
   console.log("  --order a,b,c: fire matching slugs first (upload step; rest keep summary order)");
   console.log("  --yes: accept defaults, skip all human pauses");
@@ -46,9 +46,10 @@ if (!has("--page-sections") && existsSync(join(HERE, "sections.json"))) {
   BP.push("--page-sections", join(HERE, "sections.json"));
 }
 const UP = [ // flags passed to upload-people.mjs
-  ...["--backend", "--map", "--limit"].flatMap((f) => argv.includes(f) ? [f, opt(f, "")] : []),
+  ...["--backend", "--map", "--limit", "--dry-proof"].flatMap((f) => argv.includes(f) ? [f, opt(f, "")] : []),
   ...(has("--save") ? ["--save"] : []),
   ...(has("--i-verified") ? ["--i-verified"] : []),
+  ...(has("--yes") ? ["--yes"] : []),
   ...(has("--strict-sections") ? ["--strict-sections"] : []),
 ];
 const STAGING = "_staging";

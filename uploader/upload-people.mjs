@@ -7,6 +7,7 @@
 // Backend rule: phone + trailing note go into รายละเอียด (p_detail) joined with <br>; skipped when both absent.
 import { chromium } from "playwright-core";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolvePort, discoverBackends } from "./lib/cdp-port.mjs";
@@ -69,6 +70,8 @@ if (!argv.length || argv.includes("-h") || argv.includes("--help")) {
   console.log("  named-but-unresolvable sections fail closed in per-section mode (no silent misroute);");
   console.log("  rows with no section keep the old flex path (default form + partial note)");
   console.log("  --save refuses stale finalize output (people.json vs review/selection.json) unless --ignore-selection-check");
+  console.log("  --save needs --dry-proof <dry-report.json> (fresh dry prerequisite; --yes never bypasses dry proof)");
+  console.log("  --save interactive prints a safety summary and requires typing the exact slug; --yes is non-interactive confirm only");
   process.exit(2);
 }
 const FROM = opt("--from", null);
@@ -77,6 +80,8 @@ let BACKEND = BACKEND_OPT;
 const PORT = await resolvePort(opt("--port", "auto")).catch((e) => fail(e.message));
 const MAP = opt("--map", null);
 const SAVE = argv.includes("--save");
+const YES = argv.includes("--yes");
+const DRY_PROOF = opt("--dry-proof", null);
 const TO = (opt("--to", null) || "").replace(/\/$/, "");
 if (TO && !/\/personal\/(?:person\/)?\d+(?:[/?#]|$)/.test(TO)) fail("bad --to (want a .../personal/... form URL)");
 const LIMIT = Number(opt("--limit", "0")) || 0;
@@ -130,6 +135,29 @@ const orderedAll = [...peopleAll].sort((a, b) => ((a.order ?? 0) - (b.order ?? 0
 const people = LIMIT > 0 ? orderedAll.slice(0, LIMIT) : orderedAll;
 const fromDir = dirname(resolve(FROM));
 const slug = basename(fromDir);
+// P6 Safety: --save needs a fresh dry proof (--dry-proof <dry-report.json>).
+// Fail closed on missing/invalid proof even with --yes: --yes is
+// non-interactive confirm only and never bypasses the dry prerequisite,
+// group/host/field/identity guards, or the failed-row policy.
+let dryProof = null;
+if (SAVE) {
+  if (!DRY_PROOF) fail("refusing --save without --dry-proof <dry-report.json> (fresh dry prerequisite; --yes never bypasses)");
+  let raw;
+  try { raw = readFileSync(DRY_PROOF); }
+  catch { fail(`refusing --save: dry proof unreadable: ${DRY_PROOF}`); }
+  let proof;
+  try { proof = JSON.parse(raw.toString("utf8")); }
+  catch { fail(`refusing --save: dry proof invalid JSON: ${DRY_PROOF}`); }
+  if (proof.mode !== "dry") fail(`refusing --save: dry proof mode must be "dry" (was ${proof.mode})`);
+  if (proof.slug !== slug) fail(`refusing --save: dry proof slug "${proof.slug}" != current "${slug}" (stale snapshot: re-dry)`);
+  const failedByStatus = (proof.by_status && proof.by_status.failed) || 0;
+  const failedRows = Array.isArray(proof.results) ? proof.results.filter((r) => r && r.status === "failed") : [];
+  if (failedByStatus > 0 || failedRows.length > 0) fail("refusing --save: dry proof has failed rows (G1 red until rows pass)");
+  const sha = createHash("sha256").update(raw).digest("hex");
+  const total = proof.total ?? (Array.isArray(proof.results) ? proof.results.length : "?");
+  dryProof = { path: DRY_PROOF, sha256: sha, total, by_status: proof.by_status ?? {} };
+  console.log(`dry proof verified: ${DRY_PROOF} sha256=${sha.slice(0, 16)}... total=${total} ${JSON.stringify(dryProof.by_status)}`);
+}
 // F1: refuse stale finalize output (people.json must match human ticks).
 // Escape hatch: --ignore-selection-check (loudly logged, your responsibility).
 {
@@ -292,6 +320,24 @@ try { __engine?.uploadPlan({ slug, mode: SAVE ? "save" : "dry", total: people.le
 // Pinned --map files cannot learn new departments: refuse and point at discovery.
 if (SAVE && !TO && missingGroups.length && MAP) {
   fail(`cannot auto-create ${missingGroups.length} missing group(s) with a pinned --map (${missingGroups.map((m) => m.group).join(", ")}) — re-run without --map (zero-map discovery) or pass --to <personUrl>`);
+}
+// P6 Safety: interactive --save prints a safety summary and requires typing
+// the exact slug. --yes is non-interactive confirm only — every gate above
+// and below stays enforced (--yes never bypasses dry proof, guards, rows).
+if (SAVE) {
+  console.log(`safety summary (REAL upload): backend=${BACKEND} slug=${slug} from=${FROM}`);
+  console.log(`  dry proof: ${dryProof.path} sha256=${dryProof.sha256.slice(0, 16)}...`);
+  console.log(`  plan: ${uploadPlan.map((e) => `${e.group}->${e.action}`).join(", ")}`);
+  if (YES) {
+    console.log("( --yes: non-interactive confirm; dry proof + guards + row policy still enforced )");
+  } else if (process.stdin.isTTY) {
+    process.stdout.write(`type exact slug "${slug}" to arm real upload: `);
+    const typed = readFileSync(0, "utf8").trim().split(/\s+/)[0] ?? "";
+    if (typed !== slug) fail(`typed slug mismatch (want exact "${slug}"): NOT uploading (fail-closed)`);
+    console.log("slug confirmed.");
+  } else {
+    fail("refusing --save: non-interactive stdin needs --yes (non-interactive confirm only; dry proof still required)");
+  }
 }
 if (SAVE && !TO && missingGroups.length && !MAP) {
   const cpage = await context.newPage();
