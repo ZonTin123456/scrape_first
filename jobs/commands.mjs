@@ -9,18 +9,16 @@ import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { assertArtifactPointer } from "./events.mjs";
 import { beginUploadWithProof, grantArmFromSafety, recordDryPass } from "./safety.mjs";
-import { UI_STEPS, runUiStepSync } from "./pipeline.mjs";
+import { runUiStepSync, startUiStep } from "./pipeline.mjs";
 
 export const SUPPORTED = new Set(["cancel", "advance", "retry", "resume", "artifact", "dry", "arm", "begin-upload", "finish-row", "probe", "approve-page", "scrape", "finalize", "detect", "run-step"]);
 
 // Engine-mutating commands yield to an active engine op (single-flight v1,
-// Wayfinder #12): while runPipelineAsJobOps holds the claim, dry/arm/
-// begin-upload are refused transiently. Cancel/finish-row/review traffic is
-// never gated (stop must always get through). Refusals are NOT cached: the
-// same commandId retries fresh after release.
-// UI step commands (probe/scrape/finalize/detect/run-step) also yield: they
-// claim the same single-flight briefly via runUiStepSync. approve-page is a
-// human gate like resume (never gated).
+// Wayfinder #12): while runPipelineAsJobOps or a background UI step holds the
+// claim, dry/arm/begin-upload/probe/scrape/finalize/detect/run-step are
+// refused transiently. Cancel/finish-row/review/approve-page traffic is never
+// gated (stop and human gates must always get through). Refusals are NOT
+// cached: the same commandId retries fresh after release.
 export const ENGINE_OPS = new Set(["dry", "arm", "begin-upload", "probe", "scrape", "finalize", "detect", "run-step"]);
 
 // Emit helper: hub failures never block the command ack.
@@ -74,7 +72,7 @@ export function isSupported(type) {
   return SUPPORTED.has(type);
 }
 
-export function createCommandStore({ hub = null } = {}) {
+export function createCommandStore({ hub = null, engine = null } = {}) {
   const seen = new Map();
   const k = (jobId, commandId) => `${jobId}:${commandId}`;
 
@@ -223,23 +221,29 @@ export function createCommandStore({ hub = null } = {}) {
         writeJob(outDir, job);
         emitSafe(hub, jobId, "job:advanced", { to: "cancelled", stage: job.stage, reason: rreason ?? "row-finished" });
         reason = "cancelled";
-      } else if (UI_STEPS.includes(type)) {
-        // PR #30 gap fix: normal workflow from the workspace (no CLI).
-        // Delegates to jobs/pipeline runUiStepSync (state machine + ledger +
-        // SSE + pure wrapped cores; browser work deferred). writeJob + emits
-        // happen inside runUiStepSync; here we only map disposition reason.
-        // Throws fail-closed (terminal/illegal-transition/single-flight) for
-        // outer catch mapping. Idempotent via outer commandId wrapper.
-        const result = runUiStepSync({ outDir, job, uiStep: type, hub, payload: payload ?? {} });
+      } else if (type === "probe" || type === "scrape" || type === "detect" || type === "run-step") {
+        // PR #30 gap fix: real engine steps from the workspace (no CLI).
+        // startUiStep walks the stage synchronously and accepts immediately
+        // ({accepted:true, reason:"started"}); the lifted CDP engine runs in
+        // the background under the single-flight claim and completes via
+        // ledger + SSE + GET. commandId tags the ledger for UI polling.
+        // Throws fail-closed (terminal/illegal-transition/single-flight,
+        // page-deselected) for outer catch mapping. Replay returns the
+        // accepted disposition, never executes twice (note: after a server
+        // restart mid-run, replay the step with a NEW commandId).
+        const result = startUiStep({ outDir, job, uiStep: type, hub, payload: { ...(payload ?? {}), commandId }, engine });
         if (result?.status === "already-past") reason = "already-past";
         else if (result?.status === "awaiting-approval") reason = "awaiting-approval";
-        else if (type === "probe") reason = "probed";
-        else if (type === "approve-page") reason = "page-approved";
-        else if (type === "scrape") reason = "scraped";
-        else if (type === "finalize") reason = "finalized";
-        else if (type === "detect") reason = "detected";
-        else if (type === "run-step") reason = "step-ran";
+        else if (result?.status === "started") reason = "started";
         else reason = "step-ran";
+      } else if (type === "approve-page" || type === "finalize") {
+        // Human gate + pure review validation complete synchronously.
+        // Throws fail-closed for outer catch mapping. Idempotent via the
+        // outer commandId wrapper.
+        const result = runUiStepSync({ outDir, job, uiStep: type, hub, payload: payload ?? {} });
+        if (result?.status === "already-past") reason = "already-past";
+        else if (type === "approve-page") reason = "page-approved";
+        else reason = "finalized";
       } else if (type === "artifact") {
         const art = payload?.artifact ?? payload;
         assertArtifactPointer(art);

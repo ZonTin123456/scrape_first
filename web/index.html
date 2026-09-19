@@ -32,6 +32,12 @@
   button.ghost { background: transparent; color: #FFCC66; border-color: #F2B84B; }
   input[type="number"] { width: 4em; background: #0E0D0B; color: #F4F1E8; border: 1px solid #2a261e; border-radius: 4px; padding: 2px 6px; }
   #bulk-bar, #save-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+  #pages-pane { margin-top: 16px; border-top: 1px solid #2a261e; padding-top: 12px; }
+  #pages-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+  #pages-table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0; }
+  #pages-table th, #pages-table td { border: 1px solid #2a261e; padding: 2px 6px; text-align: left; }
+  .page-imgs { margin: 4px 0 12px 16px; font-size: 12px; }
+  .page-imgs label { display: inline-block; margin: 2px 8px 2px 0; }
   #job-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
   #job-bar input { background: #0E0D0B; color: #F4F1E8; border: 1px solid #2a261e; border-radius: 4px; padding: 4px 8px; min-width: 220px; }
   #create-bar, #steps-bar, #recovery-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
@@ -109,6 +115,22 @@
   </section>
   <section id="pane-step" aria-label="current step">
     <h2 id="step-title">Current step</h2>
+    <div id="pages-pane" aria-label="page selection">
+      <h3>Page Selection — discovered pages</h3>
+      <p class="muted">Pages found by Probe over the staging contract. Untick to drop a page or its images, Save through the server, then Approve pages into Scrape.</p>
+      <div id="pages-bar">
+        <button id="pages-load-btn" class="ghost">Load pages</button>
+        <button id="pages-save-btn">Save pages (POST only)</button>
+        <button id="pages-reload-btn" class="ghost">Reload</button>
+        <span id="pages-msg" role="status"></span>
+      </div>
+      <div id="pages-pending" class="muted"></div>
+      <table id="pages-table" aria-label="discovered pages">
+        <thead><tr><th>keep</th><th>page</th><th>counts</th></tr></thead>
+        <tbody id="pages-body"></tbody>
+      </table>
+      <div id="pages-images"></div>
+    </div>
     <div id="review-pane">
       <p class="muted">Enter a Job ID, then Load review. Review stage goes wide; bottom log strip stays.</p>
       <div id="bulk-bar">
@@ -452,7 +474,8 @@
     logLine("jobs list: " + JSON.stringify((data.jobs || []).map((j) => j.jobId + "@" + j.stage)));
   };
 
-  async function driveStep(type, payload, msgEl) {
+  async function driveStep(type, payload, msgEl, opts) {
+    const bgTimeoutMs = (opts && opts.bgTimeoutMs) || 240000;
     if (!state.jobId && !$("job-id").value.trim()) {
       if (msgEl) $(msgEl).textContent = "enter or create a Job first";
       return;
@@ -468,7 +491,135 @@
     }
     logLine(type + " command: " + JSON.stringify(d));
     await tickStatus();
+    if (d.accepted && d.reason === "started") {
+      // Background engine work (real Probe/Scrape/Detect): poll the ledger
+      // for the matching finished/failed/superseded entry, then resync.
+      if (msgEl) $(msgEl).textContent = type + ": running in background…";
+      const fin = await pollBgDone(d.commandId, bgTimeoutMs);
+      if (msgEl) {
+        $(msgEl).textContent = !fin
+          ? type + ": still running — watch the log strip or press the step again"
+          : type + ": " + String(fin.kind).replace("pipeline:", "") + " — " + fin.message;
+        $(msgEl).className = fin && fin.kind === "pipeline:finished" ? "pass" : "warn";
+      }
+      logLine(type + " background: " + JSON.stringify(fin));
+      await tickStatus();
+    }
   }
+
+  async function pollBgDone(commandId, timeoutMs) {
+    const t0 = Date.now();
+    for (;;) {
+      await tickStatus();
+      const entries = (state.job?.ledger || []).filter((e) =>
+        e && e.commandId === commandId && (e.kind === "pipeline:finished" || e.kind === "pipeline:failed" || e.kind === "pipeline:superseded"));
+      if (entries.length) return entries[entries.length - 1];
+      if (Date.now() - t0 > timeoutMs) return null;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+
+  /* ---- Page Selection over the staging contract ---- */
+
+  async function loadPages() {
+    const id = $("job-id").value.trim();
+    if (!id) { $("pages-msg").textContent = "enter a Job ID"; return; }
+    state.jobId = id;
+    connectLog();
+    await tickStatus();
+    const r = await fetch("/jobs/" + encodeURIComponent(id) + "/pages");
+    if (r.status === 404) { $("pages-msg").textContent = "job not found"; return; }
+    const model = await r.json();
+    state.pages = model;
+    renderPages(model);
+    logLine("pages model: " + (model.pending ? "pending (probe first)" : (model.links.length + " link(s)")));
+  }
+
+  function renderPages(model) {
+    $("pages-pending").textContent = model.pending
+      ? "pending — no probe yet. Run Probe first, then Load pages."
+      : "";
+    const tb = $("pages-body");
+    tb.textContent = "";
+    for (const l of (model.links || [])) {
+      const tr = document.createElement("tr");
+      const tdKeep = document.createElement("td");
+      const keep = document.createElement("input");
+      keep.type = "checkbox";
+      keep.checked = l.keep !== false;
+      keep.setAttribute("data-plink", l.url);
+      tdKeep.appendChild(keep);
+      tr.appendChild(tdKeep);
+      const tdPage = document.createElement("td");
+      tdPage.innerHTML = "<b>" + esc(l.title || "(no title)") + "</b><br><span class=muted>" + esc(l.url) + "</span>";
+      tr.appendChild(tdPage);
+      const tdCounts = document.createElement("td");
+      tdCounts.textContent = l.counts ? ("text " + (l.counts.text ?? "?") + " / img " + (l.counts.image ?? "?")) : "—";
+      tr.appendChild(tdCounts);
+      tb.appendChild(tr);
+    }
+    const box = $("pages-images");
+    box.textContent = "";
+    for (const l of (model.links || [])) {
+      if (!l.images || !l.images.length) continue;
+      const fs = document.createElement("fieldset");
+      const lg = document.createElement("legend");
+      lg.textContent = "Images — " + (l.title || l.url) + " (" + l.images.length + ")";
+      fs.appendChild(lg);
+      const wrap = document.createElement("div");
+      wrap.className = "page-imgs";
+      for (const im of l.images) {
+        const lab = document.createElement("label");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = im.keep !== false;
+        cb.setAttribute("data-pslug", l.slug);
+        cb.setAttribute("data-pseq", String(im.seq));
+        lab.appendChild(cb);
+        lab.appendChild(document.createTextNode(" seq=" + im.seq + " " + (im.name || im.alt || "(no name)") + (im.section ? " [" + im.section + "]" : "")));
+        wrap.appendChild(lab);
+      }
+      fs.appendChild(wrap);
+      box.appendChild(fs);
+    }
+    if (!model.pending && !(model.links || []).length) {
+      $("pages-pending").textContent = "no pages for this job in staging (probe first).";
+    }
+  }
+
+  async function savePages() {
+    if (!state.jobId && !$("job-id").value.trim()) { $("pages-msg").textContent = "enter or create a Job first"; return; }
+    if (!state.jobId) { state.jobId = $("job-id").value.trim(); connectLog(); }
+    const links = [...document.querySelectorAll("#pages-body input[data-plink]")].map((c) => ({ url: c.getAttribute("data-plink"), keep: c.checked }));
+    const bySlug = new Map();
+    document.querySelectorAll("#pages-images input[data-pseq]").forEach((c) => {
+      const slug = c.getAttribute("data-pslug");
+      if (!bySlug.has(slug)) bySlug.set(slug, []);
+      bySlug.get(slug).push({ seq: Number(c.getAttribute("data-pseq")), keep: c.checked });
+    });
+    const images = {};
+    for (const [slug, arr] of bySlug) images[slug] = arr;
+    const r = await fetch("/jobs/" + encodeURIComponent(state.jobId) + "/pages", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ links, images }),
+    });
+    const body = await r.json();
+    if (r.ok && body.ok) {
+      $("pages-msg").textContent = "saved pages (" + body.links + " links, " + body.imageUpdates + " images)";
+      $("pages-msg").className = "pass";
+    } else {
+      $("pages-msg").textContent = "save refused: " + (body.reason || r.status);
+      $("pages-msg").className = "err";
+    }
+    logLine("pages save: " + JSON.stringify(body));
+    await loadPages();
+    await tickStatus();
+  }
+
+  $("pages-load-btn").onclick = loadPages;
+  $("pages-reload-btn").onclick = loadPages;
+  $("pages-save-btn").onclick = savePages;
 
   $("probe-btn").onclick = () => driveStep("probe", {}, "steps-msg");
   $("approve-btn").onclick = () => driveStep("approve-page", {}, "steps-msg");

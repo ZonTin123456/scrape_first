@@ -1,13 +1,14 @@
-// server.mjs — P3 transport + P5 review-first component.
+// server.mjs — P3 transport + P5 review-first component + Pages selection.
 // Importable only: importing starts nothing. Call startServer({outDir,port}).
 // Uses jobs/store for truth, jobs/events for envelope/buffer/epoch,
-// jobs/commands for commandId idempotency, jobs/review for P5 semantics.
-// No engine imports.
+// jobs/commands for commandId idempotency, jobs/review for P5 semantics,
+// jobs/pages for Page Selection over the staging contract.
+// No CDP/browser/CLI-entry imports (static linkage test enforces).
 import { createServer } from "node:http";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { assessRestart, createJob, findJobById, getPointer, loadForRestart, readJob, writeJob } from "./jobs/store.mjs";
+import { appendLedger, assessRestart, createJob, findJobById, getPointer, loadForRestart, readJob, writeJob } from "./jobs/store.mjs";
 import { createHub, formatSSE } from "./jobs/events.mjs";
 import { createCommandStore } from "./jobs/commands.mjs";
 import {
@@ -18,6 +19,7 @@ import {
   validateSelectionShape,
 } from "./jobs/review.mjs";
 import { safetyModel, verifyDryReport } from "./jobs/safety.mjs";
+import { loadPagesModel, savePagesModel } from "./jobs/pages.mjs";
 
 const CLIENT_DIR = join(dirname(fileURLToPath(import.meta.url)), "web");
 
@@ -178,13 +180,16 @@ export function listJobs(outDir) {
   return out;
 }
 
+// Mirror of slugBaseOf() in sectioning.mjs (verbatim logic, local copy: the
+// server path cannot import it — static linkage allows node: + relative only
+// and bans /sectioning/). Keeps job.slug identical to the CLI/engine slug for
+// the same URL (1 URL = 1 group), so UI jobs and CLI flows share staging.
 function slugFromSource(source) {
   try {
-    const u = new URL(String(source));
-    const host = u.hostname.toLowerCase().replace(/^www\./, "") || "page";
-    const path = u.pathname.replace(/\/+$/, "").split("/").filter(Boolean).slice(-2).join("-");
-    const base = `${host}${path ? `-${path}` : ""}`;
-    return base.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "page-index";
+    const x = new URL(String(source));
+    const host = x.hostname.replace(/^www\./, "").split(".").slice(0, -1).join("") || x.hostname.replace(/\./g, "");
+    const path = (x.pathname + (x.search ? `-${x.search}` : "")).replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 50) || "index";
+    return `${host}-${path}`.toLowerCase();
   } catch {
     return "page-index";
   }
@@ -435,6 +440,67 @@ async function handleWith(req, res, ctx) {
     } catch (e) {
       sendJson(res, 500, { error: { code: e?.code ?? "internal", message: e?.message ?? "failure" } });
     }
+    return;
+  }
+
+  // Page Selection: discovered pages over the staging contract.
+  // GET returns the model (pending:true when no probe ran yet); POST-only
+  // save merges keep/unkeep by key (url/seq/src) so sequential jobs sharing
+  // global staging do not clobber each other, then Approve/Resume into Scrape.
+  if ((m = path.match(/^\/jobs\/([^/]+)\/pages$/))) {
+    const jobId = decodeURIComponent(m[1]);
+    let found = null;
+    try {
+      found = findJobById(outDir, jobId);
+    } catch {
+      found = null;
+    }
+    if (!found) {
+      sendJson(res, 404, { error: { code: "not-found", message: "job not found" } });
+      return;
+    }
+    if (req.method === "GET") {
+      try {
+        sendJson(res, 200, loadPagesModel(outDir, found.job));
+      } catch (e) {
+        sendJson(res, 500, { error: { code: e?.code ?? "internal", message: e?.message ?? "failure" } });
+      }
+      return;
+    }
+    if (req.method === "POST") {
+      let body = null;
+      try {
+        body = await readJsonBody(req);
+      } catch (e) {
+        if (e?.code === 413) {
+          sendJson(res, 413, { ok: false, reason: "body-too-large", jobId });
+          return;
+        }
+        sendJson(res, 400, { ok: false, reason: "invalid-json", jobId });
+        return;
+      }
+      try {
+        const saved = savePagesModel(outDir, found.job, { links: body?.links, images: body?.images });
+        appendLedger(found.job, "pages:saved", `${saved.links} links, ${saved.imageUpdates} images, ${saved.decisionUpdates} master, ${saved.linkUpdates} link flags`);
+        writeJob(outDir, found.job);
+        try {
+          hub.emit(jobId, "job:advanced", { step: "pages", stage: found.job.stage, saved });
+        } catch {
+          // emit never blocks save ack
+        }
+        try {
+          hub.emit(jobId, "artifact:written", { kind: "picked-links", relPath: "_staging/picked-links.json", sha256: null, byteLength: null });
+        } catch {
+          // ignore
+        }
+        sendJson(res, 200, { ok: true, jobId, ...saved });
+        return;
+      } catch (e) {
+        sendJson(res, 400, { ok: false, reason: e?.code ?? "command-failed", detail: e?.message ?? "save failed", jobId });
+        return;
+      }
+    }
+    sendJson(res, 405, { error: { code: "method-not-allowed", message: "GET or POST only" } });
     return;
   }
 
@@ -711,7 +777,7 @@ export function validateJobsAtBoot(outDir) {
   return { checked: checked.length, disarmed };
 }
 
-export async function startServer({ outDir = "./out", port = 0 } = {}) {
+export async function startServer({ outDir = "./out", port = 0, engine = null } = {}) {
   const resolvedOut = resolve(process.cwd(), outDir);
   mkdirSync(resolvedOut, { recursive: true });
   // P8 restart validation at boot (finding 1): every persisted job record is
@@ -721,7 +787,9 @@ export async function startServer({ outDir = "./out", port = 0 } = {}) {
   // fake continuity. Never blocks boot: per-job errors are skipped.
   validateJobsAtBoot(resolvedOut);
   const hub = createHub();
-  const commands = createCommandStore({ hub });
+  // engine: injected CDP runners for probe/scrape/detect (tests pass fakes;
+  // omitted = real lifted engine via jobs/engine-cdp.mjs).
+  const commands = createCommandStore({ hub, engine });
 
   const server = createServer((req, res) => {
     handleWith(req, res, { outDir: resolvedOut, hub, commands }).catch(() => {

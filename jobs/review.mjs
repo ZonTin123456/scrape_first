@@ -306,6 +306,32 @@ export function loadReviewModel(outDir, job) {
   };
 }
 
+// Scrape->Review handoff: seed the job-scoped review draft from the
+// slug-dir selection.json the scrape wrote (CLI parity location). Runs once:
+// when the job has no draft yet (revision 0). Uses the same POST-only writer
+// (validation + fingerprint, never last-wins) so the workspace Review UI and
+// finalize see exactly what the scrape produced. Returns {status, revision}.
+export function importScrapeSelection(outDir, job) {
+  const stored = getStoredReview(job);
+  if (stored.revision !== 0) return { status: "already-seeded", revision: stored.revision };
+  let raw;
+  try {
+    raw = readFileSync(join(outDir, job.slug, "review", "selection.json"), "utf8");
+  } catch {
+    return { status: "missing" };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    const e = new Error("scrape selection unreadable");
+    e.code = "invalid-selection";
+    throw e;
+  }
+  const saved = saveReviewState(outDir, job, { selection: parsed, editedFrom: 0 });
+  return { status: "seeded", revision: saved.revision, kept: saved.selection.filter((s) => s.keep).length };
+}
+
 // POST-only save: validates + atomic-writes, bumps revision, updates
 // fingerprint. Stale (editedFrom mismatch OR disk fingerprint drift) ->
 // conflict, never last-wins.

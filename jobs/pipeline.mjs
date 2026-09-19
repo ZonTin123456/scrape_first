@@ -7,15 +7,17 @@
 // in-process runners. Only node builtins + ./store.mjs + ./safety.mjs + ./review.mjs.
 // Never imports CLI entries (reuse boundary: UI imports Lift + Wrap cores only).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
-import { advance, appendLedger, canAdvance, claimEngineOp, failJob, finishUpload, finishUploadRowAndCancel, notifyGuardRegression, notifyProofLost, readJob, releaseEngineOp, SPINE, writeJob } from "./store.mjs";
+import { advance, appendLedger, canAdvance, claimEngineOp, clearBlocker, failJob, finishUpload, finishUploadRowAndCancel, hasBlocker, notifyGuardRegression, notifyProofLost, raiseBlocker, readJob, releaseEngineOp, SPINE, writeJob } from "./store.mjs";
 import {
   beginUploadWithProof,
   grantArmFromSafety,
   recordDryPass,
   verifyDryReport,
 } from "./safety.mjs";
-import { loadReviewModel, validateForFinalize } from "./review.mjs";
+import { importScrapeSelection, loadReviewModel, validateForFinalize } from "./review.mjs";
+import { realEngine } from "./engine-cdp.mjs";
 
 // Same DAG as pipeline.mjs:31 (parity pinned in tests/pipeline.test.mjs).
 export const ALL = ["probe", "pick-links", "master", "apply-master", "run", "pick-images", "finalize", "upload"];
@@ -599,10 +601,26 @@ async function runPipelineClaimed({
 // Operator-facing UI actions mapped to spine stages. Used by
 // jobs/commands.mjs POST /jobs/:jobId/commands so the normal workflow runs
 // from the workspace without CLI. All logic stays server-side (no browser
-// duplication); browser-heavy work records deferred ledger + SSE, same as
-// machineStep deferred. Real pure work uses wrapped cores (review validation).
-// Never imports CLI entries.
+// duplication in the client); probe/scrape/detect run the real lifted CDP
+// engine (jobs/engine-cdp.mjs: Wrapped cores, never CLI entries) as
+// background work under the single-flight claim, while approve-page/finalize
+// complete synchronously (human gate + pure review validation).
+// Transport: POST accepts immediately ({accepted:true, reason:"started"});
+// completion lands via ledger + SSE + GET (the client polls). Never imports
+// CLI entries.
 export const UI_STEPS = ["probe", "approve-page", "scrape", "finalize", "detect", "run-step"];
+
+// Steps whose real work runs in the background (browser/CDP, minutes).
+// approve-page/finalize (+ run-step human/finalize/upload) stay synchronous.
+export const BG_STEPS = new Set(["probe", "scrape", "detect"]);
+
+// Engine error code -> orthogonal blocker type (store BLOCKER_TYPES).
+// Unmapped codes fail closed with ledger only (no blocker to raise).
+const BLOCKER_FOR = {
+  "cloudflare-blocked": "cloudflare",
+  "cdp-unreachable": "cdp",
+  "cdp-error": "cdp",
+};
 
 export const UI_STEP_STAGES = {
   probe: "probing",
@@ -660,17 +678,20 @@ export function getDefaultRunners({ outDir } = {}) {
   };
 }
 
-// Sync UI step executor for POST commands (jobs/commands.mjs calls this).
-// Mutates job in-memory (walk + ledger), writes record, emits SSE.
-// Engine steps claim single-flight briefly and release in finally; the human
-// gate approve-page never claims (like resume: approvals must get through).
-// Throws fail-closed codes (terminal, illegal-pipeline-transition,
-// approval-required) for caller mapping. Idempotent when already at/past
-// target (returns already-past, no backward move).
+// Sync UI step executor for POST commands (jobs/commands.mjs calls this for
+// approve-page/finalize/run-step-human; probe/scrape/detect go through
+// startUiStep below). Mutates job in-memory (walk + ledger), writes record,
+// emits SSE. Engine steps claim single-flight briefly and release in finally;
+// the human gate approve-page never claims (like resume: approvals must get
+// through). Throws fail-closed codes for caller mapping. Idempotent when
+// already at/past target (returns already-past, no backward move).
 export function runUiStepSync({ outDir, job, uiStep, hub = null, payload = {} } = {}) {
   if (!outDir || typeof outDir !== "string") fail("bad-outDir", "runUiStepSync: outDir required");
   if (!job || typeof job !== "object" || !job.jobId) fail("bad-job", "runUiStepSync: job record required");
   if (!UI_STEPS.includes(uiStep)) fail("unknown-step", `unknown UI step ${uiStep} (want ${UI_STEPS.join("|")})`, { step: uiStep });
+  if (uiStep === "probe" || uiStep === "scrape" || uiStep === "detect") {
+    fail("use-start", `ui:${uiStep} runs as background work (use startUiStep)`, { step: uiStep });
+  }
   if (uiStep === "approve-page") {
     return runUiStepClaimed({ outDir, job, uiStep, hub, payload });
   }
@@ -685,6 +706,239 @@ export function runUiStepSync({ outDir, job, uiStep, hub = null, payload = {} } 
     activePipelineJobs.delete(job.jobId);
     releaseEngineOp(job.jobId);
   }
+}
+
+// Async-accept entry for UI steps. Sync steps (approve-page/finalize/run-step
+// human+finalize+upload) delegate to runUiStepSync and complete before ack.
+// Background steps (probe/scrape/detect, run-step probe/run) walk to the
+// target stage synchronously, persist the started ledger, hold the
+// single-flight claim across the background run, and return {status:"started"}
+// immediately; completion (or fail-closed failure) lands via ledger + SSE +
+// GET. Re-runs at the target stage execute fresh work (new commandId); past
+// the target returns already-past. Terminals never reopen.
+export function startUiStep({ outDir, job, uiStep, hub = null, payload = {}, engine = null } = {}) {
+  if (!outDir || typeof outDir !== "string") fail("bad-outDir", "startUiStep: outDir required");
+  if (!job || typeof job !== "object" || !job.jobId) fail("bad-job", "startUiStep: job record required");
+  if (!UI_STEPS.includes(uiStep)) fail("unknown-step", `unknown UI step ${uiStep} (want ${UI_STEPS.join("|")})`, { step: uiStep });
+  let op = uiStep;
+  if (uiStep === "run-step") {
+    const raw = payload?.step ?? payload?.steps ?? null;
+    const list = parseSteps(typeof raw === "string" ? raw : Array.isArray(raw) ? raw.join(",") : null);
+    if (list.length !== 1) fail("bad-step", `run-step: single DAG step required (got ${list.join(",")})`, { step: raw });
+    const step = list[0];
+    if (step === "probe" || step === "run") op = step === "probe" ? "probe" : "scrape";
+    else return runUiStepSync({ outDir, job, uiStep, hub, payload });
+  }
+  if (!BG_STEPS.has(op)) return runUiStepSync({ outDir, job, uiStep, hub, payload });
+  return acceptBgStep({ outDir, job, uiStep, op, hub, payload, engine: engine ?? realEngine });
+}
+
+function acceptBgStep({ outDir, job, uiStep, op, hub, payload, engine }) {
+  const target = UI_STEP_STAGES[op];
+  const fi = spineIndex(job.stage);
+  const ti = spineIndex(target);
+  if (fi > ti) return finishUiStep(outDir, job, hub, { uiStep, status: "already-past", stage: job.stage });
+  if (!engine || typeof engine[opName(op)] !== "function") {
+    fail("missing-engine", `ui:${op}: no engine runner (pass engine or use deferred run-step)`, { step: op });
+  }
+  if (activePipelineJobs.has(job.jobId)) {
+    fail("single-flight", `pipeline:${job.jobId} already running (same-job re-entry refused)`, { jobId: job.jobId });
+  }
+  claimEngineOp(job.jobId, `ui:${op}`);
+  activePipelineJobs.add(job.jobId);
+  try {
+    walkUiTo(job, target, { step: `ui:${op}` });
+    if (op === "probe" && (!job.source || typeof job.source !== "string")) {
+      fail("bad-source", "ui:probe: job source URL required", { step: op });
+    }
+    const commandId = typeof payload?.commandId === "string" ? payload.commandId : null;
+    appendLedger(job, "pipeline:started", `ui ${op} accepted (background)`, commandId ? { commandId } : {});
+    writeJob(outDir, job);
+    emit(hub, job.jobId, "job:advanced", { step: op, stage: job.stage, started: true });
+    if (op === "probe" || op === "scrape") {
+      emit(hub, job.jobId, "scrape:url-started", { url: job.source, slug: job.slug, mode: op === "probe" ? "probe" : "scrape" });
+    }
+    const bg = { outDir, slug: job.slug, jobId: job.jobId, source: job.source, op, uiStep, hub, payload, engine, commandId };
+    runBgStep(bg).catch(() => null);
+    return { step: uiStep, op, status: "started", stage: job.stage };
+  } catch (e) {
+    activePipelineJobs.delete(job.jobId);
+    releaseEngineOp(job.jobId);
+    throw e;
+  }
+}
+
+function opName(op) {
+  return op === "probe" ? "probeUrl" : op === "scrape" ? "scrapeUrl" : "detectBackend";
+}
+
+function engineOpts(payload) {
+  const p = payload ?? {};
+  const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
+  return {
+    port: p.port ?? "auto",
+    timeoutMs: num(p.timeoutS, 60) * 1000,
+    cfWaitS: num(p.cfWaitS, 60),
+    via: typeof p.via === "string" ? p.via : "auto",
+    backend: typeof p.backend === "string" ? p.backend : null,
+    match: typeof p.match === "string" ? p.match : "personal",
+  };
+}
+
+function readPickedEntry(outDir, job) {
+  const arr = (() => { try { return JSON.parse(readFileSync(join(outDir, "_staging", "picked-links.json"), "utf8")); } catch { return null; } })();
+  if (!Array.isArray(arr)) fail("missing-picked-links", "ui:scrape: missing picked-links.json (probe + page selection first)", { step: "scrape" });
+  const hit = arr.find((e) => e && e.slug === job.slug);
+  if (!hit) fail("missing-picked-links", `ui:scrape: no picked-links entry for ${job.slug} (probe first)`, { step: "scrape" });
+  if (hit.keep === false) fail("page-deselected", `ui:scrape: page deselected for ${job.slug} (re-select in Pages, Approve, retry)`, { step: "scrape" });
+  return hit;
+}
+
+function readImageSeqFilter(outDir, slug) {
+  let arr;
+  try {
+    arr = JSON.parse(readFileSync(join(outDir, "_staging", slug, "picked-images.json"), "utf8"));
+  } catch {
+    return null; // no per-image filter = keep all (CLI parity)
+  }
+  if (!Array.isArray(arr)) return null;
+  return new Set(arr.filter((x) => x && x.keep).map((x) => Number(x.seq)));
+}
+
+// Background worker: runs the real engine, then applies the result to the
+// fresh record (cancel-safe: a terminal/cancelled record is never clobbered;
+// staging files already written are kept as files, noted in ledger).
+async function runBgStep(bg) {
+  const { outDir, slug, jobId, op, uiStep, hub, payload, engine, commandId } = bg;
+  const done = () => { activePipelineJobs.delete(jobId); releaseEngineOp(jobId); };
+  const emitFn = (type, p) => emit(hub, jobId, type, p);
+  let result = null;
+  let failure = null;
+  try {
+    const opts = engineOpts(payload);
+    if (op === "probe") {
+      result = await engine.probeUrl({ outDir, url: bg.source, port: opts.port, timeoutMs: opts.timeoutMs, cfWaitS: opts.cfWaitS, via: opts.via, emit: emitFn });
+    } else if (op === "scrape") {
+      readPickedEntry(outDir, { slug, jobId });
+      const filter = readImageSeqFilter(outDir, slug);
+      result = await engine.scrapeUrl({ outDir, url: bg.source, slug, port: opts.port, timeoutMs: opts.timeoutMs, cfWaitS: opts.cfWaitS, via: opts.via, imageSeqFilter: filter, emit: emitFn });
+    } else {
+      result = await engine.detectBackend({ outDir, slug, jobId, port: opts.port, backend: opts.backend, match: opts.match, emit: emitFn });
+    }
+  } catch (e) {
+    failure = normalizeEngineError(e);
+  }
+  let fresh;
+  try {
+    fresh = readJob(outDir, slug, jobId);
+  } catch {
+    emit(hub, jobId, "job:advanced", { step: op, error: "record-unreadable" });
+    done();
+    return;
+  }
+  try {
+    if (fresh.stage === "done" || fresh.stage === "failed" || fresh.stage === "cancelled" || fresh.stopRequested) {
+      appendLedger(fresh, "pipeline:superseded", `ui ${op} finished after ${fresh.stage}${fresh.stopRequested ? "+stop" : ""} (staging files kept, record untouched)`, commandId ? { commandId } : {});
+      writeJob(outDir, fresh);
+      emit(hub, jobId, "job:advanced", { step: op, stage: fresh.stage, superseded: true });
+      return;
+    }
+    if (failure) {
+      const blocker = BLOCKER_FOR[failure.code] ?? null;
+      appendLedger(fresh, "pipeline:failed", `ui ${op}: ${failure.code} ${failure.detail}`.slice(0, 220), commandId ? { commandId, code: failure.code } : { code: failure.code });
+      if (blocker) {
+        try { raiseBlocker(fresh, { type: blocker, ctx: `${op}:${failure.code}` }); } catch { /* bad type never happens */ }
+        emit(hub, jobId, "blocker:raised", { type: blocker, step: op, reason: failure.code });
+      }
+      if (op === "probe" || op === "scrape") {
+        emit(hub, jobId, "scrape:url-failed", { url: fresh.source, slug: fresh.slug, error: `${failure.code} ${failure.detail}`.slice(0, 200) });
+      }
+      writeJob(outDir, fresh);
+      emit(hub, jobId, "job:advanced", { step: op, stage: fresh.stage, failed: true, reason: failure.code });
+      return;
+    }
+    const { message, artifacts } = describeResult(op, outDir, result);
+    if (op === "scrape") {
+      // Scrape->Review handoff: seed the job-scoped draft from the slug-dir
+      // selection the scrape wrote, so Review UI + finalize see real rows.
+      // Non-fatal: missing/invalid only notes in ledger (finalize surfaces it).
+      try {
+        const imp = importScrapeSelection(outDir, fresh);
+        if (imp.status === "seeded") {
+          appendLedger(fresh, "review:seeded", `scrape selection imported (rev ${imp.revision}, ${imp.kept} kept)`);
+          emit(hub, jobId, "review:selection-written", { slug: fresh.slug, count: imp.kept, relPath: `${fresh.slug}/jobs/${jobId}/review/selection.json` });
+        } else if (imp.status === "missing") {
+          appendLedger(fresh, "pipeline:deferred", "ui scrape: no slug selection to seed review (operator seeds via Review UI)");
+        }
+      } catch (e) {
+        appendLedger(fresh, "pipeline:deferred", `ui scrape: review seed skipped (${e?.code ?? "error"})`);
+      }
+    }
+    appendLedger(fresh, "pipeline:finished", message, commandId ? { commandId } : {});
+    writeJob(outDir, fresh);
+    for (const a of artifacts) emit(hub, jobId, "artifact:written", a);
+    for (const t of ["cloudflare", "cdp"]) {
+      if (hasBlocker(fresh, t)) {
+        clearBlocker(fresh, t);
+        writeJob(outDir, fresh);
+        emit(hub, jobId, "blocker:cleared", { type: t, step: op });
+      }
+    }
+    emit(hub, jobId, "job:advanced", { step: op, stage: fresh.stage, finished: true });
+  } finally {
+    done();
+  }
+}
+
+function normalizeEngineError(e) {
+  if (e && typeof e.code === "string") return { code: e.code, detail: String(e.message ?? e).slice(0, 160) };
+  const msg = String(e?.message ?? e).slice(0, 160);
+  if (/ECONNREFUSED|ENOTFOUND|fetch failed|CDP|WebSocket|socket hang up|socket/i.test(msg)) {
+    return { code: "cdp-unreachable", detail: msg };
+  }
+  if (/cloudflare|challenge/i.test(msg)) return { code: "cloudflare-blocked", detail: msg };
+  return { code: "command-failed", detail: msg };
+}
+
+function artifactFor(outDir, relPath, kind) {
+  try {
+    const buf = readFileSync(join(outDir, relPath));
+    return { kind, relPath, sha256: createHash("sha256").update(buf).digest("hex"), byteLength: buf.length };
+  } catch {
+    return { kind, relPath, sha256: null, byteLength: null };
+  }
+}
+
+function describeResult(op, outDir, result) {
+  if (op === "probe") {
+    const slug = result.slug;
+    return {
+      message: `ui probe finished: ${slug} (${result.counts?.image ?? "?"} images)`,
+      artifacts: [
+        artifactFor(outDir, `_staging/${slug}/probe.json`, "probe"),
+        artifactFor(outDir, "_staging/picked-links.json", "picked-links"),
+        artifactFor(outDir, "_staging/master.json", "master"),
+      ],
+    };
+  }
+  if (op === "scrape") {
+    const slug = result.slug;
+    return {
+      message: `ui scrape finished: ${slug} (${result.nPeople ?? "?"} people, ${result.nCands ?? "?"} candidates)`,
+      artifacts: [
+        artifactFor(outDir, `${slug}/content.json`, "content"),
+        artifactFor(outDir, `${slug}/people.json`, "people"),
+        artifactFor(outDir, `${slug}/review/selection.json`, "selection"),
+        artifactFor(outDir, "summary.json", "summary"),
+      ],
+    };
+  }
+  return {
+    message: `ui detect finished: ${result.host} (${(result.departments ?? []).length} departments${result.profile ? `, profile:${result.profile}` : ""})`,
+    artifacts: [
+      { kind: "detect-report", relPath: result.relPath, sha256: result.sha256 ?? null, byteLength: result.byteLength ?? null },
+    ],
+  };
 }
 
 function runUiStepClaimed({ outDir, job, uiStep, hub, payload }) {
