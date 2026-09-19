@@ -4,10 +4,10 @@
 // jobs/commands for commandId idempotency, jobs/review for P5 semantics.
 // No engine imports.
 import { createServer } from "node:http";
-import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { findJobById, writeJob } from "./jobs/store.mjs";
+import { assessRestart, findJobById, loadForRestart, writeJob } from "./jobs/store.mjs";
 import { createHub, formatSSE } from "./jobs/events.mjs";
 import { createCommandStore } from "./jobs/commands.mjs";
 import {
@@ -17,7 +17,7 @@ import {
   selectionPathFor,
   validateSelectionShape,
 } from "./jobs/review.mjs";
-import { safetyModel } from "./jobs/safety.mjs";
+import { safetyModel, verifyDryReport } from "./jobs/safety.mjs";
 
 const CLIENT_DIR = join(dirname(fileURLToPath(import.meta.url)), "web");
 
@@ -548,9 +548,69 @@ async function handleWith(req, res, ctx) {
   sendJson(res, 404, { error: { code: "not-found", message: "unknown route" } });
 }
 
+// Restart validation (finding 1, plan State contract): scan persisted job
+// records, load + validate artifacts/fingerprints via loadForRestart,
+// re-verify the dry proof, and disarm dry_passed/armed jobs on proof or
+// artifact loss via assessRestart. Stage always comes from the record — never
+// inferred from stray files. Only disarmed records are rewritten; healthy
+// records are untouched. Exported for tests.
+export function validateJobsAtBoot(outDir) {
+  const checked = [];
+  const disarmed = [];
+  let slugs = [];
+  try {
+    slugs = readdirSync(outDir, { withFileTypes: true });
+  } catch {
+    return { checked: 0, disarmed: [] };
+  }
+  for (const ent of slugs) {
+    if (!ent.isDirectory()) continue;
+    if (ent.name.startsWith(".") || ent.name.startsWith("_")) continue;
+    const slug = ent.name;
+    let jobs = [];
+    try {
+      jobs = readdirSync(join(outDir, slug, "jobs"), { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const j of jobs) {
+      if (!j.isDirectory()) continue;
+      try {
+        const loaded = loadForRestart(outDir, slug, j.name);
+        const issues = loaded.issues || [];
+        const artifactsOk = !issues.some((i) => i.code === "artifact-missing");
+        const fingerprintsOk = !issues.some((i) => i.code === "fingerprint-mismatch");
+        let proofsOk = true;
+        if (loaded.job?.dry_run_id) {
+          try {
+            proofsOk = verifyDryReport(outDir, loaded.job).ok;
+          } catch {
+            proofsOk = false;
+          }
+        }
+        const res = assessRestart(loaded.job, { artifactsOk, fingerprintsOk, proofsOk, detail: "boot" });
+        checked.push(j.name);
+        if (res.disarmed) {
+          writeJob(outDir, loaded.job);
+          disarmed.push(j.name);
+        }
+      } catch {
+        // Corrupt/unreadable record: leave for the explicit read path errors.
+      }
+    }
+  }
+  return { checked: checked.length, disarmed };
+}
+
 export async function startServer({ outDir = "./out", port = 0 } = {}) {
   const resolvedOut = resolve(process.cwd(), outDir);
   mkdirSync(resolvedOut, { recursive: true });
+  // P8 restart validation at boot (finding 1): every persisted job record is
+  // loaded, artifacts/fingerprints checked, dry proof re-verified; proof or
+  // artifact loss on dry_passed/armed disarms back to dry_running (fail
+  // closed, plan State contract). Stream epoch stays fresh (new hub) — no
+  // fake continuity. Never blocks boot: per-job errors are skipped.
+  validateJobsAtBoot(resolvedOut);
   const hub = createHub();
   const commands = createCommandStore({ hub });
 

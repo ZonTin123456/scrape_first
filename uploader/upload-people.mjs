@@ -150,11 +150,21 @@ if (SAVE) {
   catch { fail(`refusing --save: dry proof invalid JSON: ${DRY_PROOF}`); }
   if (proof.mode !== "dry") fail(`refusing --save: dry proof mode must be "dry" (was ${proof.mode})`);
   if (proof.slug !== slug) fail(`refusing --save: dry proof slug "${proof.slug}" != current "${slug}" (stale snapshot: re-dry)`);
+  if (!Array.isArray(proof.results) && !Array.isArray(proof.rows)) fail(`refusing --save: dry proof has no rows (stale snapshot: re-dry)`);
   const failedByStatus = (proof.by_status && proof.by_status.failed) || 0;
-  const failedRows = Array.isArray(proof.results) ? proof.results.filter((r) => r && r.status === "failed") : [];
+  let failedRows = Array.isArray(proof.results) ? proof.results.filter((r) => r && r.status === "failed") : [];
+  // Job-layer dry reports (jobs/safety recordDryPass) carry dry_run_id +
+  // snapshot_id + rows instead of CLI total/by_status/results: accept both
+  // shapes, each strictly (fail closed on missing/invalid proof).
+  if (Array.isArray(proof.rows)) {
+    if (typeof proof.dry_run_id !== "string" || !proof.dry_run_id) fail(`refusing --save: dry proof missing dry_run_id (stale snapshot: re-dry)`);
+    if (typeof proof.snapshot_id !== "string" || !proof.snapshot_id) fail(`refusing --save: dry proof missing snapshot_id (stale snapshot: re-dry)`);
+    if (proof.guardStatus === "red") fail("refusing --save: dry proof guard red (G1 red until guards pass)");
+    failedRows = [...failedRows, ...proof.rows.filter((r) => r && r.status === "failed")];
+  }
   if (failedByStatus > 0 || failedRows.length > 0) fail("refusing --save: dry proof has failed rows (G1 red until rows pass)");
   const sha = createHash("sha256").update(raw).digest("hex");
-  const total = proof.total ?? (Array.isArray(proof.results) ? proof.results.length : "?");
+  const total = proof.total ?? (Array.isArray(proof.results) ? proof.results.length : (Array.isArray(proof.rows) ? proof.rows.length : "?"));
   dryProof = { path: DRY_PROOF, sha256: sha, total, by_status: proof.by_status ?? {} };
   console.log(`dry proof verified: ${DRY_PROOF} sha256=${sha.slice(0, 16)}... total=${total} ${JSON.stringify(dryProof.by_status)}`);
 }

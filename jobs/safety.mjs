@@ -107,6 +107,13 @@ export function evaluateRowPolicy(rows, { mapMode = "pinned", wouldCreate = [], 
   return { ok, code: ok ? "ok" : "blocked", reasons, warnings, counts };
 }
 
+// Shared guard-status gate: red or unknown blocks G1 fail-closed.
+// Single source for checkGate1 + recordDryPass (identical wording).
+export function guardStatusReason(guardStatus) {
+  if (guardStatus === "red") return "guard red: group/host/field/identity gate failing — G1 red";
+  if (guardStatus !== "green") return `guard unknown status: ${guardStatus}`;
+  return null;
+}
 // ---- G1: all-green + fresh dry for SAME snapshot, else Real disabled ----
 export function checkGate1(
   job,
@@ -129,8 +136,8 @@ export function checkGate1(
     reasons.push(`snapshot stale or unverified (${job.snapshot_id}): any material change re-dries`);
   }
   if (job.dry_run_id && !dryVerified) reasons.push(`dry proof missing or invalid (${job.dry_run_id}): fail closed`);
-  if (guardStatus === "red") reasons.push("guard red: group/host/field/identity gate failing — G1 red");
-  else if (guardStatus !== "green") reasons.push(`guard unknown status: ${guardStatus}`);
+  const guardReason = guardStatusReason(guardStatus);
+  if (guardReason) reasons.push(guardReason);
   const policy = evaluateRowPolicy(rows, { mapMode, wouldCreate, listedPath });
   for (const r of policy.reasons) reasons.push(r);
   for (const w of policy.warnings) warnings.push(w);
@@ -265,8 +272,8 @@ export function recordDryPass(
   }
   const policy = evaluateRowPolicy(normRows, { mapMode, wouldCreate, listedPath });
   const gateReasons = [];
-  if (guardStatus === "red") gateReasons.push("guard red: group/host/field/identity gate failing — G1 red");
-  else if (guardStatus !== "green") gateReasons.push(`guard unknown status: ${guardStatus}`);
+  const guardReason = guardStatusReason(guardStatus);
+  if (guardReason) gateReasons.push(guardReason);
   for (const r of policy.reasons) gateReasons.push(r);
   if (gateReasons.length) {
     appendLedger(job, "gate:failed", `G1 red: ${gateReasons.join("; ").slice(0, 300)}`);
