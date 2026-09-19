@@ -162,14 +162,17 @@ describe("P4a trio + row + artifact payloads (reference-only, P3 envelope)", () 
     assert.ok(replay.events.every((e) => e.streamId === replay.events[0].streamId), "same epoch same streamId");
   });
 
-  it("P4a allowlist only: full-catalog types rejected (deferred to #25)", () => {
+  it("P4b full catalog now accepted via engine emitter (extended in #25)", () => {
     const hub = createHub();
     const em = createEngineEmitter({ hub, jobId: "allow-1", emitEvents: true });
-    assert.equal(em.emit("upload:plan", { x: 1 }), null);
-    assert.equal(em.emit("review:finalized", {}), null);
+    // P4b engine catalog accepted (was deferred in P4a).
+    assert.ok(em.emit("upload:plan", { slug: "s", plan: [] }), "upload:plan accepted in P4b");
+    assert.ok(em.emit("review:finalized", { slug: "s" }), "review:finalized accepted in P4b");
+    assert.ok(em.emit("scrape:image-downloaded", { seq: 1 }), "image-downloaded accepted in P4b");
+    // Non-engine transport types stay out of the engine emitter.
     assert.equal(em.emit("job:advanced", {}), null);
-    assert.equal(em.emit("scrape:image-downloaded", {}), null);
-    assert.equal(hub.getStream("allow-1"), null, "non-P4a types never enter hub via P4a emitter");
+    assert.equal(em.emit("arm:granted", {}), null);
+    assert.ok(hub.getStream("allow-1"), "P4b engine types enter hub");
   });
 
   it("row/art validators: bad row returns null, bad artifact returns null (never throws)", () => {

@@ -14,7 +14,7 @@ import { join, basename } from "node:path";
 import { createHub } from "./jobs/events.mjs";
 import { createEngineEmitter } from "./jobs/engine-events.mjs";
 
-// P4a minimal engine events: trio + artifact, behind JOB_EVENTS=1 only.
+// P4b full engine event catalog behind JOB_EVENTS=1 only.
 // Disabled by default so CLI terminal/files are exactly as before.
 const __engineOn = process.env.JOB_EVENTS === "1";
 const __engineHub = __engineOn ? createHub() : null;
@@ -330,10 +330,20 @@ async function waitForChallengeClear(c, url) {
   const budgetMs = Math.max(0, CF_WAIT_S * 1000);
   const t0 = Date.now();
   let challenged = false;
+  let seenEmitted = false;
   for (;;) {
     const p = await probeChallenge(c);
-    if (!isChallengeProbe(p)) return { challenged, stillBlocked: false };
+    if (!isChallengeProbe(p)) {
+      if (challenged) {
+        try { __engine?.challengeCleared({ url, elapsedMs: Date.now() - t0 }); } catch { /* events never break CLI */ }
+      }
+      return { challenged, stillBlocked: false };
+    }
     challenged = true;
+    if (!seenEmitted) {
+      seenEmitted = true;
+      try { __engine?.challengeSeen({ url, phase: "auto-wait" }); } catch { /* ignore */ }
+    }
     if (Date.now() - t0 >= budgetMs) break;
     await new Promise((r) => setTimeout(r, 3000));
   }
@@ -344,11 +354,15 @@ async function waitForChallengeClear(c, url) {
     const t1 = Date.now();
     for (;;) {
       const p = await probeChallenge(c);
-      if (!isChallengeProbe(p)) return { challenged: true, stillBlocked: false };
+      if (!isChallengeProbe(p)) {
+        try { __engine?.challengeCleared({ url, elapsedMs: Date.now() - t0 }); } catch { /* ignore */ }
+        return { challenged: true, stillBlocked: false };
+      }
       if (Date.now() - t1 >= 60000) break;
       await new Promise((r) => setTimeout(r, 3000));
     }
   }
+  try { __engine?.challengeBlocked({ url, reason: "cloudflare challenge not cleared" }); } catch { /* ignore */ }
   return { challenged: true, stillBlocked: true };
 }
 
@@ -425,12 +439,16 @@ async function downloadQueue(c, queue, kept, stats, dir, url, origin) {
         else if (forceCdp || blocked) got = g2; // keep CDP (in-page cookies) error, it is authoritative
       }
     }
-    if (got.error) { rec.file = null; rec.error = got.error; imgErrors++; }
+    if (got.error) {
+      rec.file = null; rec.error = got.error; imgErrors++;
+      try { __engine?.imageFailed({ seq: rec.seq, src: rec.src, error: got.error, via: rec.via || VIA }); } catch { /* ignore */ }
+    }
     else {
       if (got.buf.length <= 70) { kept.splice(kept.indexOf(rec), 1); stats.image--; stats.cut++; continue; }
       const file = `images/${String(rec.seq).padStart(4, "0")}-${rec.width}x${rec.height}.${extOf(got.buf, got.ct, rec.src)}`;
       writeFileSync(join(dir, file), got.buf);
       rec.file = file; rec.bytes = got.buf.length;
+      try { __engine?.imageDownloaded({ seq: rec.seq, file, byteLength: got.buf.length, via: rec.via || VIA, url }); } catch { /* ignore */ }
     }
     delete rec.src;
   }
@@ -444,7 +462,12 @@ async function scrapeOne(c, url, timeoutMs, imageSeqFilter = null) {
   const { origin, title, nodes } = await navigateAndExtract(c, url, Math.max(5000, deadline - Date.now()));
   let { kept, queue, stats } = buildKept(nodes, origin, pageSectionFor(url));
   for (const n of kept) {
-    if (n.group_warn) console.error(`group-integrity: ${url} seq=${n.seq} previous=${n.group_warn.previous || "?"} demoted-division=${n.group_warn.demoted} kept=${n.section} (${n.group_warn.reason})`);
+    if (n.group_warn) {
+      console.error(`group-integrity: ${url} seq=${n.seq} previous=${n.group_warn.previous || "?"} demoted-division=${n.group_warn.demoted} kept=${n.section} (${n.group_warn.reason})`);
+      try {
+        __engine?.groupDemoted({ url, seq: n.seq, previous: n.group_warn.previous || null, demoted: n.group_warn.demoted || null, kept: n.section || null, reason: n.group_warn.reason || null });
+      } catch { /* ignore */ }
+    }
   }
   if (imageSeqFilter) {
     const dropSeqs = new Set([...queue].filter((r) => !imageSeqFilter.has(r.seq)).map((r) => r.seq));
@@ -718,6 +741,7 @@ function writeReview(dir, nodes) {
   writeFileSync(join(dir, "review", "index.html"), reviewHTML(sel, nodes, basename(dir)), "utf8");
   __emitArtifact(join(dir, "review", "selection.json"), `${basename(dir)}/review/selection.json`, "selection", null);
   __emitArtifact(join(dir, "review", "index.html"), `${basename(dir)}/review/index.html`, "review-index", null);
+  try { __engine?.selectionWritten({ slug: basename(dir), dir, count: sel.length, relPath: `${basename(dir)}/review/selection.json` }); } catch { /* ignore */ }
   return cands.length;
 }
 
@@ -846,6 +870,12 @@ function finalize(dir) {
       writeFileSync(cjPath, JSON.stringify(cj, null, 1), "utf8");
     } catch { /* keep content.json as-is on people.json parse error */ }
   }
+  try { __emitArtifact(cjPath, `${basename(dir)}/content.json`, "content", null); } catch { /* ignore */ }
+  try {
+    const pp = join(dir, "people.json");
+    if (existsSync(pp)) __emitArtifact(pp, `${basename(dir)}/people.json`, "people", null);
+  } catch { /* ignore */ }
+  try { __engine?.finalized({ slug: basename(dir), dir, kept: cj.manifest.counts.image, removed, counts: cj.manifest.counts }); } catch { /* ignore */ }
   console.log(`finalized ${dir}: kept ${cj.manifest.counts.image} images, removed ${removed}`);
 }
 
