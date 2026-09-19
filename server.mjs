@@ -1,14 +1,22 @@
-// server.mjs — P3 transport: SSE per Job + POST commands.
+// server.mjs — P3 transport + P5 review-first component.
 // Importable only: importing starts nothing. Call startServer({outDir,port}).
 // Uses jobs/store for truth, jobs/events for envelope/buffer/epoch,
-// jobs/commands for commandId idempotency. No engine imports.
+// jobs/commands for commandId idempotency, jobs/review for P5 semantics.
+// No engine imports.
 import { createServer } from "node:http";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { findJobById } from "./jobs/store.mjs";
+import { findJobById, writeJob } from "./jobs/store.mjs";
 import { createHub, formatSSE } from "./jobs/events.mjs";
 import { createCommandStore } from "./jobs/commands.mjs";
+import {
+  buildWarningPreview,
+  loadReviewModel,
+  saveReviewState,
+  selectionPathFor,
+  validateSelectionShape,
+} from "./jobs/review.mjs";
 
 const CLIENT_DIR = join(dirname(fileURLToPath(import.meta.url)), "web");
 
@@ -76,11 +84,282 @@ function writeEnvelope(res, env) {
   res.write(formatSSE(env));
 }
 
+async function readJsonBody(req) {
+  let raw = "";
+  for await (const chunk of req) {
+    raw += chunk;
+    if (raw.length > 1_000_000) {
+      const e = new Error("body-too-large");
+      e.code = 413;
+      throw e;
+    }
+  }
+  if (!raw) return {};
+  return JSON.parse(raw);
+}
+
+function reviewBase(req) {
+  const host = req.headers?.host || "127.0.0.1";
+  return `http://${host}`;
+}
+
+function thumbsFor(req, jobId, selection) {
+  const base = reviewBase(req);
+  return (selection || []).map((r) => ({
+    seq: r.seq,
+    // localhost HTTP artifact pointer only. Never file://, never inline bytes.
+    url: `${base}/jobs/${encodeURIComponent(jobId)}/review/thumbs/${encodeURIComponent(String(r.seq))}`,
+  }));
+}
+
+function resolveThumbFile(outDir, job, seq) {
+  const selPath = selectionPathFor(outDir, job.slug, job.jobId);
+  let sel = null;
+  try {
+    sel = JSON.parse(readFileSync(selPath, "utf8"));
+  } catch {
+    return null;
+  }
+  const row = (Array.isArray(sel) ? sel : []).find((r) => Number(r?.seq) === Number(seq));
+  if (!row) return null;
+  const file = String(row.file ?? "");
+  if (!file || file.startsWith("file://") || file.startsWith("data:")) return null;
+  const jobDir = join(outDir, job.slug, "jobs", job.jobId);
+  const candidates = [
+    join(jobDir, file),
+    join(jobDir, "review", file),
+    join(jobDir, "review", "files", basename(file)),
+    join(outDir, job.slug, file),
+  ];
+  for (const c of candidates) {
+    try {
+      if (statSync(c).isFile()) return c;
+    } catch {
+      // next
+    }
+  }
+  return null;
+}
+
 async function handleWith(req, res, ctx) {
   const { outDir, hub, commands } = ctx;
   const u = new URL(req.url || "/", "http://127.0.0.1");
   const path = u.pathname;
   let m;
+
+  // P5 review: HTTP-pointer thumbnails. Must precede generic /review routes.
+  if ((m = path.match(/^\/jobs\/([^/]+)\/review\/thumbs\/([^/]+)$/))) {
+    const jobId = decodeURIComponent(m[1]);
+    const seqRaw = decodeURIComponent(m[2]);
+    if (req.method !== "GET") {
+      sendJson(res, 405, { error: { code: "method-not-allowed", message: "GET only" } });
+      return;
+    }
+    let found = null;
+    try {
+      found = findJobById(outDir, jobId);
+    } catch {
+      found = null;
+    }
+    if (!found) {
+      sendJson(res, 404, { error: { code: "not-found", message: "job not found" } });
+      return;
+    }
+    const abs = resolveThumbFile(outDir, found.job, seqRaw);
+    if (!abs) {
+      sendJson(res, 404, { error: { code: "not-found", message: `thumb not found for seq ${seqRaw}` } });
+      return;
+    }
+    try {
+      const data = readFileSync(abs);
+      const type = MIME[extname(abs).toLowerCase()] || "application/octet-stream";
+      res.writeHead(200, { "content-type": type, "content-length": data.length });
+      res.end(data);
+      return;
+    } catch {
+      sendJson(res, 404, { error: { code: "not-found", message: "thumb unreadable" } });
+      return;
+    }
+  }
+
+  // P5 review: non-persisting warning preview for a submitted draft.
+  if ((m = path.match(/^\/jobs\/([^/]+)\/review\/preview$/))) {
+    const jobId = decodeURIComponent(m[1]);
+    if (req.method !== "POST") {
+      sendJson(res, 405, { error: { code: "method-not-allowed", message: "POST only" } });
+      return;
+    }
+    let found = null;
+    try {
+      found = findJobById(outDir, jobId);
+    } catch {
+      found = null;
+    }
+    if (!found) {
+      sendJson(res, 404, { error: { code: "not-found", message: "job not found" } });
+      return;
+    }
+    let body = null;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      sendJson(res, 400, { error: { code: "invalid-json", message: "invalid JSON" } });
+      return;
+    }
+    const v = validateSelectionShape(body?.selection);
+    if (!v.ok) {
+      sendJson(res, 400, { error: { code: "invalid-selection", message: v.errors.join("; ") } });
+      return;
+    }
+    // Same shared logic as finalize validation. Writes nothing.
+    const preview = buildWarningPreview(v.selection);
+    sendJson(res, 200, { jobId, persisted: false, ...preview });
+    return;
+  }
+
+  // P5 review: warnings for the stored draft (non-persisting compute).
+  if ((m = path.match(/^\/jobs\/([^/]+)\/review\/warnings$/))) {
+    const jobId = decodeURIComponent(m[1]);
+    if (req.method !== "GET") {
+      sendJson(res, 405, { error: { code: "method-not-allowed", message: "GET only" } });
+      return;
+    }
+    let found = null;
+    try {
+      found = findJobById(outDir, jobId);
+    } catch {
+      found = null;
+    }
+    if (!found) {
+      sendJson(res, 404, { error: { code: "not-found", message: "job not found" } });
+      return;
+    }
+    const model = loadReviewModel(outDir, found.job);
+    sendJson(res, 200, {
+      jobId,
+      revision: model.revision,
+      fingerprint: model.fingerprint,
+      stale: model.stale,
+      persisted: false,
+      warnings: model.warnings,
+      duplicates: model.duplicates,
+      effectiveOrder: model.effectiveOrder,
+    });
+    return;
+  }
+
+  // P5 review: GET model + POST-only save.
+  if ((m = path.match(/^\/jobs\/([^/]+)\/review$/))) {
+    const jobId = decodeURIComponent(m[1]);
+    let found = null;
+    try {
+      found = findJobById(outDir, jobId);
+    } catch {
+      found = null;
+    }
+    if (!found) {
+      sendJson(res, 404, { error: { code: "not-found", message: "job not found" } });
+      return;
+    }
+    if (req.method === "GET") {
+      const model = loadReviewModel(outDir, found.job);
+      sendJson(res, 200, {
+        jobId,
+        slug: found.job.slug,
+        stage: found.job.stage,
+        revision: model.revision,
+        fingerprint: model.fingerprint,
+        stale: model.stale,
+        staleReason: model.staleReason,
+        selection: model.selection,
+        effectiveOrder: model.effectiveOrder,
+        warnings: model.warnings,
+        duplicates: model.duplicates,
+        thumbs: thumbsFor(req, jobId, model.selection),
+      });
+      return;
+    }
+    if (req.method === "POST") {
+      let body = null;
+      try {
+        body = await readJsonBody(req);
+      } catch (e) {
+        if (e?.code === 413) {
+          sendJson(res, 413, { ok: false, reason: "body-too-large", jobId });
+          return;
+        }
+        sendJson(res, 400, { ok: false, reason: "invalid-json", jobId });
+        return;
+      }
+      // POST-only writer: GET never mutates; only this path writes.
+      try {
+        if (!Number.isInteger(body?.editedFrom)) {
+          sendJson(res, 400, { ok: false, reason: "missing-revision", jobId });
+          return;
+        }
+        const v = validateSelectionShape(body.selection);
+        if (!v.ok) {
+          sendJson(res, 400, { ok: false, reason: "invalid-selection", detail: v.errors.join("; "), jobId });
+          return;
+        }
+        const saved = saveReviewState(outDir, found.job, { selection: v.selection, editedFrom: body.editedFrom });
+        writeJob(outDir, found.job);
+        try {
+          hub.emit(jobId, "review:selection-written", {
+            slug: found.job.slug,
+            count: saved.selection.length,
+            revision: saved.revision,
+            relPath: `${found.job.slug}/jobs/${jobId}/review/selection.json`,
+          });
+        } catch {
+          // emit never blocks save ack
+        }
+        try {
+          hub.emit(jobId, "artifact:written", {
+            kind: "selection",
+            relPath: `${found.job.slug}/jobs/${jobId}/review/selection.json`,
+            sha256: saved.fingerprint,
+            byteLength: Buffer.byteLength(JSON.stringify(saved.selection), "utf8"),
+          });
+        } catch {
+          // ignore
+        }
+        const preview = buildWarningPreview(saved.selection);
+        sendJson(res, 200, {
+          ok: true,
+          jobId,
+          revision: saved.revision,
+          fingerprint: saved.fingerprint,
+          warnings: preview.warnings,
+          duplicates: preview.duplicates,
+          effectiveOrder: preview.effectiveOrder,
+        });
+        return;
+      } catch (e) {
+        if (e?.code === "stale-conflict") {
+          const cur = loadReviewModel(outDir, found.job);
+          sendJson(res, 409, {
+            ok: false,
+            reason: "stale-conflict",
+            detail: e.message,
+            jobId,
+            revision: cur.revision,
+            fingerprint: cur.fingerprint,
+            stale: true,
+          });
+          return;
+        }
+        if (e?.code === "invalid-selection" || e?.code === "missing-revision") {
+          sendJson(res, 400, { ok: false, reason: e.code, detail: e.message, jobId });
+          return;
+        }
+        sendJson(res, 400, { ok: false, reason: "invalid-selection", detail: e?.message || "save failed", jobId });
+        return;
+      }
+    }
+    sendJson(res, 405, { error: { code: "method-not-allowed", message: "GET or POST only" } });
+    return;
+  }
 
   if ((m = path.match(/^\/jobs\/([^/]+)\/commands$/))) {
     const jobId = decodeURIComponent(m[1]);

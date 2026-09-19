@@ -3,42 +3,280 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Job Workspace (P0 scaffold)</title>
+<title>Job Workspace — Review</title>
 <style>
   :root { color-scheme: dark; }
-  body { margin: 0; font: 14px/1.5 system-ui, sans-serif; background: #0e0d0b; color: #f4f1e8; }
-  header { padding: 12px 16px; border-bottom: 1px solid #2a261e; }
-  main { display: grid; grid-template-columns: 220px 1fr 300px; gap: 0; min-height: 60vh; }
-  section, aside { padding: 16px; border-right: 1px solid #2a261e; }
-  aside { border-right: 0; }
-  footer { padding: 8px 16px; border-top: 1px solid #2a261e; color: #aaa398; }
-  .pill { display: inline-block; padding: 2px 10px; border: 1px solid #f2b84b; border-radius: 999px; color: #ffcc66; }
+  body { margin: 0; font: 14px/1.5 system-ui, sans-serif; background: #0E0D0B; color: #F4F1E8; }
+  header { padding: 10px 16px; border-bottom: 1px solid #2a261e; background: #15130F; }
+  #stepper { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; font-size: 12px; color: #AAA398; }
+  #stepper .st { padding: 2px 8px; border: 1px solid #2a261e; border-radius: 999px; }
+  #stepper .st.active { border-color: #F2B84B; color: #FFCC66; }
+  main { display: grid; grid-template-columns: 220px 1fr 300px; gap: 0; min-height: 62vh; }
+  /* P5: current-step pane goes WIDE at waiting_for_people_review */
+  body[data-stage="waiting_for_people_review"] main { grid-template-columns: 160px 1fr 220px; }
+  body[data-stage="waiting_for_people_review"] #pane-step { background: #15130F; }
+  section, aside { padding: 16px; border-right: 1px solid #2a261e; min-width: 0; }
+  aside { border-right: 0; background: #15130F; }
+  body[data-stage="waiting_for_people_review"] #pane-context { font-size: 12px; }
+  footer#log-strip { padding: 8px 16px; border-top: 1px solid #2a261e; color: #AAA398; background: #0E0D0B; max-height: 22vh; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; }
+  .pill { display: inline-block; padding: 2px 10px; border: 1px solid #F2B84B; border-radius: 999px; color: #FFCC66; font-size: 12px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
+  body[data-stage="waiting_for_people_review"] .cards { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  figure.card { margin: 0; border: 1px solid #2a261e; border-radius: 8px; padding: 8px; background: #1C1913; }
+  figure.card img { width: 100%; height: 140px; object-fit: cover; background: #0E0D0B; border-radius: 4px; }
+  .warn { color: #F2B84B; }
+  .err { color: #ff8888; }
+  .muted { color: #706A61; }
+  button, input[type="number"], input[type="text"] { font: inherit; }
+  button { background: #F2B84B; border: 1px solid #D99A2B; border-radius: 6px; padding: 6px 12px; cursor: pointer; color: #0E0D0B; }
+  button.ghost { background: transparent; color: #FFCC66; border-color: #F2B84B; }
+  input[type="number"] { width: 4em; background: #0E0D0B; color: #F4F1E8; border: 1px solid #2a261e; border-radius: 4px; padding: 2px 6px; }
+  #bulk-bar, #save-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+  #job-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  #job-bar input { background: #0E0D0B; color: #F4F1E8; border: 1px solid #2a261e; border-radius: 4px; padding: 4px 8px; min-width: 220px; }
 </style>
 </head>
-<body>
+<body data-stage="idle">
 <header>
-  <strong>Job Workspace</strong> <span class="pill">P0 scaffold</span>
-  <p>3-pane workspace shell (P0 placeholder). Future: workflow steps left, current step center wide, source/target/safety/evidence right, bottom log strip.</p>
+  <strong>Job Workspace</strong>
+  <!-- 3-pane workspace shell: workflow left, current step center (wide at review), context right, bottom log strip -->
+  <span class="pill" id="status-pill">MODE local · STAGE idle</span>
+  <div id="stepper" aria-label="pipeline steps"></div>
+  <div id="job-bar">
+    <label>Job <input id="job-id" type="text" placeholder="job_..." /></label>
+    <button id="load-btn" class="ghost">Load review</button>
+    <span class="muted" id="rev-label"></span>
+  </div>
 </header>
 <main>
   <section id="pane-workflow" aria-label="workflow steps">
     <h2>Workflow</h2>
-    <p>Placeholder for the step list (probe → run → review → dry → armed → upload).</p>
+    <ol id="workflow-list"></ol>
   </section>
   <section id="pane-step" aria-label="current step">
-    <h2>Current step</h2>
-    <p>Placeholder for the active step canvas. Review steps go wide here later.</p>
+    <h2 id="step-title">Current step</h2>
+    <div id="review-pane">
+      <p class="muted">Enter a Job ID, then Load review. Review stage goes wide; bottom log strip stays.</p>
+      <div id="bulk-bar">
+        <label>Bulk order <input id="bulk-ord" type="number" min="0" value="0" /></label>
+        <button id="bulk-set">Set checked only</button>
+        <button id="preview-btn" class="ghost">Warning preview</button>
+      </div>
+      <div id="dup-warn" class="warn" role="status"></div>
+      <div id="sort-preview" class="muted"></div>
+      <div class="cards" id="cards"></div>
+      <div id="save-bar">
+        <button id="save-btn">Save (POST only)</button>
+        <button id="reload-btn" class="ghost">Reload</button>
+        <span id="save-msg" role="status"></span>
+      </div>
+    </div>
   </section>
   <aside id="pane-context" aria-label="context">
     <h2>Context</h2>
-    <p>Placeholder for source / target / safety / evidence.</p>
+    <div id="ctx-source"></div>
+    <div id="ctx-safety"></div>
+    <div id="ctx-evidence"></div>
   </aside>
 </main>
-<footer id="log-strip" aria-label="log">log strip placeholder — per-Job events stream here later.</footer>
+<footer id="log-strip" aria-label="log">log strip — per-Job events stream here.</footer>
 <script>
-  // Vanilla placeholder. Future wiring: GET /jobs/:id, POST /jobs/:jobId/commands,
-  // GET /jobs/:jobId/events (SSE). No calls issued in P0.
-  console.log("job workspace P0 scaffold");
+(function () {
+  "use strict";
+  const SPINE = ["idle","probing","waiting_for_page_selection","scraping","waiting_for_people_review","finalizing","detecting_backend","dry_running","dry_passed","armed","uploading","done"];
+  const $ = (id) => document.getElementById(id);
+  const state = { jobId: null, job: null, model: null, thumbs: new Map(), es: null };
+
+  function ordOf(v) {
+    // Cosmetic/local only: invalid coerces to 0. Server reruns authoritative.
+    const n = Number(v);
+    return Number.isInteger(n) && n >= 0 ? n : 0;
+  }
+
+  function renderStepper(stage) {
+    const el = $("stepper");
+    el.textContent = "";
+    for (const s of [...SPINE, "failed", "cancelled"]) {
+      const d = document.createElement("span");
+      d.className = "st" + (s === stage ? " active" : "");
+      d.textContent = s;
+      el.appendChild(d);
+    }
+    const wl = $("workflow-list");
+    wl.textContent = "";
+    for (const s of SPINE) {
+      const li = document.createElement("li");
+      li.textContent = s + (s === stage ? " ←" : "");
+      wl.appendChild(li);
+    }
+  }
+
+  function setStage(stage) {
+    document.body.dataset.stage = stage || "idle";
+    renderStepper(stage);
+    $("step-title").textContent = stage === "waiting_for_people_review"
+      ? "Review people — wide"
+      : ("Current step: " + (stage || "—"));
+  }
+
+  async function tickStatus() {
+    if (!state.jobId) return;
+    try {
+      const r = await fetch("/jobs/" + encodeURIComponent(state.jobId));
+      if (!r.ok) return;
+      const body = await r.json();
+      const job = body.job;
+      if (!job) return;
+      state.job = job;
+      const blockers = (job.blockers || []).map((b) => b.type).join(",") || "—";
+      $("status-pill").textContent = "MODE local · STAGE " + job.stage + " · BLOCKER " + blockers;
+      setStage(job.stage);
+      $("ctx-source").innerHTML = "<p><b>Source</b><br>" + esc(job.source) + "<br><span class=muted>" + esc(job.group || "") + " · " + esc(job.slug) + "</span></p>";
+    } catch { /* display only */ }
+  }
+  setInterval(tickStatus, 1000);
+
+  function esc(s) {
+    return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function collect() {
+    // Component submits keep/order only. Thumbs stay HTTP pointers.
+    return [...document.querySelectorAll("#cards input[data-seq]")].map((c) => ({
+      seq: Number(c.dataset.seq),
+      file: c.dataset.file,
+      keep: c.checked,
+      order: ordOf(document.querySelector('input[data-ord="' + c.dataset.seq + '"]')?.value),
+    }));
+  }
+
+  function renderModel(model) {
+    state.model = model;
+    $("rev-label").textContent = "rev " + model.revision + (model.stale ? " · STALE" : "");
+    const bySeq = new Map((model.selection || []).map((r) => [Number(r.seq), r]));
+    const thumbBySeq = new Map((model.thumbs || []).map((t) => [Number(t.seq), t.url]));
+    state.thumbs = thumbBySeq;
+    const cards = $("cards");
+    cards.textContent = "";
+    for (const r of model.selection || []) {
+      const fig = document.createElement("figure");
+      fig.className = "card";
+      const img = document.createElement("img");
+      // HTTP-pointer thumbnails only. Never file://, never inline bytes.
+      img.src = thumbBySeq.get(Number(r.seq)) || "";
+      img.alt = "seq " + r.seq;
+      img.loading = "lazy";
+      const cap = document.createElement("figcaption");
+      cap.innerHTML = "# seq=" + r.seq + " " + esc(r.file) +
+        "<br><label><input type='checkbox' data-seq='" + r.seq + "' data-file='" + esc(r.file) + "'" + (r.keep ? " checked" : "") + "> keep</label>" +
+        "<br><label>order <input type='number' data-ord='" + r.seq + "' min='0' value='" + ordOf(r.order) + "'></label>";
+      fig.appendChild(img);
+      fig.appendChild(cap);
+      cards.appendChild(fig);
+    }
+    renderWarnings(model);
+  }
+
+  function renderWarnings(model) {
+    const dups = model.duplicates || [];
+    $("dup-warn").textContent = dups.length
+      ? "warn: duplicate orders: " + dups.map((d) => d.order + " (seq " + d.seqs.join(",") + ")").join("; ")
+      : "";
+    const eff = model.effectiveOrder || [];
+    $("sort-preview").textContent = eff.length
+      ? "effective sort (order,seq): " + eff.map((e) => e.seq + "@" + e.order).join(" → ")
+      : "";
+  }
+
+  async function loadReview() {
+    const id = $("job-id").value.trim();
+    if (!id) { $("save-msg").textContent = "enter a Job ID"; return; }
+    state.jobId = id;
+    connectLog();
+    await tickStatus();
+    const r = await fetch("/jobs/" + encodeURIComponent(id) + "/review");
+    if (r.status === 404) { $("save-msg").textContent = "no review draft for job"; return; }
+    const model = await r.json();
+    if (model.stale) $("save-msg").textContent = "stale draft — reload before saving";
+    renderModel(model);
+    logLine("review model rev " + model.revision + (model.stale ? " STALE" : ""));
+  }
+
+  async function doPreview() {
+    if (!state.jobId || !state.model) return;
+    const draft = collect();
+    // Server-computed non-persisting preview: writes nothing.
+    const r = await fetch("/jobs/" + encodeURIComponent(state.jobId) + "/review/preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ selection: draft }),
+    });
+    const body = await r.json();
+    renderWarnings({ duplicates: body.duplicates || [], effectiveOrder: body.effectiveOrder || [] });
+    $("save-msg").textContent = "preview: " + (body.warnings || []).join("; ");
+    logLine("preview warnings: " + JSON.stringify(body.warnings || []));
+  }
+
+  async function doSave() {
+    if (!state.jobId || !state.model) return;
+    const draft = collect();
+    const r = await fetch("/jobs/" + encodeURIComponent(state.jobId) + "/review", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ selection: draft, editedFrom: state.model.revision }),
+    });
+    const body = await r.json();
+    if (r.status === 409 || body.ok === false) {
+      // Stale conflict: reload, never last-wins.
+      $("save-msg").textContent = "conflict: " + (body.reason || "stale") + " — reloaded rev " + body.revision;
+      $("save-msg").className = "err";
+      logLine("save conflict: " + JSON.stringify(body));
+      await loadReview();
+      return;
+    }
+    $("save-msg").textContent = "saved rev " + body.revision;
+    $("save-msg").className = "";
+    logLine("saved rev " + body.revision);
+    await loadReview();
+  }
+
+  function connectLog() {
+    try { state.es?.close(); } catch { /* ignore */ }
+    const strip = $("log-strip");
+    try {
+      const es = new EventSource("/jobs/" + encodeURIComponent(state.jobId) + "/events");
+      state.es = es;
+      es.onmessage = (ev) => logLine(ev.data);
+      es.addEventListener("artifact:written", (ev) => logLine(ev.data));
+      es.addEventListener("review:selection-written", (ev) => logLine(ev.data));
+      es.onerror = () => { /* display only; GET resync heals */ };
+    } catch { /* ignore */ }
+  }
+
+  function logLine(s) {
+    const strip = $("log-strip");
+    const div = document.createElement("div");
+    div.textContent = new Date().toISOString() + " " + s;
+    strip.appendChild(div);
+    while (strip.children.length > 200) strip.removeChild(strip.firstChild);
+    strip.scrollTop = strip.scrollHeight;
+  }
+
+  $("load-btn").onclick = loadReview;
+  $("reload-btn").onclick = loadReview;
+  $("save-btn").onclick = doSave;
+  $("preview-btn").onclick = doPreview;
+  $("bulk-set").onclick = () => {
+    // Checked-only bulk assign (cosmetic): only checked rows take the value.
+    const v = ordOf($("bulk-ord").value);
+    document.querySelectorAll("#cards input[data-seq]:checked").forEach((c) => {
+      const o = document.querySelector('input[data-ord="' + c.dataset.seq + '"]');
+      if (o) o.value = v;
+    });
+  };
+  const q = new URLSearchParams(location.search).get("jobId");
+  if (q) { $("job-id").value = q; loadReview(); }
+})();
 </script>
 </body>
 </html>
