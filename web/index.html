@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Job Workspace (P0 scaffold)</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; font: 14px/1.5 system-ui, sans-serif; background: #0e0d0b; color: #f4f1e8; }
+  header { padding: 12px 16px; border-bottom: 1px solid #2a261e; }
+  main { display: grid; grid-template-columns: 220px 1fr 300px; gap: 0; min-height: 60vh; }
+  section, aside { padding: 16px; border-right: 1px solid #2a261e; }
+  aside { border-right: 0; }
+  footer { padding: 8px 16px; border-top: 1px solid #2a261e; color: #aaa398; }
+  .pill { display: inline-block; padding: 2px 10px; border: 1px solid #f2b84b; border-radius: 999px; color: #ffcc66; }
+</style>
+</head>
+<body>
+<header>
+  <strong>Job Workspace</strong> <span class="pill">P0 scaffold</span>
+  <p>3-pane workspace shell (P0 placeholder). Future: workflow steps left, current step center wide, source/target/safety/evidence right, bottom log strip.</p>
+</header>
+<main>
+  <section id="pane-workflow" aria-label="workflow steps">
+    <h2>Workflow</h2>
+    <p>Placeholder for the step list (probe → run → review → dry → armed → upload).</p>
+  </section>
+  <section id="pane-step" aria-label="current step">
+    <h2>Current step</h2>
+    <p>Placeholder for the active step canvas. Review steps go wide here later.</p>
+  </section>
+  <aside id="pane-context" aria-label="context">
+    <h2>Context</h2>
+    <p>Placeholder for source / target / safety / evidence.</p>
+  </aside>
+</main>
+<footer id="log-strip" aria-label="log">log strip placeholder — per-Job events stream here later.</footer>
+<script>
+  // Vanilla placeholder. Future wiring: GET /jobs/:id, POST /jobs/:jobId/commands,
+  // GET /jobs/:jobId/events (SSE). No calls issued in P0.
+  console.log("job workspace P0 scaffold");
+</script>
+</body>
+</html>
