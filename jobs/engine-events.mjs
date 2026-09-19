@@ -1,4 +1,4 @@
-// jobs/engine-events.mjs — P4a minimal engine events (trio + row + artifact).
+// jobs/engine-events.mjs — P4a minimal + P4b full engine event catalog.
 // Importable emitter wrapping jobs/events.mjs hub, usable by Wrap cores
 // without CLI coupling. No CLI/browser imports. No writes, no console.
 // Behind flag first: JOB_EVENTS=1 or opts.emitEvents. UI path passes
@@ -14,6 +14,24 @@ export const P4A_TYPES = new Set([
   "upload:row-finished",
   "artifact:written",
 ]);
+
+// P4b full catalog (plan §P4 second half + Transport event catalog).
+// Challenge variants use `challenge:` prefix per envelope `domain:action`
+// convention (task shorthand challenge-seen/cleared/blocked).
+export const P4B_TYPES = new Set([
+  "upload:plan",
+  "challenge:seen",
+  "challenge:cleared",
+  "challenge:blocked",
+  "scrape:image-downloaded",
+  "scrape:image-failed",
+  "scrape:group-demoted",
+  "review:selection-written",
+  "review:finalized",
+  "upload:report-written",
+]);
+
+export const FULL_ENGINE_TYPES = new Set([...P4A_TYPES, ...P4B_TYPES]);
 
 export function isEngineEventsEnabled(opts = {}) {
   if (opts && typeof opts.emitEvents === "boolean") return opts.emitEvents;
@@ -64,7 +82,7 @@ export function createEngineEmitter({ hub = null, jobId = null, emitEvents } = {
 
   function safeEmit(type, payload) {
     if (!enabled) return null;
-    if (!P4A_TYPES.has(type)) return null;
+    if (!FULL_ENGINE_TYPES.has(type)) return null;
     try {
       return hub.emit(jobId, type, payload);
     } catch {
@@ -93,6 +111,85 @@ export function createEngineEmitter({ hub = null, jobId = null, emitEvents } = {
       "upload:row-finished",
       cleanPayload({ seq, order, name, status, detail: detail != null ? trunc(detail, 300) : null, group, form })
     );
+  }
+
+  // P4b full catalog. All payloads are notifications/references only
+  // (counts, relPaths, urls, truncated reasons) — never authoritative
+  // state (no job dump, no ledger, no inline bytes, no full results).
+
+  function uploadPlan({ slug = null, mode = null, total = null, plan = null } = {}) {
+    if (!Array.isArray(plan)) return null;
+    const cleanPlan = [];
+    for (const e of plan.slice(0, 200)) {
+      if (!e || typeof e !== "object") continue;
+      if (!e.group) continue;
+      cleanPlan.push(
+        cleanPayload({
+          group: trunc(e.group, 200),
+          action: e.action != null ? trunc(e.action, 40) : null,
+          target: e.target != null ? trunc(e.target, 300) : null,
+          via: e.via != null ? trunc(e.via, 40) : null,
+        })
+      );
+    }
+    return safeEmit("upload:plan", cleanPayload({ slug, mode, total, groups: cleanPlan.length, plan: cleanPlan }));
+  }
+
+  function challengeSeen({ url, phase = null } = {}) {
+    if (!url) return null;
+    return safeEmit("challenge:seen", cleanPayload({ url, phase }));
+  }
+
+  function challengeCleared({ url, elapsedMs = null } = {}) {
+    if (!url) return null;
+    return safeEmit("challenge:cleared", cleanPayload({ url, elapsedMs }));
+  }
+
+  function challengeBlocked({ url, reason = null, phase = null } = {}) {
+    if (!url) return null;
+    return safeEmit(
+      "challenge:blocked",
+      cleanPayload({ url, reason: reason != null ? trunc(reason, 200) : null, phase })
+    );
+  }
+
+  function imageDownloaded({ seq, file = null, byteLength = null, bytes = null, via = null, url = null } = {}) {
+    if (seq == null) return null;
+    const len = byteLength ?? bytes;
+    if (len != null && (!Number.isInteger(len) || len < 0)) return null;
+    return safeEmit("scrape:image-downloaded", cleanPayload({ seq, file, byteLength: len, via, url }));
+  }
+
+  function imageFailed({ seq, src = null, error = null, via = null } = {}) {
+    if (seq == null) return null;
+    return safeEmit(
+      "scrape:image-failed",
+      cleanPayload({ seq, src, error: error != null ? trunc(error, 200) : null, via })
+    );
+  }
+
+  function groupDemoted({ url = null, seq, previous = null, demoted = null, kept = null, reason = null } = {}) {
+    if (seq == null) return null;
+    return safeEmit(
+      "scrape:group-demoted",
+      cleanPayload({ url, seq, previous, demoted, kept, reason: reason != null ? trunc(reason, 200) : null })
+    );
+  }
+
+  function selectionWritten({ slug = null, dir = null, count = null, relPath = null } = {}) {
+    if (count == null && !slug && !dir) return null;
+    return safeEmit("review:selection-written", cleanPayload({ slug, dir, count, relPath }));
+  }
+
+  function finalized({ slug = null, dir = null, kept = null, removed = null, counts = null } = {}) {
+    if (!slug && !dir) return null;
+    return safeEmit("review:finalized", cleanPayload({ slug, dir, kept, removed, counts }));
+  }
+
+  function reportWritten({ slug = null, mode = null, total = null, byStatus = null, relPath = null } = {}) {
+    if (!mode && total == null && !slug) return null;
+    if (byStatus != null && (typeof byStatus !== "object" || Array.isArray(byStatus))) return null;
+    return safeEmit("upload:report-written", cleanPayload({ slug, mode, total, byStatus, relPath }));
   }
 
   function artifactWritten(input = {}) {
@@ -131,6 +228,16 @@ export function createEngineEmitter({ hub = null, jobId = null, emitEvents } = {
     urlFinished,
     urlFailed,
     rowFinished,
+    uploadPlan,
+    challengeSeen,
+    challengeCleared,
+    challengeBlocked,
+    imageDownloaded,
+    imageFailed,
+    groupDemoted,
+    selectionWritten,
+    finalized,
+    reportWritten,
     artifactWritten,
     artifactFromFile,
   };

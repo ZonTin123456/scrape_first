@@ -18,7 +18,7 @@ import { createDepartment } from "./lib/target-creation.mjs";
 import { createHub } from "../jobs/events.mjs";
 import { createEngineEmitter } from "../jobs/engine-events.mjs";
 
-// P4a minimal engine events: row-finished + artifact, behind JOB_EVENTS=1 only.
+// P4b full engine event catalog behind JOB_EVENTS=1 only.
 // Disabled by default so CLI terminal/files are exactly as before.
 const __engineOn = process.env.JOB_EVENTS === "1";
 const __engineHub = __engineOn ? createHub() : null;
@@ -287,6 +287,7 @@ const missingGroups = []; // unresolved target groups shared with creation below
     console.log(`  rows: ${people.length} total (see report for per-row status)`);
   }
 }
+try { __engine?.uploadPlan({ slug, mode: SAVE ? "save" : "dry", total: people.length, plan: uploadPlan }); } catch { /* ignore */ }
 // auto-create missing departments (save mode, zero-map path only).
 // Pinned --map files cannot learn new departments: refuse and point at discovery.
 if (SAVE && !TO && missingGroups.length && MAP) {
@@ -514,6 +515,7 @@ const report = {
 const reportPath = join(uploaderDir, `report-${slug}.json`);
 writeFileSync(reportPath, JSON.stringify(report, null, 1), "utf8");
 __emitArtifact(reportPath, `report-${slug}.json`, "upload-report", null);
+try { __engine?.reportWritten({ slug, mode: report.mode, total: report.total, byStatus: report.by_status, relPath: `report-${slug}.json` }); } catch { /* ignore */ }
 console.log(`mode=${report.mode} total=${report.total} ${JSON.stringify(report.by_status)}`);
 console.log(`report: ${reportPath}`);
 const failed = results.some((r) => r.status === "failed");
