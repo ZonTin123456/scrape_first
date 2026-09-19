@@ -1,11 +1,14 @@
-// server.mjs — P0 scaffold seam for the local job workspace.
-// Importable only: importing this module starts nothing. Call
-// `startServer({ outDir, port })` to serve the static client plus stub job
-// endpoints in a single Node process.
+// server.mjs — P3 transport: SSE per Job + POST commands.
+// Importable only: importing starts nothing. Call startServer({outDir,port}).
+// Uses jobs/store for truth, jobs/events for envelope/buffer/epoch,
+// jobs/commands for commandId idempotency. No engine imports.
 import { createServer } from "node:http";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { findJobById } from "./jobs/store.mjs";
+import { createHub, formatSSE } from "./jobs/events.mjs";
+import { createCommandStore } from "./jobs/commands.mjs";
 
 const CLIENT_DIR = join(dirname(fileURLToPath(import.meta.url)), "web");
 
@@ -69,7 +72,12 @@ function serveStatic(req, res, pathname) {
   }
 }
 
-async function handle(req, res) {
+function writeEnvelope(res, env) {
+  res.write(formatSSE(env));
+}
+
+async function handleWith(req, res, ctx) {
+  const { outDir, hub, commands } = ctx;
   const u = new URL(req.url || "/", "http://127.0.0.1");
   const path = u.pathname;
   let m;
@@ -100,51 +108,128 @@ async function handle(req, res) {
       sendJson(res, 400, { accepted: false, reason: "missing-commandId", jobId, commandId: null });
       return;
     }
-    sendJson(res, 200, { accepted: false, reason: "not-implemented", jobId, commandId });
+    const type = body?.type ?? null;
+    if (typeof type !== "string" || !type) {
+      sendJson(res, 400, { accepted: false, reason: "missing-type", jobId, commandId });
+      return;
+    }
+    const payload = body?.payload ?? {};
+    const disposition = commands.execute({ outDir, jobId, commandId, type, payload });
+    sendJson(res, 200, disposition);
     return;
   }
 
   if ((m = path.match(/^\/jobs\/([^/]+)\/events$/))) {
     const jobId = decodeURIComponent(m[1]);
     if (req.method !== "GET") {
-      sendJson(res, 405, { error: { code: "method-not-allowed", message: "GET only (P0 stub)" } });
+      sendJson(res, 405, { error: { code: "method-not-allowed", message: "GET only" } });
       return;
     }
-    // Cursor inputs accepted for forward compatibility; P0 replays the stub envelope.
-    void u.searchParams.get("since");
-    void req.headers["last-event-id"];
-    const streamId = "stub-1";
-    const seq = 1;
-    const envelope = {
-      v: 1,
-      streamId,
-      seq,
-      jobId,
-      type: "job:resynced",
-      at: new Date().toISOString(),
-      payload: { reason: "p0-stub" },
-    };
-    const frame = `id: ${streamId}:${seq}\nevent: job:resynced\ndata: ${JSON.stringify(envelope)}\n\n`;
+    let known = null;
+    try {
+      known = findJobById(outDir, jobId);
+    } catch {
+      known = null;
+    }
+    if (!hub.getStream(jobId)) {
+      hub.emit(jobId, "job:resynced", { reason: "stream-open" });
+    }
+    const lastId = req.headers["last-event-id"] ?? null;
+    const sinceRaw = u.searchParams.get("since");
+    const cursorRaw = lastId ?? sinceRaw ?? null;
+    const replayed = hub.replay(jobId, cursorRaw);
+    let toSend;
+    if (replayed.mode === "reset") {
+      const resetEnv = hub.emit(jobId, "job:resynced", {
+        reset: true,
+        reason: replayed.reason,
+        hint: "GET /jobs/:id",
+      });
+      toSend = [resetEnv];
+    } else {
+      toSend = replayed.events;
+      if (toSend.length === 0 && cursorRaw == null) {
+        // welcome with empty buffer cannot happen (stream-open emitted),
+        // but guard: ensure caller gets a cursor.
+        const cur = hub.getStream(jobId);
+        if (cur && cur.buffered === 0) {
+          toSend = [hub.emit(jobId, "job:resynced", { reason: "stream-open" })];
+        }
+      }
+    }
+    const once = u.searchParams.get("once");
+    const live = u.searchParams.get("live");
+    const finiteRequested = once === "1" || live === "0";
+    const finiteForUnknown = !known;
+    if (finiteRequested || finiteForUnknown) {
+      res.writeHead(200, {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-cache",
+        connection: "keep-alive",
+      });
+      for (const env of toSend) writeEnvelope(res, env);
+      res.end();
+      return;
+    }
+    // Live per-Job stream: replay buffered, then stay open for pushes.
     res.writeHead(200, {
       "content-type": "text/event-stream; charset=utf-8",
       "cache-control": "no-cache",
       connection: "keep-alive",
     });
-    res.end(frame);
+    for (const env of toSend) writeEnvelope(res, env);
+    if (typeof res.flushHeaders === "function") {
+      try {
+        res.flushHeaders();
+      } catch {
+        // ignore
+      }
+    }
+    const unsub = hub.subscribe(jobId, (env) => {
+      try {
+        writeEnvelope(res, env);
+      } catch {
+        // client gone
+      }
+    });
+    const cleanup = () => {
+      try {
+        unsub();
+      } catch {
+        // ignore
+      }
+    };
+    req.on("close", cleanup);
+    res.on("close", cleanup);
+    return;
+  }
+
+  if (path === "/jobs" && (req.method === "GET" || req.method === "HEAD")) {
+    sendJson(res, 200, { jobs: [] });
     return;
   }
 
   if ((m = path.match(/^\/jobs\/([^/]+)$/))) {
     const jobId = decodeURIComponent(m[1]);
     if (req.method !== "GET") {
-      sendJson(res, 405, { error: { code: "method-not-allowed", message: "GET only (P0 stub)" } });
+      sendJson(res, 405, { error: { code: "method-not-allowed", message: "GET only" } });
       return;
     }
-    sendJson(res, 404, {
-      job: null,
-      jobId,
-      error: { code: "not-found", message: "job not found (P0 stub)" },
-    });
+    let found = null;
+    try {
+      found = findJobById(outDir, jobId);
+    } catch {
+      found = null;
+    }
+    if (!found) {
+      sendJson(res, 404, {
+        job: null,
+        jobId,
+        error: { code: "not-found", message: "job not found" },
+      });
+      return;
+    }
+    sendJson(res, 200, { job: found.job });
     return;
   }
 
@@ -152,16 +237,18 @@ async function handle(req, res) {
     serveStatic(req, res, path);
     return;
   }
-  sendJson(res, 404, { error: { code: "not-found", message: "unknown route (P0 stub)" } });
+  sendJson(res, 404, { error: { code: "not-found", message: "unknown route" } });
 }
 
 export async function startServer({ outDir = "./out", port = 0 } = {}) {
   const resolvedOut = resolve(process.cwd(), outDir);
   mkdirSync(resolvedOut, { recursive: true });
+  const hub = createHub();
+  const commands = createCommandStore({ hub });
 
   const server = createServer((req, res) => {
-    handle(req, res).catch(() => {
-      if (!res.headersSent) sendJson(res, 500, { error: { code: "internal", message: "stub failure" } });
+    handleWith(req, res, { outDir: resolvedOut, hub, commands }).catch(() => {
+      if (!res.headersSent) sendJson(res, 500, { error: { code: "internal", message: "failure" } });
       else res.end();
     });
   });
@@ -185,5 +272,5 @@ export async function startServer({ outDir = "./out", port = 0 } = {}) {
       }
       server.close((e) => (e ? bad(e) : ok()));
     });
-  return { server, port: actual, outDir: resolvedOut, url, close };
+  return { server, port: actual, outDir: resolvedOut, url, close, hub, commands };
 }
