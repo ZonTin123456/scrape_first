@@ -8,7 +8,7 @@
 // Never imports CLI entries (reuse boundary: UI imports Lift + Wrap cores only).
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { advance, appendLedger, canAdvance, failJob, finishUpload, SPINE, writeJob } from "./store.mjs";
+import { advance, appendLedger, canAdvance, claimEngineOp, failJob, finishUpload, releaseEngineOp, SPINE, writeJob } from "./store.mjs";
 import {
   beginUploadWithProof,
   grantArmFromSafety,
@@ -423,6 +423,33 @@ export async function runPipelineAsJobOps({
 } = {}) {
   if (!outDir || typeof outDir !== "string") fail("bad-outDir", "runPipelineAsJobOps: outDir required");
   if (!job || typeof job !== "object" || !job.jobId) fail("bad-job", "runPipelineAsJobOps: job record required");
+  // P8 single-flight v1: one active engine op globally. A second pipeline run
+  // while one holds the claim is refused (code single-flight). Waits may sit:
+  // the claim covers execution only and releases in finally (even on throw).
+  claimEngineOp(job.jobId, "pipeline");
+  try {
+    return await runPipelineClaimed({
+      outDir, job, steps, order, autoApprove, hub, runners, approvals, dryInputs, armInputs, rootDir, from,
+    });
+  } finally {
+    releaseEngineOp(job.jobId);
+  }
+}
+
+async function runPipelineClaimed({
+  outDir,
+  job,
+  steps = null,
+  order = "",
+  autoApprove = false,
+  hub = null,
+  runners = {},
+  approvals = {},
+  dryInputs = null,
+  armInputs = null,
+  rootDir = null,
+  from = null,
+} = {}) {
   const list = parseSteps(steps == null ? [...ALL] : steps);
   writeJob(outDir, job);
   emit(hub, job.jobId, "job:advanced", { pipeline: "started", steps: list, autoApprove });
