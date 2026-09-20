@@ -12,6 +12,31 @@ function linkTarget(route, page) {
   return page === "overview" ? `/jobs/${id}` : `/jobs/${id}/${page}`;
 }
 
+// Image card: display server-provided probe metadata only (verbatim, all
+// escaped). Thumbnails render only for remote http(s) sources — never
+// file:// or inline data. Keep checkbox wiring (data-pimg) is identical to
+// the old table, so keep/unkeep semantics and the save shape are unchanged.
+function imageCard(im, slug) {
+  const src = typeof im.src === "string" ? im.src : "";
+  const remote = src.startsWith("http://") || src.startsWith("https://");
+  const dims = im.width != null && im.height != null ? `${im.width}×${im.height}` : "";
+  const note = im.note || im.caption_text || im.alt || "";
+  const thumb = remote
+    ? `<img src="${esc(src)}" alt="" loading="lazy" style="width:100%;height:120px;object-fit:cover;border-radius:4px;border:1px solid var(--bd)">`
+    : `<div style="width:100%;height:120px;border-radius:4px;background:var(--nt-bg);border:1px solid var(--nt-bd);display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:11px">no preview</div>`;
+  return (
+    `<div style="border:1px solid var(--bd);border-radius:8px;padding:10px;background:#fff">` +
+    `${thumb}` +
+    `<p style="margin:8px 0 4px"><label><input type="checkbox" data-pimg ${im.keep !== false ? "checked" : ""} data-pslug="${esc(slug)}" data-pseq="${im.seq}"> keep</label> ` +
+    `<b>seq ${im.seq}</b>${dims ? ` <span class="small muted">${esc(dims)}</span>` : ""}</p>` +
+    (im.name ? `<p style="margin:0 0 4px"><b>${esc(im.name)}</b>${im.position ? ` <span class="small muted">${esc(im.position)}</span>` : ""}</p>` : "") +
+    (note ? `<p class="small" style="margin:0 0 4px">${esc(note)}</p>` : "") +
+    (im.section ? `<p class="small muted" style="margin:0 0 4px">section: ${esc(im.section)}</p>` : "") +
+    (src ? `<p class="small muted" style="margin:0;word-break:break-all">${esc(src)}</p>` : "") +
+    `</div>`
+  );
+}
+
 export async function render(el, api, route) {
   let timer = null;
 
@@ -77,16 +102,10 @@ export async function render(el, api, route) {
       links
         .map(
           (l, i) =>
-            `<div class="card"><h2>Images — ${esc(l.slug || `link ${i + 1}`)}</h2>` +
-            `<table class="q"><tr><th>Keep</th><th>Seq</th><th>Detail</th></tr>` +
-            (l.images || [])
-              .map(
-                (im) =>
-                  `<tr><td><input type="checkbox" data-pimg ${im.keep !== false ? "checked" : ""} data-pslug="${esc(l.slug || "")}" data-pseq="${im.seq}"></td>` +
-                  `<td>${im.seq}</td><td class="small muted">${esc(im.file || im.src || "")}</td></tr>`,
-              )
-              .join("") +
-            `</table></div>`,
+            `<div class="card"><h2>Images — ${esc(l.slug || `link ${i + 1}`)} <span class="small muted">${(l.images || []).length} discovered</span></h2>` +
+            `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">` +
+            (l.images || []).map((im) => imageCard(im, l.slug || "")).join("") +
+            `</div></div>`,
         )
         .join("") +
       `<div class="card"><h2>Approve &amp; scrape</h2>` +

@@ -46,12 +46,17 @@ function probeInfo(outDir, slug) {
     title: probe.source_title ?? null,
     counts: probe.counts ?? null,
     images: (probe.images || []).map((im) => ({
+      // Display-only pass-through of engine probe metadata (verbatim, no
+      // filtering or classification here). Save path uses seq/keep only.
       seq: im.seq,
+      src: im.src ?? null,
       width: im.width ?? null,
       height: im.height ?? null,
       name: im.name ?? null,
       position: im.position ?? null,
       alt: im.alt ?? null,
+      note: im.note ?? null,
+      caption_text: im.caption_text ?? null,
       section: im.section ?? null,
     })),
   };
