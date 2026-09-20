@@ -1,16 +1,15 @@
-// router.js — pathname router for the light shell (#39).
-// Parses location.pathname, lazy-loads the owning page module, renders into
-// #view. Legacy ?jobId= on / renders the job view. No stage logic here:
-// pages decide what to show from GET job/safety only. No auto-redirect.
+// router.js — pathname router for the light shell (#39 shell, #40 header).
+// Parses location.pathname, mounts shared header, lazy-loads the owning page
+// module into #view, mounts Activity for job routes. Legacy ?jobId= on /
+// renders the job view. No stage logic here: pages decide what to show from
+// GET job/safety only. Wrong-stage renders explain+link, never auto-redirect.
 "use strict";
 
 import * as api from "./api.js";
 
 const view = () => document.getElementById("view");
-const nav = () => document.getElementById("nav");
-const pill = () => document.getElementById("pill");
 
-let cleanup = null;
+let cleanups = [];
 
 export function parseRoute(pathname = location.pathname, search = location.search) {
   const q = new URLSearchParams(search);
@@ -29,73 +28,55 @@ export function parseRoute(pathname = location.pathname, search = location.searc
   return { name: "not-found", jobId: null };
 }
 
-function paintNav(route) {
-  const links = [{ href: "/", label: "Dashboard", on: route.name === "dashboard" }];
-  if (route.jobId) {
-    const id = encodeURIComponent(route.jobId);
-    links.push(
-      { href: `/jobs/${id}`, label: "Job", on: route.name === "overview" },
-      { href: `/jobs/${id}/pages`, label: "Pages", on: route.name === "pages" },
-      { href: `/jobs/${id}/review`, label: "Review", on: route.name === "review" },
-      { href: `/jobs/${id}/safety`, label: "Safety", on: route.name === "safety" },
-    );
-  }
-  nav().innerHTML = links
-    .map((l) => `<a data-nav href="${l.href}" class="${l.on ? "on" : ""}">${l.label}</a>`)
-    .join("");
-}
+const PAGE_MODULE = {
+  dashboard: "./pages/dashboard.js",
+  overview: "./pages/overview.js",
+  // #41/#42/#43 add pages, review, safety here.
+};
 
-// Interim job view (#39): proves deep-link shell + GET-first. Replaced by the
-// real Overview + shared header in #40. Not a placeholder for behavior.
-async function renderJobInterim(route) {
-  pill().textContent = `JOB ${route.jobId}`;
-  paintNav(route);
-  const el = view();
-  el.innerHTML = `<div class="card"><h2>Job <span class="small muted">${escapeHtml(route.jobId)}</span></h2><p class="muted">Loading…</p></div>`;
-  let data = null;
-  try {
-    data = await api.getJob(route.jobId);
-  } catch {
-    data = null;
-  }
-  const stage = data?.job?.stage ?? "unknown";
-  el.innerHTML =
-    `<div class="card"><h2>Job <span class="small muted">${escapeHtml(route.jobId)}</span></h2>` +
-    `<p>Stage: <b>${escapeHtml(String(stage))}</b></p>` +
-    `<p class="small muted">Full ${escapeHtml(route.name)} view ships in the next ticket. Job record loads correctly.</p>` +
-    `<p><a class="btn sec" data-nav href="/">Back to Dashboard</a></p></div>`;
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-}
-
-export async function render() {
-  if (cleanup) {
+function teardown() {
+  for (const c of cleanups) {
     try {
-      cleanup();
+      c();
     } catch {
       // ignore
     }
-    cleanup = null;
   }
+  cleanups = [];
+  document.getElementById("activity-mount").innerHTML = "";
+}
+
+export async function render() {
+  teardown();
   const route = parseRoute();
-  if (route.name === "dashboard") {
-    const mod = await import("./pages/dashboard.js");
-    pill().textContent = "Job Workspace";
-    paintNav(route);
-    cleanup = (await mod.render(view(), api)) || null;
-    return;
-  }
+  const { mount } = await import("./header.js");
+  cleanups.push(await mount(route));
+
   if (route.name === "not-found") {
-    pill().textContent = "Job Workspace";
-    paintNav(route);
+    document.getElementById("pill").textContent = "Job Workspace";
     view().innerHTML =
       `<div class="gate"><b>Unknown page.</b> No such workspace page. ` +
       `<a class="btn sec" data-nav href="/">Back to Dashboard</a></div>`;
     return;
   }
-  await renderJobInterim(route);
+  const modPath = PAGE_MODULE[route.name];
+  if (!modPath) {
+    // pages/review/safety land in #41–#43; interim card keeps deep links honest.
+    view().innerHTML =
+      `<div class="card"><h2>${route.name[0].toUpperCase()}${route.name.slice(1)} — next ticket</h2>` +
+      `<p class="small muted">This page ships in its ticket with full stage gating. Shell, header, and Activity already live.</p>` +
+      `<p><a class="btn sec" data-nav href="/jobs/${encodeURIComponent(route.jobId || "")}">Back to overview</a></p></div>`;
+    const { mount: mountActivity } = await import("./activity.js");
+    if (route.jobId) cleanups.push(mountActivity(route.jobId));
+    return;
+  }
+  const mod = await import(modPath);
+  const done = await mod.render(view(), api, route);
+  if (typeof done === "function") cleanups.push(done);
+  if (route.jobId) {
+    const { mount: mountActivity } = await import("./activity.js");
+    cleanups.push(mountActivity(route.jobId));
+  }
 }
 
 export function navigate(path) {
