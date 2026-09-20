@@ -31,7 +31,7 @@ export function parseRoute(pathname = location.pathname, search = location.searc
 const PAGE_MODULE = {
   dashboard: "./pages/dashboard.js",
   overview: "./pages/overview.js",
-  // #41/#42/#43 add pages, review, safety here.
+  pages: "./pages/pages.js",
 };
 
 function teardown() {
