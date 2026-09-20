@@ -28,6 +28,11 @@ export async function render(el, api, route) {
     const m = el.querySelector("#sf-msg");
     if (m) m.textContent = t;
   };
+  // Dry status lives next to the Dry button (not hidden in Detect).
+  const drySay = (t) => {
+    const m = el.querySelector("#sf-dry-msg");
+    if (m) m.textContent = t;
+  };
 
   async function paint() {
     let job = null;
@@ -75,7 +80,8 @@ export async function render(el, api, route) {
         ? `<button class="pri" id="sf-detect">Run Detect</button> <span class="small muted" id="sf-msg"></span>`
         : `<p class="small muted">Detect ${["dry_running", "dry_passed", "armed", "uploading", "done"].includes(stage) ? "completed." : "is not the current step."} <span id="sf-msg"></span></p>`) +
       `</div>` +
-      `<div class="warn"><b>Dry-run — safe, never saves.</b><br><button class="pri" id="sf-dry">Run dry-run</button>` +
+      `<div class="warn"><b>Dry-run — safe, never saves.</b><br><button class="pri" id="sf-dry" ${stage === "dry_running" ? "" : "disabled"}>Run dry-run</button> ` +
+      `<span class="small" id="sf-dry-msg">${stage === "dry_running" ? "" : "Available at stage dry_running."}</span>` +
       `<details style="margin-top:8px"><summary style="cursor:pointer;font-size:13px">Advanced — raw JSON payload (power users)</summary>` +
       `<textarea id="sf-json" rows="4">{}</textarea><br><button id="sf-dry-json">Run with JSON</button></details></div>` +
       (bundle
@@ -105,9 +111,13 @@ export async function render(el, api, route) {
       await paint();
     });
     el.querySelector("#sf-dry").addEventListener("click", async () => {
-      say("Dry-running with server defaults…");
+      drySay("Dry running with server defaults…");
       const r = await api.postCommand(job.jobId, "dry", {});
-      say(r.data?.accepted ? "Dry started." : `Refused: ${r.data?.reason || r.status}`);
+      if (r.data?.accepted) {
+        drySay("Dry recorded — G1 evaluated.");
+      } else {
+        drySay(`Dry refused: ${r.data?.reason || r.status}`);
+      }
       await paint();
     });
     el.querySelector("#sf-dry-json").addEventListener("click", async () => {
@@ -115,12 +125,16 @@ export async function render(el, api, route) {
       try {
         payload = JSON.parse(el.querySelector("#sf-json").value || "{}");
       } catch {
-        say("Advanced JSON invalid — nothing sent.");
+        drySay("Advanced JSON invalid — nothing sent.");
         return;
       }
-      say("Dry-running with JSON payload…");
+      drySay("Dry running with JSON payload…");
       const r = await api.postCommand(job.jobId, "dry", payload);
-      say(r.data?.accepted ? "Dry started." : `Refused: ${r.data?.reason || r.status}`);
+      if (r.data?.accepted) {
+        drySay("Dry recorded — G1 evaluated.");
+      } else {
+        drySay(`Dry refused: ${r.data?.reason || r.status}`);
+      }
       await paint();
     });
     el.querySelector("#sf-arm").addEventListener("click", async () => {

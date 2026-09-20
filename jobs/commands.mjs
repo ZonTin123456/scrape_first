@@ -9,6 +9,7 @@ import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { assertArtifactPointer } from "./events.mjs";
 import { beginUploadWithProof, grantArmFromSafety, recordDryPass } from "./safety.mjs";
+import { buildDryDefaults } from "./dry-defaults.mjs";
 import { runUiStepSync, startUiStep } from "./pipeline.mjs";
 
 export const SUPPORTED = new Set(["cancel", "advance", "retry", "resume", "artifact", "dry", "arm", "begin-upload", "finish-row", "probe", "approve-page", "scrape", "finalize", "detect", "run-step"]);
@@ -147,26 +148,38 @@ export function createCommandStore({ hub = null, engine = null } = {}) {
         emitSafe(hub, jobId, "job:advanced", { stage: job.stage, reason: rreason });
         reason = "resumed";
       } else if (type === "dry") {
-        // P6 G1: record a dry pass. Payload carries the dry inputs; the gate
-        // (row policy + guard + snapshot) is enforced in jobs/safety and
-        // fails closed — the job stays dry_running on gate1-failed.
+        // P6 G1: record a dry pass. An explicit Advanced payload (any dry key
+        // supplied) runs exactly as before; an empty or keyless payload builds the authoritative inputs server-side from the
+        // finalized selection + scrape people + detect snapshot (one-click
+        // dry, locked #35/#43). The gate (row policy + guard + snapshot) is
+        // enforced in jobs/safety and fails closed — the job stays dry_running
+        // on gate1-failed or missing/invalid inputs.
         const p = payload ?? {};
+        // Any supplied dry key takes the explicit Advanced path (exact legacy
+        // behavior, including fail-closed refusals); a bare {} (or a payload
+        // with no dry keys) builds the authoritative inputs server-side.
+        const DRY_KEYS = ["snapshotInput", "snapshotId", "rows", "mapMode", "guardStatus", "listedPath",
+          "destinationOrigin", "targetDepts", "wouldCreate", "identity", "unmapped", "shots"];
+        const explicit = DRY_KEYS.some((k) => p[k] !== undefined);
+        const dryInputs = explicit
+          ? {
+              snapshotInput: p.snapshotInput ?? null,
+              snapshotId: p.snapshotId ?? null,
+              rows: p.rows ?? [],
+              mapMode: p.mapMode ?? "pinned",
+              guardStatus: p.guardStatus ?? "green",
+              listedPath: p.listedPath ?? null,
+              destinationOrigin: p.destinationOrigin ?? null,
+              targetDepts: p.targetDepts ?? [],
+              wouldCreate: p.wouldCreate ?? [],
+              identity: p.identity ?? null,
+              unmapped: p.unmapped ?? [],
+              shots: p.shots ?? [],
+            }
+          : buildDryDefaults(outDir, job);
         let result;
         try {
-          result = recordDryPass(outDir, job, {
-            snapshotInput: p.snapshotInput ?? null,
-            snapshotId: p.snapshotId ?? null,
-            rows: p.rows ?? [],
-            mapMode: p.mapMode ?? "pinned",
-            guardStatus: p.guardStatus ?? "green",
-            listedPath: p.listedPath ?? null,
-            destinationOrigin: p.destinationOrigin ?? null,
-            targetDepts: p.targetDepts ?? [],
-            wouldCreate: p.wouldCreate ?? [],
-            identity: p.identity ?? null,
-            unmapped: p.unmapped ?? [],
-            shots: p.shots ?? [],
-          });
+          result = recordDryPass(outDir, job, dryInputs);
         } catch (e) {
           emitSafe(hub, jobId, "gate:failed", { gate: "G1", reason: e?.code ?? "gate1-failed" });
           throw e;
