@@ -68,12 +68,17 @@ describe("startServer stub roundtrip", () => {
     await app?.close();
   });
 
-  it("serves the static client shell with the 3-pane placeholder", async () => {
+  it("serves the static client shell at / (light shell after #44 flip)", async () => {
     const r = await fetch(`${app.url}/`);
     assert.equal(r.status, 200);
     assert.match(r.headers.get("content-type") || "", /text\/html/);
     const html = await r.text();
-    assert.match(html, /3-pane/);
+    assert.match(html, /light-job-workspace/);
+  });
+
+  it("old single-page file retained on disk with its 3-pane marker (#44 rollback)", async () => {
+    const old = readFileSync(join(root, "web", "index.html"), "utf8");
+    assert.match(old, /3-pane/);
   });
 
   it("GET /jobs/:id returns forward-compat not-found", async () => {

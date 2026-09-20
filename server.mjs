@@ -44,8 +44,10 @@ function sendJson(res, status, obj) {
 
 function serveStatic(req, res, pathname) {
   let rel;
+  // #44 cutover (single flip): root serves the new light shell. The old
+  // single-page UI stays on disk at /index.html for one release (rollback).
   try {
-    rel = pathname === "/" ? "/index.html" : decodeURIComponent(pathname);
+    rel = pathname === "/" ? "/shell.html" : decodeURIComponent(pathname);
   } catch {
     res.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
     res.end("bad path");

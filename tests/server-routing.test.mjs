@@ -63,11 +63,13 @@ describe("deep-link intercept (#39)", () => {
     assert.match(unknownJson.headers.get("content-type") || "", /application\/json/);
   });
 
-  it("root still serves the old UI (flip lands in #44)", async () => {
+  it("root serves the new shell after flip; old file retained at /index.html (#44)", async () => {
     const r = await fetch(`${app.url}/`, { headers: HTML });
     assert.equal(r.status, 200);
-    const html = await r.text();
-    assert.doesNotMatch(html, /light-job-workspace/);
+    assert.match(await r.text(), /light-job-workspace/);
+    const old = await fetch(`${app.url}/index.html`, { headers: HTML });
+    assert.equal(old.status, 200);
+    assert.doesNotMatch(await old.text(), /light-job-workspace/);
   });
 
   it("POST mutations never divert to HTML", async () => {
