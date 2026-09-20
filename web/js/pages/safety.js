@@ -7,6 +7,7 @@
 "use strict";
 
 import { esc } from "../header.js";
+import { nextFor } from "../stage-map.js";
 
 const PRE = new Set([
   "idle",
@@ -42,9 +43,13 @@ export async function render(el, api, route) {
     }
     const stage = job.stage;
     if (PRE.has(stage)) {
+      // Wrong-stage: destination derives from the single stage map (never a
+      // hardcoded guess), so cards cannot point at each other in a loop.
+      const [label, page] = nextFor(stage);
       el.innerHTML =
         `<h1>Safety / Dry / Real Upload</h1><div class="gate"><b>Safety is not available</b> while the job is at stage <b>${esc(stage)}</b>. ` +
-        `Finalize People Review first. <a class="btn sec" data-nav href="${linkTarget(route, "review")}">Go to review</a></div>`;
+        `Next step is “${esc(label)}” on the ${esc(page)} page. ` +
+        `<a class="btn sec" data-nav href="${linkTarget(route, page)}">Go to the right page</a></div>`;
       return stage;
     }
     try {

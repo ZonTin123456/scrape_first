@@ -56,6 +56,13 @@ export function nextFor(stage) {
   return NEXT[stage] || ["Open overview", "overview"];
 }
 
+// Wrong-stage destination: the single mapping every gate card derives its
+// link from. Depending only on stage (never on the current page) makes
+// page-to-page loops impossible: the target always owns the stage.
+export function pageFor(stage) {
+  return nextFor(stage)[1];
+}
+
 export function stepIndex(stage) {
   return ORDER.indexOf(stage);
 }

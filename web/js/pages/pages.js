@@ -6,6 +6,7 @@
 "use strict";
 
 import { esc } from "../header.js";
+import { nextFor } from "../stage-map.js";
 
 function linkTarget(route, page) {
   const id = encodeURIComponent(route.jobId);
@@ -60,14 +61,13 @@ export async function render(el, api, route) {
     const stage = job.stage;
 
     if (stage !== "waiting_for_page_selection" && stage !== "scraping") {
-      const hint =
-        stage === "idle" || stage === "probing"
-          ? "Run Probe first."
-          : "Pages are already approved for this job.";
-      const go = stage === "idle" || stage === "probing" ? "overview" : "review";
+      // Wrong-stage: destination derives from the single stage map (never a
+      // hardcoded guess), so cards cannot point at each other in a loop.
+      const [label, page] = nextFor(stage);
       el.innerHTML =
-        `<h1>Page Selection</h1><div class="gate"><b>Page Selection is not available</b> while the job is at stage <b>${esc(stage)}</b>. ${esc(hint)} ` +
-        `<a class="btn sec" data-nav href="${linkTarget(route, go)}">Go to the right page</a></div>`;
+        `<h1>Page Selection</h1><div class="gate"><b>Page Selection is not available</b> while the job is at stage <b>${esc(stage)}</b>. ` +
+        `Next step is “${esc(label)}” on the ${esc(page)} page. ` +
+        `<a class="btn sec" data-nav href="${linkTarget(route, page)}">Go to the right page</a></div>`;
       return stage;
     }
 
