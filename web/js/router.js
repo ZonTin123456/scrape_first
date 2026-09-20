@@ -32,6 +32,7 @@ const PAGE_MODULE = {
   dashboard: "./pages/dashboard.js",
   overview: "./pages/overview.js",
   pages: "./pages/pages.js",
+  review: "./pages/review.js",
 };
 
 function teardown() {
