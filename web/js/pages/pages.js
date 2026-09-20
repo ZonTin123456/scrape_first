@@ -109,6 +109,9 @@ export async function render(el, api, route) {
         )
         .join("") +
       `<div class="card"><h2>Approve &amp; scrape</h2>` +
+      (job.pageApproval?.approved === true
+        ? `<p class="small">Approved ✓${job.pageApproval.at ? ` (${esc(String(job.pageApproval.at).slice(0, 19).replace("T", " "))})` : ""} — Scrape when ready. Saving new pages invalidates approval.</p>`
+        : `<p class="small muted">Not approved yet — Save, then Approve. Scrape stays available after approval.</p>`) +
       `<button class="pri" id="pg-save">Save pages</button> <button id="pg-approve">Approve pages</button> <button id="pg-scrape">Scrape</button> ` +
       `<span class="small muted" id="pg-msg"></span></div>`;
 

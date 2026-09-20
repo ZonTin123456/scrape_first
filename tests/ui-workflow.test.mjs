@@ -5,7 +5,7 @@
 // Run: node --test tests/ui-workflow.test.mjs
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -187,7 +187,7 @@ describe("UI workflow: POST /jobs create + GET /jobs list", () => {
 });
 
 describe("UI workflow: Probe -> Approve -> Scrape -> Finalize -> Detect via POST", () => {
-  it("drives spine end-to-end to detecting_backend with ledger + SSE truth", async () => {
+  it("drives spine end-to-end to dry_running with ledger + SSE truth", async () => {
     const outDir = tmpOut();
     const calls = [];
     const app = await startServer({ outDir, port: 0, engine: fakeEngine(calls) });
@@ -213,14 +213,26 @@ describe("UI workflow: Probe -> Approve -> Scrape -> Finalize -> Detect via POST
       assert.deepEqual(probeReplay.json, probe.json);
       assert.deepEqual(calls.filter((x) => x === "probe").length, 1, "replay never executes twice");
 
+      // Stand in for real probe staging output (fake engine writes none).
+      mkdirSync(join(outDir, "_staging", "s"), { recursive: true });
+      writeFileSync(join(outDir, "_staging", "picked-links.json"), JSON.stringify([
+        { url: "https://a.go.th/x", slug: "s", keep: true },
+      ]), "utf8");
+      writeFileSync(join(outDir, "_staging", "s", "probe.json"), JSON.stringify({
+        source_url: "https://a.go.th/x", source_title: "X", counts: { image: 0 }, images: [],
+      }), "utf8");
+      writeFileSync(join(outDir, "_staging", "s", "picked-images.json"), JSON.stringify([]), "utf8");
+
       const approve = await postCommand(app.url, jobId, { commandId: "u-appr", type: "approve-page", payload: {} });
       assert.equal(approve.json.accepted, true);
       assert.equal(approve.json.reason, "page-approved");
-      assert.equal((await getJob(app.url, jobId)).json.job.stage, "scraping");
+      // Approval records durability only: the wait stage holds until Scrape.
+      assert.equal((await getJob(app.url, jobId)).json.job.stage, "waiting_for_page_selection");
 
       const scrape = await postCommand(app.url, jobId, { commandId: "u-scrape", type: "scrape", payload: {} });
       assert.deepEqual(scrape.json, { accepted: true, reason: "started", jobId, commandId: "u-scrape" });
       await waitLedger(app.url, jobId, "u-scrape");
+      assert.equal((await getJob(app.url, jobId)).json.job.stage, "waiting_for_people_review");
 
       // People Review seed (existing Review UI path untouched).
       const job = readJob(outDir, "s", jobId);
@@ -237,7 +249,7 @@ describe("UI workflow: Probe -> Approve -> Scrape -> Finalize -> Detect via POST
       assert.equal(fin.json.accepted, true);
       assert.ok(["finalized", "already-past"].includes(fin.json.reason));
       const afterFin = (await getJob(app.url, jobId)).json.job;
-      assert.equal(afterFin.stage, "finalizing");
+      assert.equal(afterFin.stage, "detecting_backend");
 
       const det = await postCommand(app.url, jobId, { commandId: "u-det", type: "detect", payload: {} });
       assert.deepEqual(det.json, { accepted: true, reason: "started", jobId, commandId: "u-det" });
@@ -296,21 +308,28 @@ describe("UI workflow: Probe -> Approve -> Scrape -> Finalize -> Detect via POST
       const jobId = c.jobId;
       await postCommand(app.url, jobId, { commandId: "u-p1", type: "probe", payload: {} });
       await waitLedger(app.url, jobId, "u-p1");
-      // Retry back to probing (same stage, bumps attempts).
+      // Retry back to probing (same stage, bumps attempts), then probe again.
       const rt = await postCommand(app.url, jobId, { commandId: "u-rt", type: "retry", payload: { to: "probing", reason: "ui retry" } });
       assert.equal(rt.json.accepted, true);
       assert.equal((await getJob(app.url, jobId)).json.job.attempts, 1);
-      // Approve to scraping, then retry back to probing, then approve again.
+      await postCommand(app.url, jobId, { commandId: "u-p1b", type: "probe", payload: {} });
+      await waitLedger(app.url, jobId, "u-p1b");
+      // Stand in for real probe staging output (fake engine writes none).
+      mkdirSync(join(outDir, "_staging", "s"), { recursive: true });
+      writeFileSync(join(outDir, "_staging", "picked-links.json"), JSON.stringify([
+        { url: "https://a.go.th/x", slug: "s", keep: true },
+      ]), "utf8");
+      writeFileSync(join(outDir, "_staging", "s", "picked-images.json"), JSON.stringify([]), "utf8");
+      // Approve records durability only (stays at the wait).
       await postCommand(app.url, jobId, { commandId: "u-a1", type: "approve-page", payload: {} });
-      assert.equal((await getJob(app.url, jobId)).json.job.stage, "scraping");
-      // Resume refused outside waits.
-      const resBad = await postCommand(app.url, jobId, { commandId: "u-res-bad", type: "resume", payload: {} });
-      assert.equal(resBad.json.accepted, false);
-      assert.equal(resBad.json.reason, "not-waiting");
-      // Cancel with prompt (non-upload).
+      assert.equal((await getJob(app.url, jobId)).json.job.stage, "waiting_for_page_selection");
+      // Cancel with prompt (non-upload), then resume refused outside waits.
       const cx = await postCommand(app.url, jobId, { commandId: "u-cx", type: "cancel", payload: { prompted: true, reason: "ui cancel" } });
       assert.equal(cx.json.accepted, true);
       assert.equal((await getJob(app.url, jobId)).json.job.stage, "cancelled");
+      const resBad = await postCommand(app.url, jobId, { commandId: "u-res-bad", type: "resume", payload: {} });
+      assert.equal(resBad.json.accepted, false);
+      assert.equal(resBad.json.reason, "not-waiting");
     } finally {
       await app.close();
     }
@@ -328,6 +347,12 @@ describe("UI workflow: Probe -> Approve -> Scrape -> Finalize -> Detect via POST
       const jobId = c.jobId;
       await postCommand(app.url, jobId, { commandId: "u-p", type: "probe", payload: {} });
       await waitLedger(app.url, jobId, "u-p");
+      // Stand in for real probe staging output (fake engine writes none).
+      mkdirSync(join(outDir, "_staging", "s"), { recursive: true });
+      writeFileSync(join(outDir, "_staging", "picked-links.json"), JSON.stringify([
+        { url: "https://a.go.th/x", slug: "s", keep: true },
+      ]), "utf8");
+      writeFileSync(join(outDir, "_staging", "s", "picked-images.json"), JSON.stringify([]), "utf8");
       await postCommand(app.url, jobId, { commandId: "u-a", type: "approve-page", payload: {} });
       await postCommand(app.url, jobId, { commandId: "u-s", type: "scrape", payload: {} });
       await waitLedger(app.url, jobId, "u-s");
@@ -439,7 +464,13 @@ describe("UI step commands: idempotency + single-flight + validation", () => {
       const g = await getJob(app.url, jobId);
       assert.equal(g.json.job.stage, "probing", "failure keeps the stage for Retry");
       assert.ok(g.json.job.blockers.some((b) => b.type === "cloudflare"), "CF blocker raised");
-      // Claim released: human gate still works.
+      // Claim released: human gate still works once at the wait with staging.
+      await postCommand(app.url, jobId, { commandId: "bg-adv", type: "advance", payload: { to: "waiting_for_page_selection", reason: "test" } });
+      mkdirSync(join(outDir, "_staging", "s"), { recursive: true });
+      writeFileSync(join(outDir, "_staging", "picked-links.json"), JSON.stringify([
+        { url: "https://a.go.th/x", slug: "s", keep: true },
+      ]), "utf8");
+      writeFileSync(join(outDir, "_staging", "s", "picked-images.json"), JSON.stringify([]), "utf8");
       const ap = await postCommand(app.url, jobId, { commandId: "bg-a1", type: "approve-page", payload: {} });
       assert.equal(ap.json.accepted, true);
     } finally {

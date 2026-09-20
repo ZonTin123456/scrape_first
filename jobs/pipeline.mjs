@@ -9,7 +9,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
-import { advance, appendLedger, canAdvance, claimEngineOp, clearBlocker, failJob, finishUpload, finishUploadRowAndCancel, hasBlocker, notifyGuardRegression, notifyProofLost, raiseBlocker, readJob, releaseEngineOp, SPINE, writeJob } from "./store.mjs";
+import { advance, appendLedger, canAdvance, claimEngineOp, clearBlocker, failJob, finishUpload, finishUploadRowAndCancel, hasBlocker, isTerminal, notifyGuardRegression, notifyProofLost, raiseBlocker, readJob, releaseEngineOp, SPINE, writeJob } from "./store.mjs";
 import {
   beginUploadWithProof,
   grantArmFromSafety,
@@ -17,6 +17,7 @@ import {
   verifyDryReport,
 } from "./safety.mjs";
 import { importScrapeSelection, loadReviewModel, validateForFinalize } from "./review.mjs";
+import { checkPageApproval, recordPageApproval } from "./pages.mjs";
 import { realEngine } from "./engine-cdp.mjs";
 
 // Same DAG as pipeline.mjs:31 (parity pinned in tests/pipeline.test.mjs).
@@ -744,6 +745,15 @@ function acceptBgStep({ outDir, job, uiStep, op, hub, payload, engine }) {
   if (activePipelineJobs.has(job.jobId)) {
     fail("single-flight", `pipeline:${job.jobId} already running (same-job re-entry refused)`, { jobId: job.jobId });
   }
+  if (op === "scrape") {
+    // Durable human gate: scraping begins only on approved staging. Approval
+    // is recorded by approve-page and bound to a staging fingerprint; any
+    // later Save invalidates it (approval-stale). Fail-closed, no side effects.
+    const chk = checkPageApproval(outDir, job);
+    if (!chk.ok) {
+      fail(chk.reason, `ui:scrape: ${chk.reason === "approval-stale" ? "staging changed since approval (re-approve)" : "approve pages first"}`, { step: op });
+    }
+  }
   claimEngineOp(job.jobId, `ui:${op}`);
   activePipelineJobs.add(job.jobId);
   try {
@@ -992,26 +1002,58 @@ function runUiStepClaimed({ outDir, job, uiStep, hub, payload }) {
     return { step: uiStep, dagStep: step, status: "ran", stage: job.stage };
   }
 
-  // approve-page: human gate at waiting_for_page_selection -> scraping.
+  // approve-page: durable human approval only. Records approval on the job
+  // record (reload-safe, bound to a staging fingerprint) and stays at
+  // waiting_for_page_selection. Scraping begins only when the Scrape command
+  // is accepted. Past the wait the approval is moot (already-past).
   if (uiStep === "approve-page") {
     const wait = "waiting_for_page_selection";
-    const next = "scraping";
+    if (isTerminal(job.stage)) {
+      fail("illegal-pipeline-transition", `pipeline:ui:approve-page: terminal ${job.stage} never reopens (new Job for same source)`);
+    }
     const fi = spineIndex(job.stage);
     const wi = spineIndex(wait);
-    const ni = spineIndex(next);
-    if (fi > ni) return finishUiStep(outDir, job, hub, { uiStep, status: "already-past", stage: job.stage });
-    if (fi <= wi) walkUiTo(job, wait, { step: "ui:approve-page" });
-    // Record explicit human approval (maps CLI Enter/--yes confirm only).
-    appendLedger(job, "pipeline:approved", "pick-links/master (ui approve-page)");
-    // Resume from wait to scraping (explicit resume semantics, same inputs).
-    if (job.stage === wait) {
-      advance(job, next, { reason: "ui:approve-page" });
-    } else {
-      walkUiTo(job, next, { step: "ui:approve-page" });
+    if (fi < wi) {
+      fail("bad-stage", `ui:approve-page: stage must be ${wait} (was ${job.stage})`, { step: uiStep });
     }
+    if (fi > wi) return finishUiStep(outDir, job, hub, { uiStep, status: "already-past", stage: job.stage });
+    readPickedEntry(outDir, job);
+    recordPageApproval(outDir, job);
+    appendLedger(job, "pipeline:approved", "pick-links/master (ui approve-page)");
     writeJob(outDir, job);
     emit(hub, job.jobId, "job:advanced", { step: "approve-page", stage: job.stage, approved: true });
     return { step: uiStep, status: "approved", stage: job.stage };
+  }
+
+  // finalize: validate FIRST, then complete synchronously through the
+  // transient finalizing stage to detecting_backend (no pre-walk: a failed
+  // validation must leave the stage untouched). Placed before the generic
+  // walk so deferred outcomes never claim finalizing.
+  if (uiStep === "finalize") {
+    const ft = UI_STEP_STAGES.finalize;
+    if (spineIndex(job.stage) > spineIndex(ft)) {
+      return finishUiStep(outDir, job, hub, { uiStep, status: "already-past", stage: job.stage });
+    }
+    let detail = { deferred: true };
+    try {
+      const model = loadReviewModel(outDir, job);
+      if (model?.selection?.length) {
+        const v = validateForFinalize(model.selection);
+        detail = { kept: v.kept.length, removed: v.removed, warnings: v.warnings, effectiveOrder: v.effectiveOrder };
+        appendLedger(job, "pipeline:step", `ui finalize: review validated (kept ${v.kept.length}, removed ${v.removed})`);
+        // Successful finalize completes synchronously to detecting_backend,
+        // where Detect owns the next step. Failures stay deferred below.
+        walkUiTo(job, "detecting_backend", { step: "ui:finalize" });
+      } else {
+        appendLedger(job, "pipeline:deferred", "ui finalize: no review selection (browser work deferred)");
+      }
+    } catch {
+      appendLedger(job, "pipeline:deferred", "ui finalize: review unreadable (deferred)");
+    }
+    writeJob(outDir, job);
+    emit(hub, job.jobId, "review:finalized", { slug: job.slug, kept: detail.kept ?? null, removed: detail.removed ?? null });
+    emit(hub, job.jobId, "job:advanced", { step: "finalize", stage: job.stage });
+    return { step: uiStep, status: "ran", stage: job.stage, detail };
   }
 
   const target = UI_STEP_STAGES[uiStep];
@@ -1038,26 +1080,6 @@ function runUiStepClaimed({ outDir, job, uiStep, hub, payload }) {
     emit(hub, job.jobId, "scrape:url-started", { url: job.source, slug: job.slug, mode: "scrape" });
     emit(hub, job.jobId, "job:advanced", { step: "scrape", stage: job.stage, deferred: true });
     return { step: uiStep, status: "ran", stage: job.stage, deferred: true };
-  }
-
-  if (uiStep === "finalize") {
-    let detail = { deferred: true };
-    try {
-      const model = loadReviewModel(outDir, job);
-      if (model?.selection?.length) {
-        const v = validateForFinalize(model.selection);
-        detail = { kept: v.kept.length, removed: v.removed, warnings: v.warnings, effectiveOrder: v.effectiveOrder };
-        appendLedger(job, "pipeline:step", `ui finalize: review validated (kept ${v.kept.length}, removed ${v.removed})`);
-      } else {
-        appendLedger(job, "pipeline:deferred", "ui finalize: no review selection (browser work deferred)");
-      }
-    } catch {
-      appendLedger(job, "pipeline:deferred", "ui finalize: review unreadable (deferred)");
-    }
-    writeJob(outDir, job);
-    emit(hub, job.jobId, "review:finalized", { slug: job.slug, kept: detail.kept ?? null, removed: detail.removed ?? null });
-    emit(hub, job.jobId, "job:advanced", { step: "finalize", stage: job.stage });
-    return { step: uiStep, status: "ran", stage: job.stage, detail };
   }
 
   if (uiStep === "detect") {

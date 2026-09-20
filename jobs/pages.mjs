@@ -6,6 +6,7 @@
 // entries. Only node builtins. Merges by key (url/seq/src) so sequential jobs
 // sharing global staging do not clobber each other.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 
 function fail(code, message, extra = {}) {
@@ -210,4 +211,31 @@ function linkSlugFor(outDir, job, url) {
   }
   if (url === job.source) return job.slug;
   return null;
+}
+
+// ---- durable page approval (human gate, server-authoritative) ----
+// Approval binds to a fingerprint of the current staging selection, so any
+// later Save (or re-probe) invalidates it and Scrape refuses until re-approve.
+// Stored on the job record: reloads remember it. No stage movement here;
+// scraping begins only when the Scrape command is accepted.
+export function approvalFingerprint(outDir, slug) {
+  const links = (readJson(join(outDir, "_staging", "picked-links.json"), []) || [])
+    .filter((e) => e && e.slug === slug);
+  const picks = readJson(join(outDir, "_staging", slug, "picked-images.json"), null);
+  return `appr_${createHash("sha256").update(JSON.stringify({ links, picks }), "utf8").digest("hex").slice(0, 16)}`;
+}
+
+export function recordPageApproval(outDir, job) {
+  if (!outDir || typeof outDir !== "string") fail("bad-outDir", "recordPageApproval: outDir required");
+  if (!job || typeof job !== "object" || !job.jobId) fail("bad-job", "recordPageApproval: job required");
+  const fp = approvalFingerprint(outDir, job.slug);
+  job.pageApproval = { approved: true, at: new Date().toISOString(), fingerprint: fp };
+  return job.pageApproval;
+}
+
+export function checkPageApproval(outDir, job) {
+  const a = job?.pageApproval;
+  if (!a || a.approved !== true) return { ok: false, reason: "approval-required" };
+  if (a.fingerprint !== approvalFingerprint(outDir, job.slug)) return { ok: false, reason: "approval-stale" };
+  return { ok: true };
 }

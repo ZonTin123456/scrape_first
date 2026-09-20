@@ -100,6 +100,11 @@ describe("bg success advances stage exactly once", () => {
     writeFileSync(join(outDir, "_staging", "picked-links.json"), JSON.stringify([
       { url: "https://example.invalid/bg-scrape", slug, keep: true },
     ]), "utf8");
+    // Real flow: walk to the wait (single-spine steps), approve (durable), then scrape.
+    await postCmd(jobId, "bg-scrape-adv1", "advance", { to: "probing", reason: "test setup" });
+    await postCmd(jobId, "bg-scrape-adv2", "advance", { to: "waiting_for_page_selection", reason: "test setup" });
+    const appr = await postCmd(jobId, "bg-scrape-appr", "approve-page");
+    assert.equal(appr.json.accepted, true);
     const acc = await postCmd(jobId, "bg-scrape-1", "scrape");
     assert.equal(acc.json.accepted, true);
     const { entry, job } = await waitLedger(jobId, "bg-scrape-1");
