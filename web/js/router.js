@@ -33,6 +33,7 @@ const PAGE_MODULE = {
   overview: "./pages/overview.js",
   pages: "./pages/pages.js",
   review: "./pages/review.js",
+  safety: "./pages/safety.js",
 };
 
 function teardown() {
