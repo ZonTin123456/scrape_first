@@ -81,15 +81,24 @@ export async function mount(route) {
     } catch {
       return;
     }
+    // Pill text is cheap (no focus impact); recovery buttons repaint only on
+    // stage change so the retry select and focus survive polling.
     if (!job) {
       setPill(`JOB ${route.jobId} — not found`);
-      paintRecovery(route, "cancelled");
+      if (lastKey !== "missing") {
+        lastKey = "missing";
+        paintRecovery(route, "cancelled");
+      }
       return;
     }
     const n = job.blockers?.length || 0;
     setPill(`STAGE ${job.stage} · ${n} blocker${n === 1 ? "" : "s"}`);
-    paintRecovery(route, job.stage);
+    if (job.stage !== lastKey) {
+      lastKey = job.stage;
+      paintRecovery(route, job.stage);
+    }
   }
+  let lastKey = null;
   await refresh();
   const timer = setInterval(refresh, 1000);
   return () => clearInterval(timer);

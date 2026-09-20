@@ -28,7 +28,6 @@ function progressHtml(stage) {
 }
 
 export async function render(el, api, route) {
-  let stage = null;
   let timer = null;
 
   async function paint() {
@@ -88,12 +87,17 @@ export async function render(el, api, route) {
     return job.stage;
   }
 
-  stage = await paint();
+  let last = await paint();
+  // Repaint only on stage change: full paint rebuilds DOM (kills focus).
+  // Probe and other clicks repaint directly after their mutation.
   timer = setInterval(async () => {
     if (document.hidden) return;
-    const cur = await paint();
-    if (cur !== undefined) stage = cur;
+    try {
+      const cur = (await api.getJob(route.jobId))?.job?.stage ?? null;
+      if (cur !== last) last = await paint();
+    } catch {
+      // poll heals
+    }
   }, 1000);
-  // Re-render only matters on stage change; paint() already refreshes text.
   return () => clearInterval(timer);
 }

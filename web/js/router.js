@@ -10,6 +10,7 @@ import * as api from "./api.js";
 const view = () => document.getElementById("view");
 
 let cleanups = [];
+let gen = 0;
 
 export function parseRoute(pathname = location.pathname, search = location.search) {
   const q = new URLSearchParams(search);
@@ -49,9 +50,11 @@ function teardown() {
 }
 
 export async function render() {
+  const g = ++gen;
   teardown();
   const route = parseRoute();
   const { mount } = await import("./header.js");
+  if (g !== gen) return; // superseded by a newer nav: leak nothing
   cleanups.push(await mount(route));
 
   if (route.name === "not-found") {
@@ -69,14 +72,17 @@ export async function render() {
       `<p class="small muted">This page ships in its ticket with full stage gating. Shell, header, and Activity already live.</p>` +
       `<p><a class="btn sec" data-nav href="/jobs/${encodeURIComponent(route.jobId || "")}">Back to overview</a></p></div>`;
     const { mount: mountActivity } = await import("./activity.js");
+    if (g !== gen) return;
     if (route.jobId) cleanups.push(mountActivity(route.jobId));
     return;
   }
   const mod = await import(modPath);
+  if (g !== gen) return;
   const done = await mod.render(view(), api, route);
   if (typeof done === "function") cleanups.push(done);
   if (route.jobId) {
     const { mount: mountActivity } = await import("./activity.js");
+    if (g !== gen) return;
     cleanups.push(mountActivity(route.jobId));
   }
 }

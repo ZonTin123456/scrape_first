@@ -102,7 +102,7 @@ export async function render(el, api, route) {
         [...new Set([...el.querySelectorAll("[data-pimg]")].map((c) => c.getAttribute("data-pslug")))].map(
           (slug) => [
             slug,
-            [...el.querySelectorAll(`[data-pimg][data-pslug="${slug}"]`)].map((c) => ({
+            [...el.querySelectorAll(`[data-pimg][data-pslug="${CSS.escape(slug)}"]`)].map((c) => ({
               seq: Number(c.getAttribute("data-pseq")),
               keep: c.checked,
             })),

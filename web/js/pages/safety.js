@@ -77,7 +77,7 @@ export async function render(el, api, route) {
         ? `<div class="card"><h2>Visibility bundle</h2><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">` +
           secs.map((s) => `<div style="border:1px solid var(--bd);border-radius:6px;padding:8px;font-size:12px;background:#fff"><b style="display:block;font-size:11px;color:var(--tx2);text-transform:uppercase">${esc(s)}</b>${esc(summarize(bundle[s]))}</div>`).join("") +
           `</div></div>`
-        : `<div class="card"><h2>Visibility bundle</h2><p class="small muted">Pending — no dry yet. ${(safety.pending || []).join(", ")}</p></div>`) +
+        : `<div class="card"><h2>Visibility bundle</h2><p class="small muted">Pending — no dry yet. ${esc((safety.pending || []).join(", "))}</p></div>`) +
       (g1.ok
         ? `<div style="background:var(--gr-bg);border:1px solid var(--gr-bd);border-radius:8px;padding:12px 16px;margin:0 0 16px;color:var(--gr-t)"><b>G1 preflight: passed</b> — dry-run current for this snapshot. Real Upload stays disabled until G1 is green.</div>`
         : `<div class="warn"><b>G1 preflight: blocked.</b><ul class="small">${(g1.reasons || []).map((r) => `<li>${esc(r)}</li>`).join("")}</ul></div>`) +

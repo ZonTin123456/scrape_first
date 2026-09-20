@@ -80,11 +80,11 @@ export async function render(el, api, route) {
           return (
             `<div data-card data-seq="${r.seq}" data-file="${esc(r.file || "")}" style="display:grid;grid-template-columns:64px 1fr;gap:10px;border:1px solid var(--bd);border-radius:8px;padding:10px;margin:0 0 10px;background:#fff">` +
             (thumb
-              ? `<img src="${thumb}" alt="" loading="lazy" style="width:64px;height:64px;object-fit:cover;border-radius:4px;border:1px solid var(--bd)">`
+              ? `<img src="${esc(thumb)}" alt="" loading="lazy" style="width:64px;height:64px;object-fit:cover;border-radius:4px;border:1px solid var(--bd)">`
               : `<div style="width:64px;height:64px;border-radius:4px;background:var(--nt-bg);border:1px solid var(--nt-bd)"></div>`) +
             `<div><b>seq ${r.seq}</b> <span class="small muted">${esc(r.file || "")}</span><br>` +
             `<label><input type="checkbox" data-keep ${r.keep !== false ? "checked" : ""}> keep</label> ` +
-            `<label>order <input type="number" data-order value="${r.order ?? 0}" style="width:4em"></label></div></div>`
+            `<label>order <input type="number" data-order value="${esc(String(r.order ?? 0))}" style="width:4em"></label></div></div>`
           );
         })
         .join("") +

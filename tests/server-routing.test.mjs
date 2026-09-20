@@ -71,7 +71,24 @@ describe("deep-link intercept (#39)", () => {
     assert.equal(gone.status, 404);
   });
 
-  it("POST mutations never divert to HTML", async () => {
+  it("HEAD deep links serve shell HTML; POST commands keep JSON even asking html", async () => {
+    const h = await fetch(`${app.url}/jobs/${jobId}`, { method: "HEAD", headers: HTML });
+    assert.equal(h.status, 200);
+    assert.match(h.headers.get("content-type") || "", /text\/html/);
+    const c = await fetch(`${app.url}/jobs/${jobId}/commands`, {
+      method: "POST",
+      headers: { "content-type": "application/json", Accept: "text/html,application/xhtml+xml" },
+      body: JSON.stringify({ commandId: "html-cmd-1", type: "bogus-type-xyz", payload: {} }),
+    });
+    assert.equal(c.status, 200);
+    assert.deepEqual(await c.json(), {
+      accepted: false,
+      reason: "not-implemented",
+      jobId,
+      commandId: "html-cmd-1",
+    });
+  });
+  it("POST review keeps JSON even asking html", async () => {
     const r = await fetch(`${app.url}/jobs/${jobId}/review`, {
       method: "POST",
       headers: { "content-type": "application/json", Accept: "text/html,application/xhtml+xml" },
