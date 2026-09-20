@@ -1,0 +1,224 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE for wayfinder ticket #37. Mock data, no backend, no persistence.
+  Do NOT merge to main, do NOT copy-paste into production (rewrite properly at implementation).
+
+  Locked inputs: #32 bindings, #33 single-HTML routing, #34 light theme, #35 IA+gating,
+  #36 logs-as-secondary, #38 parallel-shell strangler.
+
+  Deliberate deviation from prototype-skill UI.md: no style variants — theme/IA/density are
+  already locked. The switcher bar instead cycles ?stage= to demo per-stage gating and the
+  wrong-stage explain+link pattern, which is what this prototype must validate.
+  Question it answers: is navigation, info hierarchy, page density, safety hierarchy clear
+  enough to implement?  Run: double-click this file (file:// works, no fetch used).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PROTOTYPE #37 — Light Job Workspace shell</title>
+<style>
+  :root{
+    --bg:#F3F4F6; --card:#FFFFFF; --bd:#E5E7EB; --tx:#111827; --tx2:#4B5563; --mut:#6B7280;
+    --ac:#2563EB; --ac-s:#1D4ED8; --ac-t:#EFF6FF;
+    --gr-t:#166534; --gr-bg:#F0FDF4; --gr-bd:#BBF7D0;
+    --am-t:#92400E; --am-bg:#FFFBEB; --am-bd:#F59E0B;
+    --rd:#DC2626; --rd-d:#B91C1C; --rd-bg:#FEF2F2;
+    --nt-bg:#F3F4F6; --nt-bd:#D1D5DB; --nt-t:#374151;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+  .pbanner{background:#111827;color:#fff;font-size:12px;padding:6px 16px}
+  .pbanner b{color:#FBBF24}
+  header.top{position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--bd);padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  nav.pages{display:flex;gap:4px;flex-wrap:wrap}
+  nav.pages a{padding:4px 10px;border:1px solid var(--bd);border-radius:999px;color:var(--tx2);text-decoration:none;font-size:13px;background:var(--card)}
+  nav.pages a.on{border-color:var(--ac);color:var(--ac-s);background:var(--ac-t);font-weight:600}
+  .pill{display:inline-block;padding:2px 10px;border:1px solid var(--nt-bd);border-radius:999px;background:var(--nt-bg);color:var(--nt-t);font-size:12px}
+  .recov{margin-left:auto;display:flex;gap:6px}
+  main{max-width:960px;margin:0 auto;padding:16px}
+  .card{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:16px;margin:0 0 16px}
+  .card h2{margin:0 0 8px;font-size:16px}
+  .card h3{margin:0 0 6px;font-size:13px;color:var(--tx2)}
+  .muted{color:var(--mut)} .small{font-size:12px}
+  .next{background:var(--ac-t);border:1px solid var(--ac);border-radius:8px;padding:12px 16px;margin:0 0 16px}
+  .warn{background:var(--am-bg);border:1px solid var(--am-bd);border-radius:8px;padding:12px 16px;margin:0 0 16px;color:var(--am-t)}
+  .ok{background:var(--gr-bg);border:1px solid var(--gr-bd);border-radius:8px;padding:12px 16px;margin:0 0 16px;color:var(--gr-t)}
+  .gate{background:var(--nt-bg);border:1px solid var(--nt-bd);border-radius:8px;padding:12px 16px;margin:0 0 16px;color:var(--nt-t)}
+  fieldset.danger{border:2px solid var(--rd);border-radius:8px;padding:12px 16px;margin:0 0 16px;background:var(--card)}
+  fieldset.danger legend{color:var(--rd-d);font-weight:700;padding:0 8px}
+  button{font:inherit;cursor:pointer;border-radius:6px;padding:6px 14px;border:1px solid var(--bd);background:var(--card);color:var(--tx)}
+  button.pri{background:var(--ac);border-color:var(--ac-s);color:#fff}
+  button.danger{background:var(--rd);border-color:var(--rd-d);color:#fff}
+  button[disabled]{opacity:.45;cursor:not-allowed}
+  a.btn{display:inline-block;text-decoration:none;font:inherit;border-radius:6px;padding:6px 14px;border:1px solid var(--ac-s);background:var(--ac);color:#fff}
+  a.btn.sec{background:var(--card);color:var(--tx);border-color:var(--bd)}
+  input[type=text],input[type=number],textarea{font:inherit;padding:4px 8px;border:1px solid var(--bd);border-radius:4px;background:#fff;color:var(--tx)}
+  textarea{width:100%;font-family:ui-monospace,monospace;font-size:12px}
+  table.q{width:100%;border-collapse:collapse;font-size:13px}
+  table.q th{background:#F9FAFB;text-align:left;padding:6px 8px;border-bottom:1px solid var(--bd);font-size:12px;color:var(--tx2)}
+  table.q td{padding:6px 8px;border-bottom:1px solid #EEF0F3}
+  .stepper{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0}
+  .stepper .st{padding:2px 8px;border:1px solid var(--bd);border-radius:999px;font-size:12px;color:var(--mut);background:var(--card)}
+  .stepper .st.done{border-color:var(--gr-bd);color:var(--gr-t);background:var(--gr-bg)}
+  .stepper .st.cur{border-color:var(--ac);color:var(--ac-s);background:var(--ac-t);font-weight:700}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .mini{border:1px solid var(--bd);border-radius:6px;padding:8px;font-size:12px;background:#fff}
+  .mini b{display:block;font-size:11px;color:var(--tx2);text-transform:uppercase;letter-spacing:.03em}
+  .person{display:grid;grid-template-columns:64px 1fr;gap:10px;border:1px solid var(--bd);border-radius:8px;padding:10px;margin:0 0 10px;background:#fff}
+  .thumb{width:64px;height:64px;border-radius:4px;background:var(--nt-bg);border:1px solid var(--nt-bd);display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:11px}
+  details.act{border:1px solid var(--bd);border-radius:8px;background:#fff;margin:0 0 16px}
+  details.act summary{padding:10px 16px;cursor:pointer;color:var(--tx2);font-size:13px}
+  details.act .log{border-top:1px solid var(--bd);padding:8px 16px;font-family:ui-monospace,monospace;font-size:12px;color:var(--tx2);max-height:180px;overflow:auto}
+  details.adv summary{cursor:pointer;color:var(--tx2);font-size:13px}
+  .switch{position:fixed;left:50%;transform:translateX(-50%);bottom:12px;background:#111827;color:#fff;border-radius:999px;padding:6px 8px;display:flex;gap:6px;align-items:center;font-size:12px;box-shadow:0 4px 16px rgba(0,0,0,.3);z-index:50}
+  .switch a{color:#FBBF24;text-decoration:none;padding:2px 8px}
+  .switch select{font:inherit;border-radius:4px}
+  .stubnote{position:fixed;right:12px;bottom:12px;background:#111827;color:#FBBF24;font-size:12px;border-radius:6px;padding:6px 10px;display:none;z-index:60}
+  :focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="pbanner"><b>THROWAWAY PROTOTYPE #37</b> — mock data, stub actions, no backend. Validates locked IA/theme/gating only. Do not merge.</div>
+<header class="top">
+  <nav class="pages" id="nav"></nav>
+  <span class="pill" id="pill"></span>
+  <span class="recov" id="recov"></span>
+</header>
+<main id="app"></main>
+<div class="switch" id="switch"></div>
+<div class="stubnote" id="stubnote">PROTOTYPE STUB — no backend call made</div>
+<script>
+"use strict";
+// ---- mock world (STUB: server decides everything in production) ----
+const q = new URLSearchParams(location.search);
+const PAGE = q.get("page") || "dashboard";
+const STAGE = q.get("stage") || "waiting_for_people_review";
+const JOB = { id:"demo-job", source:"https://example.invalid/board", group:"board", slug:"demo-board" };
+const STEPS = ["Create","Probe","Page Selection","Scrape","People Review","Finalize","Detect","Dry-run","Arm","Real Upload"];
+const STEP_STAGE = { "Create":"idle","Probe":"probing","Page Selection":"waiting_for_page_selection","Scrape":"scraping","People Review":"waiting_for_people_review","Finalize":"finalizing","Detect":"detecting_backend","Dry-run":"dry_running","Arm":"dry_passed","Real Upload":"armed" };
+const ORDER = ["idle","probing","waiting_for_page_selection","scraping","waiting_for_people_review","finalizing","detecting_backend","dry_running","dry_passed","armed","uploading","done","failed","cancelled"];
+const NEXT = {
+  idle:["Run Probe","overview"], probing:["Wait for probe to finish","overview"],
+  waiting_for_page_selection:["Select pages","pages"], scraping:["Wait for scrape","pages"],
+  waiting_for_people_review:["Review people","review"], finalizing:["Wait for finalize","review"],
+  detecting_backend:["Run Detect","safety"], dry_running:["Run dry-run","safety"],
+  dry_passed:["Attest and arm","safety"], armed:["Real Upload","safety"],
+  uploading:["Wait for upload","safety"], done:["View proofs","overview"],
+  failed:["Resume or retry","overview"], cancelled:["Terminal — no actions","overview"]
+};
+const PAGES = [["dashboard","Dashboard"],["overview","Job"],["pages","Pages"],["review","Review"],["safety","Safety"]];
+const link = (p,s,txt,cls)=>`<a class="${cls||""}" href="?page=${p}${s?`&stage=${s}`:""}">${txt}</a>`;
+const gateCard = (pageName, hint, goPage)=>`<div class="gate"><b>${pageName} is not available</b> while the job is at stage <b>${STAGE}</b>. ${hint} ${link(goPage||"overview",STAGE,"Go to the right page","btn sec")}</div>`;
+const stub = `<span class="small muted">(stub — no backend call)</span>`;
+function toast(){ const n=document.getElementById("stubnote"); n.style.display="block"; clearTimeout(n._t); n._t=setTimeout(()=>n.style.display="none",1200); }
+document.addEventListener("click",e=>{ const b=e.target.closest("button"); if(b && !b.disabled){ e.preventDefault(); toast(); } });
+document.addEventListener("submit",e=>{ e.preventDefault(); toast(); });
+
+// ---- chrome ----
+document.getElementById("nav").innerHTML = PAGES.map(([k,l])=>`<a href="?page=${k}&stage=${STAGE}" class="${PAGE===k?"on":""}">${l}</a>`).join("");
+document.getElementById("pill").textContent = PAGE==="dashboard" ? "3 jobs tracked" : `STAGE ${STAGE} · ${STAGE==="failed"?"2 blockers":"0 blockers"}`;
+const canCancel = !["done","cancelled"].includes(STAGE), canRec = STAGE==="failed";
+document.getElementById("recov").innerHTML =
+  `<button ${canRec?"":"disabled"} title="stub: server allows only when failed/blocked">Retry</button>`+
+  `<button ${canRec?"":"disabled"} title="stub: server allows only when failed/blocked">Resume</button>`+
+  `<button ${canCancel?"":"disabled"} title="stub: server allows unless terminal">Cancel</button>`;
+document.getElementById("switch").innerHTML =
+  `<span>stage:</span><select id="stsel">${ORDER.map(s=>`<option ${s===STAGE?"selected":""}>${s}</option>`).join("")}</select>
+   <span class="small">demo gating — never auto-redirects</span>`;
+document.getElementById("stsel").onchange = e=>{ const u=new URL(location.href); u.searchParams.set("stage",e.target.value); location.href=u; };
+
+// ---- shared bits ----
+const stepper = ()=>{ const idx=ORDER.indexOf(STAGE);
+  return `<div class="stepper">${STEPS.map(s=>{ const si=ORDER.indexOf(STEP_STAGE[s]);
+    const c = si<idx||STAGE==="done" ? "done" : (si===idx?"cur":"");
+    return `<span class="st ${c}">${s}</span>`; }).join("")}</div>`; };
+const activity = ()=>`<details class="act"><summary>Activity — recent events (collapsed by default, debug only)</summary><div class="log">
+  10:02:11 job:advanced stage=waiting_for_people_review<br>10:01:48 artifact:written kind=picked-links<br>
+  10:00:03 job:advanced stage=scraping<br>09:58:40 pipeline:finished op=scrape<br>
+  09:57:12 job:advanced stage=waiting_for_page_selection<br>09:55:00 pipeline:finished op=probe<br>
+  <span class="muted">showing 6 of 50 (mock) — state comes from GETs above, never from this list</span></div></details>`;
+const nextCard = ()=>{ const [label,pg]=NEXT[STAGE]||["—","overview"];
+  return `<div class="next"><b>Next: ${label}</b> <span class="small">on the ${pg} page</span> ${link(pg,STAGE,label,"btn")}</div>`; };
+
+// ---- pages ----
+const app = document.getElementById("app"); let h = "";
+if(PAGE==="dashboard"){
+  h = `<h1>Dashboard</h1>
+  <div class="card"><h2>Create job</h2>
+    <form><label>Source URL <input type="text" size="40" placeholder="https://…"></label>
+    <label>Group <input type="text" size="12" placeholder="optional"></label>
+    <label>Slug <input type="text" size="14" placeholder="optional"></label>
+    <button class="pri">Create job</button> ${stub}</form>
+    <p class="small muted">Validation messages appear here. No saved/recent lists in this version.</p></div>
+  <div class="card"><h2>Jobs</h2>
+    <table class="q"><tr><th>Job</th><th>Source</th><th>Stage</th><th></th></tr>
+    <tr><td>demo-job</td><td>example.invalid/board</td><td>waiting_for_people_review</td><td>${link("overview","waiting_for_people_review","Open","btn sec")}</td></tr>
+    <tr><td>nightly-board</td><td>example.invalid/nightly</td><td>dry_passed</td><td>${link("safety","dry_passed","Open","btn sec")}</td></tr>
+    <tr><td>archive-03</td><td>example.invalid/old</td><td>done</td><td>${link("overview","done","Open","btn sec")}</td></tr>
+    </table></div>`;
+}
+else if(PAGE==="overview"){
+  h = `<h1>Job overview <span class="small muted">${JOB.id}</span></h1>${nextCard()}
+  <div class="card"><h2>Identity</h2><div class="grid2">
+    <div class="mini"><b>source</b>${JOB.source}</div><div class="mini"><b>group</b>${JOB.group}</div>
+    <div class="mini"><b>slug</b>${JOB.slug}</div><div class="mini"><b>stage</b>${STAGE}</div></div></div>
+  <div class="card"><h2>Workflow progress</h2>${stepper()}</div>
+  ${STAGE==="failed"?`<div class="warn"><b>Blocked: 2 failed rows.</b> Fix or remap, then Resume from the header. Logs never carry this — it is state.</div>`:""}
+  ${STAGE==="done"?`<div class="card"><h2>Proofs</h2><p class="small">dry-report.json · save-report.json · 4 screenshots (mock links)</p></div>`:""}
+  ${activity()}`;
+}
+else if(PAGE==="pages"){
+  if(!["waiting_for_page_selection","scraping"].includes(STAGE))
+    h = `<h1>Page Selection</h1>`+gateCard("Page Selection", STAGE==="idle"||STAGE==="probing" ? "Run Probe first." : "Pages are already approved for this job.", STAGE==="idle"||STAGE==="probing"?"overview":"review");
+  else h = `<h1>Page Selection</h1>${nextCard()}
+  <div class="card"><h2>Links <span class="small muted">(from probe.json — mock)</span></h2>
+    <table class="q"><tr><th>Keep</th><th>URL</th></tr>
+    <tr><td><input type="checkbox" checked></td><td>/board/page/1</td></tr>
+    <tr><td><input type="checkbox" checked></td><td>/board/page/2</td></tr>
+    <tr><td><input type="checkbox"></td><td>/board/ads</td></tr></table></div>
+  <div class="card"><h2>Images</h2><p class="small">slug <b>page-1</b>: 3 shots, all kept (mock)</p></div>
+  <div class="card"><h2>Approve &amp; scrape</h2>
+    ${STAGE==="scraping"?`<p>Scraping in progress… (poll + SSE resync — mock)</p>`:`<button class="pri">Save pages</button> <button>Approve pages</button> <button>Scrape</button> ${stub}`}</div>
+  ${activity()}`;
+}
+else if(PAGE==="review"){
+  if(!["waiting_for_people_review","finalizing"].includes(STAGE))
+    h = `<h1>People Review</h1>`+gateCard("People Review","Scrape has not produced a review yet.", STAGE==="done"||STAGE==="dry_passed"||STAGE==="armed"||STAGE==="dry_running"||STAGE==="detecting_backend"?"safety":"pages");
+  else h = `<h1>People Review</h1>${nextCard()}
+  <div class="card"><h2>Revision <span class="pill">rev 3 · fresh</span></h2>
+    <p class="small muted">If someone else saves first you get a stale-conflict: reload, never last-wins. (mock copy)</p></div>
+  <div class="card"><h2>People (mock)</h2>
+    ${[["A. Example","1"],["B. Sample","2"],["C. Demo","0"]].map(([n,s])=>`<div class="person"><div class="thumb">shot ${s}</div>
+      <div><b>${n}</b> <span class="small muted">seq ${s}</span><br>
+      <label><input type="checkbox" checked> keep</label> <label>order <input type="number" value="${s}" style="width:4em"></label></div></div>`).join("")}
+    <p><label>Bulk order <input type="text" id="bulk" size="6"></label> <button>Apply to checked</button></p></div>
+  <div class="warn"><b>Dry-run warnings (preview):</b> 1 duplicate name, order normalized 1→2→0. Labeled in words, amber means non-destructive.</div>
+  <div class="card"><h2>Save &amp; finalize</h2><button>Warning preview</button> <button class="pri">Save (POST only)</button> <button>Finalize</button> ${stub}</div>
+  ${activity()}`;
+}
+else if(PAGE==="safety"){
+  const pre = ["idle","probing","waiting_for_page_selection","scraping","waiting_for_people_review"].includes(STAGE);
+  h = `<h1>Safety / Dry / Real Upload</h1>${pre?gateCard("Safety","Finalize People Review first."):nextCard()}
+  <div class="card"><h2>Detect backend</h2>${STAGE==="detecting_backend"||STAGE==="finalizing"?`<button class="pri">Run Detect</button> ${stub}`:`<p class="small muted">Detect ${ORDER.indexOf(STAGE)>ORDER.indexOf("detecting_backend")?"completed (mock).":"is not the current step."}</p>`}</div>
+  <div class="warn"><b>Dry-run — safe, never saves.</b><br><button class="pri">Run dry-run</button> ${stub}
+    <details class="adv" style="margin-top:8px"><summary>Advanced — raw JSON payload (power users)</summary>
+    <textarea rows="4">{"backend":"https://backend.invalid","mode":"dry"}</textarea><br><button>Run with JSON</button></details></div>
+  <div class="card"><h2>Visibility bundle <span class="small muted">(10 sections, mock values)</span></h2><div class="grid2">
+    ${["source","group","destination","target depts","would-create","identity","unmapped","counts","rows","proofs"].map(s=>`<div class="mini"><b>${s}</b>ok (mock)</div>`).join("")}</div></div>
+  <div class="ok"><b>G1 preflight: passed</b> — dry-run current for this snapshot (mock). Real Upload stays disabled until G1 is green.</div>
+  <div class="card"><h2>G2 attestation</h2>
+    <p class="small">“I reviewed dry report <b>dry_abc123</b> and all <b>4</b> screenshots for snapshot <b>snap_9f2</b>.”</p>
+    <p><label><input type="checkbox"> I attest (mock)</label> <label>type slug <input type="text" size="12" placeholder="demo-board"></label>
+    <button ${STAGE==="dry_passed"?"": "disabled"}>Arm</button> ${stub}</p></div>
+  <fieldset class="danger"><legend>Real upload — destructive</legend>
+    <p><b style="color:var(--rd-d)">This clicks save on the backend. Red appears nowhere else in this UI.</b></p>
+    <button class="danger" ${STAGE==="armed"?"":"disabled"}>Real Upload — clicks save</button> ${stub}</fieldset>
+  <div class="card"><h2>Proofs</h2><p class="small">dry-report.json · 4 shots (immutable; save writes a separate set — mock)</p></div>
+  ${activity()}`;
+}
+else h = `<h1>Unknown page</h1><div class="gate">No such prototype page. ${link("dashboard","","Back to Dashboard","btn sec")}</div>`;
+app.innerHTML = h;
+</script>
+</body>
+</html>
