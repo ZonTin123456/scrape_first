@@ -72,6 +72,13 @@ export async function render(el, api, route) {
     const bundle = safety.bundle || null;
     const armed = g2.armed === true || safety.arm === "armed";
     const secs = ["source", "group", "destinationOrigin", "targetDepts", "wouldCreate", "identity", "unmapped", "counts", "rows", "proofs"];
+    // Latest dry refusals, persisted server-side on the record: they survive
+    // repaint and reload (the POST disposition alone does not). Amber explainer
+    // card — never red (red is fenced to Real Upload only).
+    const refusals = (job.ledger || [])
+      .filter((e) => e && e.kind === "gate:failed" && /dry refused|G1 red/i.test(e.message || ""))
+      .slice(-2)
+      .reverse();
 
     el.innerHTML =
       `<h1>Safety / Dry / Real Upload</h1>` +
@@ -84,6 +91,11 @@ export async function render(el, api, route) {
       `<span class="small" id="sf-dry-msg">${stage === "dry_running" ? "" : "Available at stage dry_running."}</span>` +
       `<details style="margin-top:8px"><summary style="cursor:pointer;font-size:13px">Advanced — raw JSON payload (power users)</summary>` +
       `<textarea id="sf-json" rows="4">{}</textarea><br><button id="sf-dry-json">Run with JSON</button></details></div>` +
+      (refusals.length
+        ? `<div class="warn"><b>Last dry attempt refused.</b><ul class="small">` +
+          refusals.map((r) => `<li>${esc(r.message)}${r.at ? ` <span class="muted">${esc(r.at)}</span>` : ""}</li>`).join("") +
+          `</ul></div>`
+        : "") +
       (bundle
         ? `<div class="card"><h2>Visibility bundle</h2><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">` +
           secs.map((s) => `<div style="border:1px solid var(--bd);border-radius:6px;padding:8px;font-size:12px;background:#fff"><b style="display:block;font-size:11px;color:var(--tx2);text-transform:uppercase">${esc(s)}</b>${esc(summarize(bundle[s]))}</div>`).join("") +
@@ -116,7 +128,7 @@ export async function render(el, api, route) {
       if (r.data?.accepted) {
         drySay("Dry recorded — G1 evaluated.");
       } else {
-        drySay(`Dry refused: ${r.data?.reason || r.status}`);
+        drySay("Dry refused — details below.");
       }
       await paint();
     });

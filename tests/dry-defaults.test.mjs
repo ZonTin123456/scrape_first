@@ -178,8 +178,7 @@ describe("one-click dry builds server defaults", () => {
     assert.equal((await getJob(jobId)).dry_run_id, idBefore, "replay mints no second dry id");
   });
 
-  it("explicit Advanced JSON keeps legacy behavior", async () => {
-    const jobId = await createJob();
+  it("explicit Advanced JSON keeps legacy behavior", async () => {    const jobId = await createJob();
     toDryRunning(jobId);
     const payload = {
       snapshotInput: {
@@ -207,5 +206,96 @@ describe("one-click dry builds server defaults", () => {
     assert.equal(d.json.accepted, true);
     assert.equal(d.json.reason, "dry-recorded");
     assert.equal((await getJob(jobId)).stage, "dry_passed");
+  });
+});
+
+describe("dry refusal detail survives repaint/reload", () => {
+  let app2;
+  before(async () => {
+    outDir = mkdtempSync(join(tmpdir(), "dry-refusal-"));
+    const { startServer } = await import("../server.mjs");
+    app2 = await startServer({ outDir, port: 0 });
+    url = app2.url;
+  });
+  after(async () => {
+    await app2?.close();
+  });
+
+  function dryRefusals(job) {
+    return (job.ledger || []).filter((e) =>
+      e && e.kind === "gate:failed" && /dry refused|G1 red/i.test(e.message || ""));
+  }
+
+  it("would-create refusal persists the pinned reason; reload GET shows it", async () => {
+    const jobId = await createJob();
+    toDryRunning(jobId);
+    seedPeople();
+    seedSelection(jobId);
+    seedDetect(jobId, []);
+    const d = await postDry(jobId, "dd-r1-1", {});
+    assert.equal(d.json.accepted, false);
+    assert.equal(d.json.reason, "gate1-failed");
+    // Fresh GET = reload: the refusal detail is on the record, not the POST.
+    const job = await getJob(jobId);
+    const refusals = dryRefusals(job);
+    assert.ok(refusals.length >= 1, "refusal persisted on the record");
+    const last = refusals[refusals.length - 1];
+    assert.match(last.message, /pinned-would-create/, "names the pinned block");
+    assert.match(last.message, new RegExp(SLUG.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), "names the missing target group");
+    assert.equal(job.stage, "dry_running", "stage untouched");
+    assert.equal(job.snapshot_id, null, "no snapshot minted");
+    assert.equal(job.dry_run_id, null, "no dry id minted");
+  });
+
+  it("no-selection refusal persists a dry-refused note", async () => {
+    const jobId = await createJob();
+    toDryRunning(jobId);
+    const d = await postDry(jobId, "dd-r2-1", {});
+    assert.equal(d.json.reason, "no-selection");
+    const refusals = dryRefusals(await getJob(jobId));
+    assert.ok(refusals.length >= 1, "refusal persisted on the record");
+    assert.match(refusals[refusals.length - 1].message, /dry refused: .*no kept people/);
+  });
+
+  it("Real Upload path stays disabled after refusal (arm refused, no upload)", async () => {
+    const jobId = await createJob();
+    toDryRunning(jobId);
+    seedPeople();
+    seedSelection(jobId);
+    seedDetect(jobId, []);
+    await postDry(jobId, "dd-r3-1", {});
+    const arm = await (await fetch(`${url}/jobs/${jobId}/commands`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ commandId: "dd-r3-arm", type: "arm", payload: { attestedText: "x", typed: SLUG, clicked: true } }),
+    })).json();
+    assert.equal(arm.accepted, false, "arm refused while G1 red");
+    const job = await getJob(jobId);
+    assert.equal(job.stage, "dry_running");
+    assert.ok(!(job.artifacts || []).some((a) => a.kind === "save-report"), "no save proof");
+  });
+
+  it("successful dry adds no refusal entries", async () => {
+    const jobId = await createJob();
+    toDryRunning(jobId);
+    seedPeople();
+    seedSelection(jobId);
+    seedDetect(jobId, [SLUG]);
+    const before = dryRefusals(await getJob(jobId)).length;
+    const d = await postDry(jobId, "dd-r4-1", {});
+    assert.equal(d.json.accepted, true);
+    assert.equal(dryRefusals(await getJob(jobId)).length, before, "green dry writes no refusal notes");
+  });
+
+  it("Safety UI renders persisted refusals escaped in an amber card", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { dirname, join } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const src = readFileSync(join(root, "web", "js", "pages", "safety.js"), "utf8");
+    assert.match(src, /Last dry attempt refused/, "refusal card present");
+    assert.match(src, /job\.ledger/, "card reads the persisted record, not POST memory");
+    assert.match(src, /esc\(r\.message\)/, "refusal text escaped");
+    assert.match(src, /class="warn"><b>Last dry attempt refused/, "amber explainer, not the red danger fence");
   });
 });

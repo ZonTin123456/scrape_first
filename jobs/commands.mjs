@@ -3,7 +3,7 @@
 // Client-generated commandId on all mutating commands.
 // Replay returns original disposition, never executes twice.
 // Cancel records intent/audit before ack via jobs/store (ledger append + write).
-import { findJobById, writeJob, requestCancel, advance, retry, resume, addArtifact, finishUploadRowAndCancel, currentEngineOp, jobDirFor } from "./store.mjs";
+import { findJobById, writeJob, requestCancel, advance, retry, resume, addArtifact, appendLedger, finishUploadRowAndCancel, currentEngineOp, jobDirFor } from "./store.mjs";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
@@ -161,27 +161,42 @@ export function createCommandStore({ hub = null, engine = null } = {}) {
         const DRY_KEYS = ["snapshotInput", "snapshotId", "rows", "mapMode", "guardStatus", "listedPath",
           "destinationOrigin", "targetDepts", "wouldCreate", "identity", "unmapped", "shots"];
         const explicit = DRY_KEYS.some((k) => p[k] !== undefined);
-        const dryInputs = explicit
-          ? {
-              snapshotInput: p.snapshotInput ?? null,
-              snapshotId: p.snapshotId ?? null,
-              rows: p.rows ?? [],
-              mapMode: p.mapMode ?? "pinned",
-              guardStatus: p.guardStatus ?? "green",
-              listedPath: p.listedPath ?? null,
-              destinationOrigin: p.destinationOrigin ?? null,
-              targetDepts: p.targetDepts ?? [],
-              wouldCreate: p.wouldCreate ?? [],
-              identity: p.identity ?? null,
-              unmapped: p.unmapped ?? [],
-              shots: p.shots ?? [],
-            }
-          : buildDryDefaults(outDir, job);
         let result;
         try {
+          // Defaults build inside try so missing/invalid inputs land in the
+          // refusal path below (persisted note + visible reason) too.
+          const dryInputs = explicit
+            ? {
+                snapshotInput: p.snapshotInput ?? null,
+                snapshotId: p.snapshotId ?? null,
+                rows: p.rows ?? [],
+                mapMode: p.mapMode ?? "pinned",
+                guardStatus: p.guardStatus ?? "green",
+                listedPath: p.listedPath ?? null,
+                destinationOrigin: p.destinationOrigin ?? null,
+                targetDepts: p.targetDepts ?? [],
+                wouldCreate: p.wouldCreate ?? [],
+                identity: p.identity ?? null,
+                unmapped: p.unmapped ?? [],
+                shots: p.shots ?? [],
+              }
+            : buildDryDefaults(outDir, job);
           result = recordDryPass(outDir, job, dryInputs);
         } catch (e) {
           emitSafe(hub, jobId, "gate:failed", { gate: "G1", reason: e?.code ?? "gate1-failed" });
+          // Persist the refusal detail so Safety shows it after repaint or
+          // reload (the POST disposition alone is lost on repaint). Stage,
+          // ids, proofs untouched: display metadata only, still fail-closed.
+          // recordDryPass already ledgered G1-red detail (e.ledgered); other
+          // input failures get one refusal note here.
+          try {
+            if (!e?.ledgered) {
+              appendLedger(job, "gate:failed", `dry refused: ${e?.message ?? e?.code ?? "failed"}`.slice(0, 300), commandId ? { commandId } : {});
+            }
+            writeJob(outDir, job);
+          } catch {
+            // Noting the refusal must never mask the refusal itself.
+          }
           throw e;
         }
         writeJob(outDir, job);
