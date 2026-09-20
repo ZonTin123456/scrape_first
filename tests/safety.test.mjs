@@ -621,17 +621,16 @@ describe("P6 walkthroughs (happy, CF-preserves-arm, dry-partial amber, guard-red
 });
 
 describe("P6 trinity modes + danger-zone screen contract pins", () => {
-  it("web client carries discover/dry/real screens, fenced danger zone, auto-pin", () => {
-    const html = src("web/index.html");
-    assert.ok(html.includes("DISCOVER — inspect only"), "missing pin: discover screen");
-    assert.ok(html.includes("DRY — fill + screenshot, never save"), "missing pin: dry screen");
-    assert.ok(html.includes("REAL — danger zone"), "missing pin: real danger zone");
-    assert.ok(html.includes("danger zone (red fence)"), "missing pin: fenced red zone");
-    assert.ok(html.includes("auto-pinned at"), "missing pin: context auto-pin");
-    assert.ok(html.includes("drawer allowed only before dry_running"), "missing pin: drawer rule");
-    assert.ok(html.includes("I reviewed dry report") || html.includes("attestation"), "missing pin: attestation UI");
-    assert.ok(html.includes("PASS: Gate 1 green") && html.includes("BLOCKED: Gate 1 red"), "missing pin: G1 text status");
-    assert.ok(html.includes("MODES") || html.includes("MODE "), "missing pin: mode+stage pill");
+  it("light shell carries dry-safe screen, fenced danger zone, G1/G2 gating", () => {
+    const safety = src("web/js/pages/safety.js");
+    const header = src("web/js/header.js");
+    assert.ok(safety.includes("Dry-run — safe, never saves"), "missing pin: dry-safe screen");
+    assert.ok(safety.includes("Real upload — destructive"), "missing pin: real danger zone");
+    assert.ok(safety.includes("Red appears nowhere else"), "missing pin: fenced red zone");
+    assert.ok(safety.includes("G2 attestation"), "missing pin: G2 attestation UI");
+    assert.ok(safety.includes("G1 preflight: passed") && safety.includes("G1 preflight: blocked"), "missing pin: G1 text status");
+    assert.ok(header.includes("STAGE"), "missing pin: stage pill");
+    assert.ok(header.includes("retry-to") && header.includes("Cancel"), "missing pin: recovery controls");
   });
 
   it("modes frozen: discover/dry/real trinity", () => {

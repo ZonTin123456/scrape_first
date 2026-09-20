@@ -488,14 +488,28 @@ describe("UI step commands: idempotency + single-flight + validation", () => {
 });
 
 describe("UI shell carries Create + Steps + Recovery controls", () => {
-  it("web client has source form, step buttons, pages pane, retry/resume/cancel (static)", () => {
-    const html = readFileSync(join(root, "web", "index.html"), "utf8");
-    for (const id of ["src-url", "src-slug", "src-group", "create-btn", "jobs-btn", "probe-btn", "approve-btn", "scrape-btn", "finalize-btn", "detect-btn",
-      "pages-pane", "pages-load-btn", "pages-save-btn", "pages-reload-btn", "pages-msg", "pages-body", "pages-images",
-      "retry-to", "retry-btn", "resume-btn", "cancel-btn"]) {
-      assert.ok(html.includes(`id="${id}"`), `missing #${id}`);
+  it("light shell has create form, page modules, recovery controls (static)", () => {
+    const shell = readFileSync(join(root, "web", "shell.html"), "utf8");
+    const dash = readFileSync(join(root, "web", "js", "pages", "dashboard.js"), "utf8");
+    for (const id of ["nav", "pill", "recov", "view", "activity-mount"]) {
+      assert.ok(shell.includes(`id="${id}"`), `missing #${id} in shell`);
     }
-    assert.ok(html.includes("/jobs") && html.includes("POST"), "client uses POST job transport");
-    assert.ok(html.includes("/pages"), "client drives Page Selection routes");
+    for (const id of ["create-form", "f-source", "f-group", "f-slug", "jobs-list"]) {
+      assert.ok(dash.includes(id), `missing ${id} in dashboard`);
+    }
+    for (const [file, ids] of [
+      ["pages/overview.js", ["ov-probe"]],
+      ["pages/pages.js", ["pg-save", "pg-approve", "pg-scrape"]],
+      ["pages/review.js", ["rev-save", "rev-preview", "rev-finalize"]],
+      ["pages/safety.js", ["sf-detect", "sf-dry", "sf-arm", "sf-upload"]],
+      ["header.js", ["retry-to"]],
+    ]) {
+      const src = readFileSync(join(root, "web", "js", file), "utf8");
+      for (const id of ids) assert.ok(src.includes(id), `missing ${id} in ${file}`);
+    }
+    const api = readFileSync(join(root, "web", "js", "api.js"), "utf8");
+    assert.ok(api.includes("/jobs"), "client uses job transport");
+    assert.ok(api.includes("/commands"), "client drives POST command transport");
+    assert.ok(api.includes("/pages"), "client drives Page Selection routes");
   });
 });
