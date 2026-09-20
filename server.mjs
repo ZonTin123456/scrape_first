@@ -44,8 +44,8 @@ function sendJson(res, status, obj) {
 
 function serveStatic(req, res, pathname) {
   let rel;
-  // #45 retire: old single-page UI deleted at behavior/contract parity.
-  // Root serves the new light shell; no dark-theme fallback remains.
+  // #44 cutover (single flip): root serves the new light shell. The old
+  // single-page UI stays on disk at /index.html for one release (rollback).
   try {
     rel = pathname === "/" ? "/shell.html" : decodeURIComponent(pathname);
   } catch {

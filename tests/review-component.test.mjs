@@ -326,18 +326,13 @@ describe("P5 server: POST-only save, stale conflict, preview, thumbs", () => {
     for (const name of ["pickLinksHTML", "masterPickHTML", "pickImagesHTML", "reviewHTML", "writeReview"]) {
       assert.ok(cli.includes(name), `legacy builder stays: ${name}`);
     }
-    const shell = readFileSync(join(root, "web", "shell.html"), "utf8");
-    const stageMap = readFileSync(join(root, "web", "js", "stage-map.js"), "utf8");
-    const activity = readFileSync(join(root, "web", "js", "activity.js"), "utf8");
-    for (const src of [shell, stageMap, activity]) {
-      assert.ok(!/<iframe/i.test(src), "no iframe in light shell");
-      assert.ok(!/src=["']file:\/\//i.test(src), "no file:// thumbs");
-      assert.ok(!/href=["']file:\/\//i.test(src), "no file:// links");
-      assert.ok(!/src=["']data:/i.test(src), "no inline bytes in light shell");
-    }
-    assert.match(stageMap, /waiting_for_people_review/);
-    assert.match(shell, /activity-mount/);
-    assert.match(activity, /<details/);
+    const client = readFileSync(join(root, "web", "index.html"), "utf8");
+    assert.ok(!/<iframe/i.test(client), "no iframe in review component");
+    assert.ok(!/src=["']file:\/\//i.test(client), "no file:// thumbs");
+    assert.ok(!/href=["']file:\/\//i.test(client), "no file:// links");
+    assert.ok(!/src=["']data:/i.test(client), "no inline bytes in client");
+    assert.match(client, /waiting_for_people_review/);
+    assert.match(client, /log-strip/);
   });
 });
 

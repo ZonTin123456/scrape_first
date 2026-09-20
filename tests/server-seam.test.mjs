@@ -76,10 +76,9 @@ describe("startServer stub roundtrip", () => {
     assert.match(html, /light-job-workspace/);
   });
 
-  it("old single-page file retired: absent on disk, /index.html now 404s (#45)", async () => {
-    assert.throws(() => readFileSync(join(root, "web", "index.html"), "utf8"), /ENOENT/);
-    const r = await fetch(`${app.url}/index.html`, { headers: { Accept: "text/html" } });
-    assert.equal(r.status, 404);
+  it("old single-page file retained on disk with its 3-pane marker (#44 rollback)", async () => {
+    const old = readFileSync(join(root, "web", "index.html"), "utf8");
+    assert.match(old, /3-pane/);
   });
 
   it("GET /jobs/:id returns forward-compat not-found", async () => {

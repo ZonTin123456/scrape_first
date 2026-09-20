@@ -63,12 +63,13 @@ describe("deep-link intercept (#39)", () => {
     assert.match(unknownJson.headers.get("content-type") || "", /application\/json/);
   });
 
-  it("root serves the new shell; retired /index.html path 404s (#45)", async () => {
+  it("root serves the new shell after flip; old file retained at /index.html (#44)", async () => {
     const r = await fetch(`${app.url}/`, { headers: HTML });
     assert.equal(r.status, 200);
     assert.match(await r.text(), /light-job-workspace/);
-    const gone = await fetch(`${app.url}/index.html`, { headers: HTML });
-    assert.equal(gone.status, 404);
+    const old = await fetch(`${app.url}/index.html`, { headers: HTML });
+    assert.equal(old.status, 200);
+    assert.doesNotMatch(await old.text(), /light-job-workspace/);
   });
 
   it("HEAD deep links serve shell HTML; POST commands keep JSON even asking html", async () => {

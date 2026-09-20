@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Job Workspace — Review</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; font: 14px/1.5 system-ui, sans-serif; background: #0E0D0B; color: #F4F1E8; }
+  header { padding: 10px 16px; border-bottom: 1px solid #2a261e; background: #15130F; }
+  #stepper { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; font-size: 12px; color: #AAA398; }
+  #stepper .st { padding: 2px 8px; border: 1px solid #2a261e; border-radius: 999px; }
+  #stepper .st.active { border-color: #F2B84B; color: #FFCC66; }
+  main { display: grid; grid-template-columns: 220px 1fr 300px; gap: 0; min-height: 62vh; }
+  /* P5: current-step pane goes WIDE at waiting_for_people_review */
+  body[data-stage="waiting_for_people_review"] main { grid-template-columns: 160px 1fr 220px; }
+  body[data-stage="waiting_for_people_review"] #pane-step { background: #15130F; }
+  section, aside { padding: 16px; border-right: 1px solid #2a261e; min-width: 0; }
+  aside { border-right: 0; background: #15130F; }
+  body[data-stage="waiting_for_people_review"] #pane-context { font-size: 12px; }
+  footer#log-strip { padding: 8px 16px; border-top: 1px solid #2a261e; color: #AAA398; background: #0E0D0B; max-height: 22vh; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; }
+  .pill { display: inline-block; padding: 2px 10px; border: 1px solid #F2B84B; border-radius: 999px; color: #FFCC66; font-size: 12px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
+  body[data-stage="waiting_for_people_review"] .cards { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  figure.card { margin: 0; border: 1px solid #2a261e; border-radius: 8px; padding: 8px; background: #1C1913; }
+  figure.card img { width: 100%; height: 140px; object-fit: cover; background: #0E0D0B; border-radius: 4px; }
+  .warn { color: #F2B84B; }
+  .err { color: #ff8888; }
+  .muted { color: #706A61; }
+  button, input[type="number"], input[type="text"] { font: inherit; }
+  button { background: #F2B84B; border: 1px solid #D99A2B; border-radius: 6px; padding: 6px 12px; cursor: pointer; color: #0E0D0B; }
+  button.ghost { background: transparent; color: #FFCC66; border-color: #F2B84B; }
+  input[type="number"] { width: 4em; background: #0E0D0B; color: #F4F1E8; border: 1px solid #2a261e; border-radius: 4px; padding: 2px 6px; }
+  #bulk-bar, #save-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+  #pages-pane { margin-top: 16px; border-top: 1px solid #2a261e; padding-top: 12px; }
+  #pages-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+  #pages-table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0; }
+  #pages-table th, #pages-table td { border: 1px solid #2a261e; padding: 2px 6px; text-align: left; }
+  .page-imgs { margin: 4px 0 12px 16px; font-size: 12px; }
+  .page-imgs label { display: inline-block; margin: 2px 8px 2px 0; }
+  #job-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  #job-bar input { background: #0E0D0B; color: #F4F1E8; border: 1px solid #2a261e; border-radius: 4px; padding: 4px 8px; min-width: 220px; }
+  #create-bar, #steps-bar, #recovery-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  #create-bar input, #recovery-bar input, #recovery-bar select { background: #0E0D0B; color: #F4F1E8; border: 1px solid #2a261e; border-radius: 4px; padding: 4px 8px; }
+  /* P6 Safety trinity: names in headings, never color alone. */
+  #mode-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; font-size: 12px; }
+  #mode-bar .mode { padding: 2px 10px; border: 1px solid #2a261e; border-radius: 999px; cursor: pointer; color: #AAA398; }
+  #mode-bar .mode[aria-pressed="true"][data-mode="discover"] { border-color: #AAA398; color: #F4F1E8; }
+  #mode-bar .mode[aria-pressed="true"][data-mode="dry"] { border-color: #F2B84B; color: #FFCC66; }
+  #mode-bar .mode[aria-pressed="true"][data-mode="real"] { border-color: #ff5555; color: #ff8888; }
+  #safety-pane { margin-top: 16px; border-top: 1px solid #2a261e; padding-top: 12px; }
+  #bundle-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; margin: 8px 0; }
+  .bundle-sec { border: 1px solid #2a261e; border-radius: 6px; padding: 8px; background: #15130F; font-size: 12px; }
+  .bundle-sec h4 { margin: 0 0 4px; font-size: 12px; color: #AAA398; }
+  .bundle-sec.pending { border-style: dashed; }
+  #row-table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0; }
+  #row-table th, #row-table td { border: 1px solid #2a261e; padding: 2px 6px; text-align: left; }
+  .pass { color: #8fd18f; }
+  .blocked { color: #ff8888; }
+  fieldset.danger { border: 2px solid #ff5555; border-radius: 8px; padding: 10px; margin: 10px 0; }
+  fieldset.danger legend { color: #ff8888; font-weight: bold; padding: 0 6px; }
+  body[data-pinned="true"] #pane-context { outline: 1px solid #F2B84B; }
+  #ctx-pin-note { font-size: 12px; color: #FFCC66; }
+  #dry-input { width: 100%; min-height: 90px; background: #0E0D0B; color: #F4F1E8; border: 1px solid #2a261e; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 11px; }
+</style>
+</head>
+<body data-stage="idle">
+<header>
+  <strong>Job Workspace</strong>
+  <!-- 3-pane workspace shell: workflow left, current step center (wide at review), context right, bottom log strip -->
+  <span class="pill" id="status-pill">MODE local · STAGE idle</span>
+  <div id="stepper" aria-label="pipeline steps"></div>
+  <div id="job-bar">
+    <label>Job <input id="job-id" type="text" placeholder="job_..." /></label>
+    <button id="load-btn" class="ghost">Load review</button>
+    <button id="safety-btn" class="ghost">Load safety</button>
+    <span class="muted" id="rev-label"></span>
+  </div>
+  <div id="create-bar" aria-label="create job">
+    <label>Source URL <input id="src-url" type="text" placeholder="https://..." size="32" /></label>
+    <label>Slug <input id="src-slug" type="text" placeholder="auto from URL" size="16" /></label>
+    <label>Group <input id="src-group" type="text" placeholder="group" size="12" /></label>
+    <button id="create-btn">Create Job</button>
+    <button id="jobs-btn" class="ghost">List jobs</button>
+    <span class="muted" id="create-msg" role="status"></span>
+  </div>
+  <div id="steps-bar" role="group" aria-label="pipeline steps">
+    <span class="muted">Steps:</span>
+    <button id="probe-btn" class="ghost">Probe</button>
+    <button id="approve-btn" class="ghost">Approve pages</button>
+    <button id="scrape-btn" class="ghost">Scrape</button>
+    <button id="finalize-btn" class="ghost">Finalize</button>
+    <button id="detect-btn" class="ghost">Detect</button>
+    <span class="muted" id="steps-msg" role="status"></span>
+  </div>
+  <div id="recovery-bar" role="group" aria-label="retry resume cancel">
+    <span class="muted">Recovery:</span>
+    <label>Retry to <select id="retry-to"></select></label>
+    <button id="retry-btn" class="ghost">Retry</button>
+    <button id="resume-btn" class="ghost">Resume</button>
+    <button id="cancel-btn" class="ghost">Cancel</button>
+    <span class="muted" id="recovery-msg" role="status"></span>
+  </div>
+  <div id="mode-bar" role="group" aria-label="safety mode">
+    <span class="muted">Mode:</span>
+    <button class="mode" data-mode="discover" aria-pressed="true">DISCOVER — inspect only (gray/neutral)</button>
+    <button class="mode" data-mode="dry" aria-pressed="false">DRY — fill + screenshot, never save (amber)</button>
+    <button class="mode" data-mode="real" aria-pressed="false">REAL — danger zone: only mode that saves/creates (red fence)</button>
+  </div>
+</header>
+<main>
+  <section id="pane-workflow" aria-label="workflow steps">
+    <h2>Workflow</h2>
+    <ol id="workflow-list"></ol>
+  </section>
+  <section id="pane-step" aria-label="current step">
+    <h2 id="step-title">Current step</h2>
+    <div id="pages-pane" aria-label="page selection">
+      <h3>Page Selection — discovered pages</h3>
+      <p class="muted">Pages found by Probe over the staging contract. Untick to drop a page or its images, Save through the server, then Approve pages into Scrape.</p>
+      <div id="pages-bar">
+        <button id="pages-load-btn" class="ghost">Load pages</button>
+        <button id="pages-save-btn">Save pages (POST only)</button>
+        <button id="pages-reload-btn" class="ghost">Reload</button>
+        <span id="pages-msg" role="status"></span>
+      </div>
+      <div id="pages-pending" class="muted"></div>
+      <table id="pages-table" aria-label="discovered pages">
+        <thead><tr><th>keep</th><th>page</th><th>counts</th></tr></thead>
+        <tbody id="pages-body"></tbody>
+      </table>
+      <div id="pages-images"></div>
+    </div>
+    <div id="review-pane">
+      <p class="muted">Enter a Job ID, then Load review. Review stage goes wide; bottom log strip stays.</p>
+      <div id="bulk-bar">
+        <label>Bulk order <input id="bulk-ord" type="number" min="0" value="0" /></label>
+        <button id="bulk-set">Set checked only</button>
+        <button id="preview-btn" class="ghost">Warning preview</button>
+      </div>
+      <div id="dup-warn" class="warn" role="status"></div>
+      <div id="sort-preview" class="muted"></div>
+      <div class="cards" id="cards"></div>
+      <div id="save-bar">
+        <button id="save-btn">Save (POST only)</button>
+        <button id="reload-btn" class="ghost">Reload</button>
+        <span id="save-msg" role="status"></span>
+      </div>
+    </div>
+    <div id="safety-pane" aria-label="safety">
+      <h3>Safety — discover / dry / real trinity</h3>
+      <p class="muted">Visibility bundle below is undroppable: every section always renders (or shows an explicit pending note). Real upload stays disabled until Gate 1 is green and Gate 2 (exact attestation + typed slug + click) completes.</p>
+      <div id="bundle-grid"></div>
+      <h4>Per-row table</h4>
+      <table id="row-table" aria-label="per-row upload table">
+        <thead><tr><th>seq</th><th>name</th><th>group</th><th>target</th><th>status</th><th>detail</th></tr></thead>
+        <tbody id="row-body"></tbody>
+      </table>
+      <h4>Gate 1 — all-green + fresh dry for same snapshot</h4>
+      <div id="g1-list" role="status"></div>
+      <h4>Dry input (JSON payload for the dry command)</h4>
+      <textarea id="dry-input" aria-label="dry command payload"></textarea>
+      <div id="dry-bar">
+        <button id="dry-btn">Record dry pass (DRY mode only)</button>
+        <span id="dry-msg" role="status"></span>
+      </div>
+      <fieldset class="danger" aria-label="real danger zone">
+        <legend>REAL — danger zone (red fence): only mode that clicks save / creates departments</legend>
+        <div id="g2-attest"></div>
+        <label><input type="checkbox" id="g2-check" /> <span id="g2-text"></span></label>
+        <br />
+        <label>Type exact slug to arm: <input id="g2-slug" type="text" autocomplete="off" /></label>
+        <button id="arm-btn">Arm (click — single use)</button>
+        <button id="upload-btn">Real upload (REAL mode only)</button>
+        <span id="g2-msg" role="status"></span>
+      </fieldset>
+      <h4>Proofs — immutable dry/save reports (sha256)</h4>
+      <div id="proof-list" class="muted"></div>
+    </div>
+  </section>
+  <aside id="pane-context" aria-label="context">
+    <h2>Context <button id="ctx-toggle" class="ghost">Collapse context</button></h2>
+    <div id="ctx-pin-note" role="status"></div>
+    <div id="ctx-source"></div>
+    <div id="ctx-safety"></div>
+    <div id="ctx-evidence"></div>
+  </aside>
+</main>
+<footer id="log-strip" aria-label="log">log strip — per-Job events stream here.</footer>
+<script>
+(function () {
+  "use strict";
+  const SPINE = ["idle","probing","waiting_for_page_selection","scraping","waiting_for_people_review","finalizing","detecting_backend","dry_running","dry_passed","armed","uploading","done"];
+  const $ = (id) => document.getElementById(id);
+  const state = { jobId: null, job: null, model: null, thumbs: new Map(), es: null, safetyMode: "discover", safety: null, ctxCollapsed: false };
+
+  function ordOf(v) {
+    // Cosmetic/local only: invalid coerces to 0. Server reruns authoritative.
+    const n = Number(v);
+    return Number.isInteger(n) && n >= 0 ? n : 0;
+  }
+
+  function renderStepper(stage) {
+    const el = $("stepper");
+    el.textContent = "";
+    for (const s of [...SPINE, "failed", "cancelled"]) {
+      const d = document.createElement("span");
+      d.className = "st" + (s === stage ? " active" : "");
+      d.textContent = s;
+      el.appendChild(d);
+    }
+    const wl = $("workflow-list");
+    wl.textContent = "";
+    for (const s of SPINE) {
+      const li = document.createElement("li");
+      li.textContent = s + (s === stage ? " ←" : "");
+      wl.appendChild(li);
+    }
+  }
+
+  function setStage(stage) {
+    document.body.dataset.stage = stage || "idle";
+    renderStepper(stage);
+    $("step-title").textContent = stage === "waiting_for_people_review"
+      ? "Review people — wide"
+      : ("Current step: " + (stage || "—"));
+  }
+
+  async function tickStatus() {
+    if (!state.jobId) return;
+    try {
+      const r = await fetch("/jobs/" + encodeURIComponent(state.jobId));
+      if (!r.ok) return;
+      const body = await r.json();
+      const job = body.job;
+      if (!job) return;
+      state.job = job;
+      const blockers = (job.blockers || []).map((b) => b.type).join(",") || "—";
+      $("status-pill").textContent = "MODE " + state.safetyMode + " · STAGE " + job.stage + " · BLOCKER " + blockers;
+      setStage(job.stage);
+      updatePin(job.stage);
+      gateButtons();
+      $("ctx-source").innerHTML = "<p><b>Source</b><br>" + esc(job.source) + "<br><span class=muted>" + esc(job.group || "") + " · " + esc(job.slug) + "</span></p>";
+    } catch { /* display only */ }
+  }
+  setInterval(tickStatus, 1000);
+
+  function esc(s) {
+    return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function collect() {
+    // Component submits keep/order only. Thumbs stay HTTP pointers.
+    return [...document.querySelectorAll("#cards input[data-seq]")].map((c) => ({
+      seq: Number(c.dataset.seq),
+      file: c.dataset.file,
+      keep: c.checked,
+      order: ordOf(document.querySelector('input[data-ord="' + c.dataset.seq + '"]')?.value),
+    }));
+  }
+
+  function renderModel(model) {
+    state.model = model;
+    $("rev-label").textContent = "rev " + model.revision + (model.stale ? " · STALE" : "");
+    const bySeq = new Map((model.selection || []).map((r) => [Number(r.seq), r]));
+    const thumbBySeq = new Map((model.thumbs || []).map((t) => [Number(t.seq), t.url]));
+    state.thumbs = thumbBySeq;
+    const cards = $("cards");
+    cards.textContent = "";
+    for (const r of model.selection || []) {
+      const fig = document.createElement("figure");
+      fig.className = "card";
+      const img = document.createElement("img");
+      // HTTP-pointer thumbnails only. Never file://, never inline bytes.
+      img.src = thumbBySeq.get(Number(r.seq)) || "";
+      img.alt = "seq " + r.seq;
+      img.loading = "lazy";
+      const cap = document.createElement("figcaption");
+      cap.innerHTML = "# seq=" + r.seq + " " + esc(r.file) +
+        "<br><label><input type='checkbox' data-seq='" + r.seq + "' data-file='" + esc(r.file) + "'" + (r.keep ? " checked" : "") + "> keep</label>" +
+        "<br><label>order <input type='number' data-ord='" + r.seq + "' min='0' value='" + ordOf(r.order) + "'></label>";
+      fig.appendChild(img);
+      fig.appendChild(cap);
+      cards.appendChild(fig);
+    }
+    renderWarnings(model);
+  }
+
+  function renderWarnings(model) {
+    const dups = model.duplicates || [];
+    $("dup-warn").textContent = dups.length
+      ? "warn: duplicate orders: " + dups.map((d) => d.order + " (seq " + d.seqs.join(",") + ")").join("; ")
+      : "";
+    const eff = model.effectiveOrder || [];
+    $("sort-preview").textContent = eff.length
+      ? "effective sort (order,seq): " + eff.map((e) => e.seq + "@" + e.order).join(" → ")
+      : "";
+  }
+
+  async function loadReview() {
+    const id = $("job-id").value.trim();
+    if (!id) { $("save-msg").textContent = "enter a Job ID"; return; }
+    state.jobId = id;
+    connectLog();
+    await tickStatus();
+    const r = await fetch("/jobs/" + encodeURIComponent(id) + "/review");
+    if (r.status === 404) { $("save-msg").textContent = "no review draft for job"; return; }
+    const model = await r.json();
+    if (model.stale) $("save-msg").textContent = "stale draft — reload before saving";
+    renderModel(model);
+    logLine("review model rev " + model.revision + (model.stale ? " STALE" : ""));
+  }
+
+  async function doPreview() {
+    if (!state.jobId || !state.model) return;
+    const draft = collect();
+    // Server-computed non-persisting preview: writes nothing.
+    const r = await fetch("/jobs/" + encodeURIComponent(state.jobId) + "/review/preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ selection: draft }),
+    });
+    const body = await r.json();
+    renderWarnings({ duplicates: body.duplicates || [], effectiveOrder: body.effectiveOrder || [] });
+    $("save-msg").textContent = "preview: " + (body.warnings || []).join("; ");
+    logLine("preview warnings: " + JSON.stringify(body.warnings || []));
+  }
+
+  async function doSave() {
+    if (!state.jobId || !state.model) return;
+    const draft = collect();
+    const r = await fetch("/jobs/" + encodeURIComponent(state.jobId) + "/review", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ selection: draft, editedFrom: state.model.revision }),
+    });
+    const body = await r.json();
+    if (r.status === 409 || body.ok === false) {
+      // Stale conflict: reload, never last-wins.
+      $("save-msg").textContent = "conflict: " + (body.reason || "stale") + " — reloaded rev " + body.revision;
+      $("save-msg").className = "err";
+      logLine("save conflict: " + JSON.stringify(body));
+      await loadReview();
+      return;
+    }
+    $("save-msg").textContent = "saved rev " + body.revision;
+    $("save-msg").className = "";
+    logLine("saved rev " + body.revision);
+    await loadReview();
+  }
+
+  function connectLog() {
+    try { state.es?.close(); } catch { /* ignore */ }
+    const strip = $("log-strip");
+    try {
+      const es = new EventSource("/jobs/" + encodeURIComponent(state.jobId) + "/events");
+      state.es = es;
+      es.onmessage = (ev) => logLine(ev.data);
+      es.addEventListener("artifact:written", (ev) => logLine(ev.data));
+      es.addEventListener("review:selection-written", (ev) => logLine(ev.data));
+      es.onerror = () => { /* display only; GET resync heals */ };
+    } catch { /* ignore */ }
+  }
+
+  function logLine(s) {
+    const strip = $("log-strip");
+    const div = document.createElement("div");
+    div.textContent = new Date().toISOString() + " " + s;
+    strip.appendChild(div);
+    while (strip.children.length > 200) strip.removeChild(strip.firstChild);
+    strip.scrollTop = strip.scrollHeight;
+  }
+
+  $("load-btn").onclick = loadReview;
+  $("safety-btn").onclick = loadSafety;
+  $("reload-btn").onclick = loadReview;
+  $("save-btn").onclick = doSave;
+  $("preview-btn").onclick = doPreview;
+  $("bulk-set").onclick = () => {
+    // Checked-only bulk assign (cosmetic): only checked rows take the value.
+    const v = ordOf($("bulk-ord").value);
+    document.querySelectorAll("#cards input[data-seq]:checked").forEach((c) => {
+      const o = document.querySelector('input[data-ord="' + c.dataset.seq + '"]');
+      if (o) o.value = v;
+    });
+  };
+  const q = new URLSearchParams(location.search).get("jobId");
+  if (q) { $("job-id").value = q; loadReview(); }
+
+  /* ---- P6 Safety trinity ---- */
+
+  const DRY_TEMPLATE = {
+    snapshotInput: {
+      people: [{ seq: 1, name: "demo" }],
+      selection: [{ seq: 1, keep: true, order: 0 }],
+      sourceUrl: "https://example.go.th/p1",
+      sourceGroup: "g",
+      backendOrigin: "https://backend.invalid/",
+      deptMapping: { g: 1 },
+      deptPlan: [{ group: "g", action: "upload" }],
+      mappingVersion: "m1",
+      profileVersion: "p1",
+    },
+    rows: [{ seq: 1, name: "demo", group: "g", target: "https://backend.invalid/personal/person/1", status: "dry" }],
+    mapMode: "pinned",
+    guardStatus: "green",
+    destinationOrigin: "https://backend.invalid/",
+    targetDepts: ["g"],
+    wouldCreate: [],
+    identity: { verified: false, note: "demo" },
+    unmapped: [],
+    shots: [],
+  };
+  $("dry-input").value = JSON.stringify(DRY_TEMPLATE, null, 1);
+
+  function newCommandId() {
+    return "cmd_" + Date.now().toString(36) + "_" + Math.floor(Math.random() * 1e9).toString(36);
+  }
+
+  async function postCommand(type, payload) {
+    if (!state.jobId) return { accepted: false, reason: "no-job" };
+    const r = await fetch("/jobs/" + encodeURIComponent(state.jobId) + "/commands", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ commandId: newCommandId(), type, payload: payload || {} }),
+    });
+    return r.json();
+  }
+
+  /* ---- PR #30 gap fix: Create + normal workflow steps + recovery ---- */
+
+  (function initRetryTargets() {
+    const sel = $("retry-to");
+    if (!sel) return;
+    for (const s of SPINE) {
+      const o = document.createElement("option");
+      o.value = s;
+      o.textContent = s;
+      sel.appendChild(o);
+    }
+  })();
+
+  $("create-btn").onclick = async () => {
+    const source = $("src-url").value.trim();
+    const slug = $("src-slug").value.trim();
+    const group = $("src-group").value.trim();
+    if (!source) { $("create-msg").textContent = "enter a Source URL"; return; }
+    const body = { source, group };
+    if (slug) body.slug = slug;
+    const r = await fetch("/jobs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (!r.ok || !data.job) {
+      $("create-msg").textContent = "create refused: " + (data.error?.code || r.status);
+      logLine("create job refused: " + JSON.stringify(data));
+      return;
+    }
+    $("job-id").value = data.jobId;
+    state.jobId = data.jobId;
+    $("create-msg").textContent = "created " + data.jobId;
+    logLine("created job " + data.jobId + " slug " + data.job.slug);
+    connectLog();
+    await tickStatus();
+  };
+
+  $("jobs-btn").onclick = async () => {
+    const r = await fetch("/jobs");
+    const data = await r.json();
+    const n = (data.jobs || []).length;
+    $("create-msg").textContent = n + " job(s)";
+    logLine("jobs list: " + JSON.stringify((data.jobs || []).map((j) => j.jobId + "@" + j.stage)));
+  };
+
+  async function driveStep(type, payload, msgEl, opts) {
+    const bgTimeoutMs = (opts && opts.bgTimeoutMs) || 240000;
+    if (!state.jobId && !$("job-id").value.trim()) {
+      if (msgEl) $(msgEl).textContent = "enter or create a Job first";
+      return;
+    }
+    if (!state.jobId) {
+      state.jobId = $("job-id").value.trim();
+      connectLog();
+    }
+    const d = await postCommand(type, payload || {});
+    if (msgEl) {
+      $(msgEl).textContent = d.accepted ? (type + ": " + d.reason) : ("refused: " + d.reason);
+      $(msgEl).className = d.accepted ? "pass" : "err";
+    }
+    logLine(type + " command: " + JSON.stringify(d));
+    await tickStatus();
+    if (d.accepted && d.reason === "started") {
+      // Background engine work (real Probe/Scrape/Detect): poll the ledger
+      // for the matching finished/failed/superseded entry, then resync.
+      if (msgEl) $(msgEl).textContent = type + ": running in background…";
+      const fin = await pollBgDone(d.commandId, bgTimeoutMs);
+      if (msgEl) {
+        $(msgEl).textContent = !fin
+          ? type + ": still running — watch the log strip or press the step again"
+          : type + ": " + String(fin.kind).replace("pipeline:", "") + " — " + fin.message;
+        $(msgEl).className = fin && fin.kind === "pipeline:finished" ? "pass" : "warn";
+      }
+      logLine(type + " background: " + JSON.stringify(fin));
+      await tickStatus();
+    }
+  }
+
+  async function pollBgDone(commandId, timeoutMs) {
+    const t0 = Date.now();
+    for (;;) {
+      await tickStatus();
+      const entries = (state.job?.ledger || []).filter((e) =>
+        e && e.commandId === commandId && (e.kind === "pipeline:finished" || e.kind === "pipeline:failed" || e.kind === "pipeline:superseded"));
+      if (entries.length) return entries[entries.length - 1];
+      if (Date.now() - t0 > timeoutMs) return null;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+
+  /* ---- Page Selection over the staging contract ---- */
+
+  async function loadPages() {
+    const id = $("job-id").value.trim();
+    if (!id) { $("pages-msg").textContent = "enter a Job ID"; return; }
+    state.jobId = id;
+    connectLog();
+    await tickStatus();
+    const r = await fetch("/jobs/" + encodeURIComponent(id) + "/pages");
+    if (r.status === 404) { $("pages-msg").textContent = "job not found"; return; }
+    const model = await r.json();
+    state.pages = model;
+    renderPages(model);
+    logLine("pages model: " + (model.pending ? "pending (probe first)" : (model.links.length + " link(s)")));
+  }
+
+  function renderPages(model) {
+    $("pages-pending").textContent = model.pending
+      ? "pending — no probe yet. Run Probe first, then Load pages."
+      : "";
+    const tb = $("pages-body");
+    tb.textContent = "";
+    for (const l of (model.links || [])) {
+      const tr = document.createElement("tr");
+      const tdKeep = document.createElement("td");
+      const keep = document.createElement("input");
+      keep.type = "checkbox";
+      keep.checked = l.keep !== false;
+      keep.setAttribute("data-plink", l.url);
+      tdKeep.appendChild(keep);
+      tr.appendChild(tdKeep);
+      const tdPage = document.createElement("td");
+      tdPage.innerHTML = "<b>" + esc(l.title || "(no title)") + "</b><br><span class=muted>" + esc(l.url) + "</span>";
+      tr.appendChild(tdPage);
+      const tdCounts = document.createElement("td");
+      tdCounts.textContent = l.counts ? ("text " + (l.counts.text ?? "?") + " / img " + (l.counts.image ?? "?")) : "—";
+      tr.appendChild(tdCounts);
+      tb.appendChild(tr);
+    }
+    const box = $("pages-images");
+    box.textContent = "";
+    for (const l of (model.links || [])) {
+      if (!l.images || !l.images.length) continue;
+      const fs = document.createElement("fieldset");
+      const lg = document.createElement("legend");
+      lg.textContent = "Images — " + (l.title || l.url) + " (" + l.images.length + ")";
+      fs.appendChild(lg);
+      const wrap = document.createElement("div");
+      wrap.className = "page-imgs";
+      for (const im of l.images) {
+        const lab = document.createElement("label");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = im.keep !== false;
+        cb.setAttribute("data-pslug", l.slug);
+        cb.setAttribute("data-pseq", String(im.seq));
+        lab.appendChild(cb);
+        lab.appendChild(document.createTextNode(" seq=" + im.seq + " " + (im.name || im.alt || "(no name)") + (im.section ? " [" + im.section + "]" : "")));
+        wrap.appendChild(lab);
+      }
+      fs.appendChild(wrap);
+      box.appendChild(fs);
+    }
+    if (!model.pending && !(model.links || []).length) {
+      $("pages-pending").textContent = "no pages for this job in staging (probe first).";
+    }
+  }
+
+  async function savePages() {
+    if (!state.jobId && !$("job-id").value.trim()) { $("pages-msg").textContent = "enter or create a Job first"; return; }
+    if (!state.jobId) { state.jobId = $("job-id").value.trim(); connectLog(); }
+    const links = [...document.querySelectorAll("#pages-body input[data-plink]")].map((c) => ({ url: c.getAttribute("data-plink"), keep: c.checked }));
+    const bySlug = new Map();
+    document.querySelectorAll("#pages-images input[data-pseq]").forEach((c) => {
+      const slug = c.getAttribute("data-pslug");
+      if (!bySlug.has(slug)) bySlug.set(slug, []);
+      bySlug.get(slug).push({ seq: Number(c.getAttribute("data-pseq")), keep: c.checked });
+    });
+    const images = {};
+    for (const [slug, arr] of bySlug) images[slug] = arr;
+    const r = await fetch("/jobs/" + encodeURIComponent(state.jobId) + "/pages", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ links, images }),
+    });
+    const body = await r.json();
+    if (r.ok && body.ok) {
+      $("pages-msg").textContent = "saved pages (" + body.links + " links, " + body.imageUpdates + " images)";
+      $("pages-msg").className = "pass";
+    } else {
+      $("pages-msg").textContent = "save refused: " + (body.reason || r.status);
+      $("pages-msg").className = "err";
+    }
+    logLine("pages save: " + JSON.stringify(body));
+    await loadPages();
+    await tickStatus();
+  }
+
+  $("pages-load-btn").onclick = loadPages;
+  $("pages-reload-btn").onclick = loadPages;
+  $("pages-save-btn").onclick = savePages;
+
+  $("probe-btn").onclick = () => driveStep("probe", {}, "steps-msg");
+  $("approve-btn").onclick = () => driveStep("approve-page", {}, "steps-msg");
+  $("scrape-btn").onclick = () => driveStep("scrape", {}, "steps-msg");
+  $("finalize-btn").onclick = () => driveStep("finalize", {}, "steps-msg");
+  $("detect-btn").onclick = () => driveStep("detect", {}, "steps-msg");
+
+  $("retry-btn").onclick = async () => {
+    const to = $("retry-to").value;
+    await driveStep("retry", { to, reason: "ui retry" }, "recovery-msg");
+  };
+  $("resume-btn").onclick = () => driveStep("resume", { reason: "ui resume" }, "recovery-msg");
+  $("cancel-btn").onclick = () => driveStep("cancel", { prompted: true, reason: "ui cancel" }, "recovery-msg");
+
+  document.querySelectorAll("#mode-bar .mode").forEach((b) => {
+    b.onclick = () => {
+      state.safetyMode = b.dataset.mode;
+      document.querySelectorAll("#mode-bar .mode").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+      tickStatus();
+      gateButtons();
+      logLine("safety mode: " + state.safetyMode);
+    };
+  });
+
+  // Context auto-pins at dry_passed/armed. The drawer (collapse toggle) is
+  // allowed only before dry_running; past that the context stays expanded.
+  function updatePin(stage) {
+    const pinned = stage === "dry_passed" || stage === "armed";
+    document.body.dataset.pinned = pinned ? "true" : "false";
+    const order = ["idle","probing","waiting_for_page_selection","scraping","waiting_for_people_review","finalizing","detecting_backend","dry_running","dry_passed","armed","uploading","done"];
+    const drawerAllowed = order.indexOf(stage) < order.indexOf("dry_running");
+    if (!drawerAllowed && state.ctxCollapsed) {
+      state.ctxCollapsed = false;
+    }
+    document.getElementById("pane-context").style.display = state.ctxCollapsed ? "none" : "";
+    const t = $("ctx-toggle");
+    t.disabled = !drawerAllowed;
+    t.title = drawerAllowed ? "" : "drawer allowed only before dry_running";
+    $("ctx-pin-note").textContent = pinned
+      ? "Context auto-pinned at " + stage + " — collapse disabled."
+      : (!drawerAllowed ? "Context locked expanded from dry_running on." : "");
+  }
+
+  $("ctx-toggle").onclick = () => {
+    state.ctxCollapsed = !state.ctxCollapsed;
+    updatePin(state.job?.stage || "idle");
+  };
+
+  // Client-side mode gating (server re-enforces G1/G2 regardless).
+  function gateButtons() {
+    const mode = state.safetyMode;
+    const g1ok = !!state.safety?.gate1?.ok;
+    $("dry-btn").disabled = mode !== "dry";
+    $("dry-btn").title = mode !== "dry" ? "switch to DRY mode to record a dry pass" : "";
+    const canReal = mode === "real" && g1ok;
+    $("arm-btn").disabled = !canReal;
+    $("upload-btn").disabled = !canReal;
+    if (mode === "discover") $("dry-msg").textContent = "DISCOVER mode: inspect only — switch mode to act.";
+  }
+
+  async function postSafetyCommand(type, payload) {
+    const r = await fetch("/jobs/" + encodeURIComponent(state.jobId) + "/commands", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ commandId: newCommandId(), type, payload }),
+    });
+    return r.json();
+  }
+
+  async function loadSafety() {
+    const id = $("job-id").value.trim();
+    if (!id) { $("dry-msg").textContent = "enter a Job ID"; return; }
+    state.jobId = id;
+    connectLog();
+    await tickStatus();
+    const r = await fetch("/jobs/" + encodeURIComponent(id) + "/safety");
+    if (r.status === 404) { $("dry-msg").textContent = "job not found"; return; }
+    const model = await r.json();
+    state.safety = model;
+    renderSafety(model);
+    gateButtons();
+    logLine("safety: G1 " + (model.gate1?.ok ? "GREEN" : "RED") + " stage " + model.stage);
+  }
+
+  function secDiv(title, bodyHtml, pending) {
+    const d = document.createElement("div");
+    d.className = "bundle-sec" + (pending ? " pending" : "");
+    const h = document.createElement("h4");
+    h.textContent = title;
+    d.appendChild(h);
+    const b = document.createElement("div");
+    b.innerHTML = bodyHtml;
+    d.appendChild(b);
+    return d;
+  }
+
+  function renderSafety(model) {
+    const grid = $("bundle-grid");
+    grid.textContent = "";
+    const b = model.bundle;
+    // Undroppable: all 10 sections always render; pending ones say so loudly.
+    const PENDING = "pending — no dry yet";
+    const secs = [
+      ["source", b ? esc(b.source) : PENDING],
+      ["group", b ? esc(b.group) : PENDING],
+      ["destination origin", b ? esc(b.destinationOrigin || "—") : PENDING],
+      ["target departments", b ? esc((b.targetDepts || []).join(", ") || "—") : PENDING],
+      ["would-create", b ? esc((b.wouldCreate || []).join(", ") || "none") : PENDING],
+      ["identity", b ? esc(JSON.stringify(b.identity)) : PENDING],
+      ["unmapped / TBD", b ? esc((b.unmapped || []).join(", ") || "none") + " · count " + b.counts.unmapped : PENDING],
+      ["counts (partial/skipped/failed)", b ? ("partial " + b.counts.partial + " · skipped " + b.counts.skipped + " · failed " + b.counts.failed + " · total " + b.counts.total) : PENDING],
+      ["per-row table", b ? (b.rows.length + " rows below") : PENDING],
+      ["report + screenshot links", b ? ((b.proofs || []).map((p) => esc(p.kind + " " + (p.relPath || p.url || ""))).join("<br>") || "none") : PENDING],
+    ];
+    for (const [t, html] of secs) grid.appendChild(secDiv(t, html, !b));
+    const tb = $("row-body");
+    tb.textContent = "";
+    for (const r of (b?.rows || [])) {
+      const tr = document.createElement("tr");
+      [r.seq, r.name, r.group, r.target, r.status, r.detail].forEach((v) => {
+        const td = document.createElement("td");
+        td.textContent = v ?? "";
+        tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    }
+    const g1 = model.gate1 || {};
+    const gl = $("g1-list");
+    gl.textContent = "";
+    const head = document.createElement("div");
+    head.className = g1.ok ? "pass" : "blocked";
+    head.textContent = g1.ok ? "PASS: Gate 1 green — Real danger zone may arm." : "BLOCKED: Gate 1 red — Real disabled.";
+    gl.appendChild(head);
+    for (const r of (g1.reasons || [])) {
+      const d = document.createElement("div");
+      d.className = "blocked";
+      d.textContent = "BLOCKED: " + r;
+      gl.appendChild(d);
+    }
+    for (const w of (g1.warnings || [])) {
+      const d = document.createElement("div");
+      d.className = "warn";
+      d.textContent = "AMBER: " + w;
+      gl.appendChild(d);
+    }
+    for (const v of (g1.verifyReasons || [])) {
+      const d = document.createElement("div");
+      d.className = "muted";
+      d.textContent = "proof: " + v;
+      gl.appendChild(d);
+    }
+    $("g2-text").textContent = model.gate2?.attestation
+      ? ("exact attestation (copy verbatim): " + model.gate2.attestation)
+      : "attestation unavailable until Gate 1 passes";
+    $("g2-attest").textContent = model.gate2?.armed ? "PASS: armed (single-use arm live)." : "";
+    const pl = $("proof-list");
+    pl.textContent = "";
+    for (const p of (b?.proofs || [])) {
+      const d = document.createElement("div");
+      d.textContent = p.kind + " · " + (p.relPath || p.url || "") + " · sha256 " + String(p.sha256 || "").slice(0, 16) + "… · " + (p.byteLength ?? "?") + " bytes";
+      pl.appendChild(d);
+    }
+  }
+
+  $("dry-btn").onclick = async () => {
+    if (!state.jobId) return;
+    let payload;
+    try {
+      payload = JSON.parse($("dry-input").value);
+    } catch {
+      $("dry-msg").textContent = "dry input is not valid JSON";
+      return;
+    }
+    const d = await postSafetyCommand("dry", payload);
+    $("dry-msg").textContent = d.accepted ? "dry recorded" : ("refused: " + d.reason);
+    $("dry-msg").className = d.accepted ? "pass" : "err";
+    logLine("dry command: " + JSON.stringify(d));
+    await loadSafety();
+  };
+
+  $("arm-btn").onclick = async () => {
+    if (!state.jobId || !state.safety) return;
+    const d = await postSafetyCommand("arm", {
+      attestedText: $("g2-check").checked ? (state.safety.gate2?.attestation ?? null) : null,
+      typed: $("g2-slug").value,
+      clicked: true,
+    });
+    $("g2-msg").textContent = d.accepted ? "PASS: armed (single use)." : ("refused: " + d.reason);
+    logLine("arm command: " + JSON.stringify(d));
+    await loadSafety();
+  };
+
+  $("upload-btn").onclick = async () => {
+    if (!state.jobId) return;
+    const d = await postSafetyCommand("begin-upload", {});
+    $("g2-msg").textContent = d.accepted ? "upload started (arm consumed)." : ("refused: " + d.reason);
+    logLine("begin-upload command: " + JSON.stringify(d));
+    await loadSafety();
+  };
+})();
+</script>
+</body>
+</html>
