@@ -202,9 +202,12 @@ describe("UI workflow: Probe -> Approve -> Scrape -> Finalize -> Detect via POST
       // Background accept: stage walks synchronously, work completes async.
       const probe = await postCommand(app.url, jobId, { commandId: "u-probe", type: "probe", payload: {} });
       assert.deepEqual(probe.json, { accepted: true, reason: "started", jobId, commandId: "u-probe" });
-      assert.equal((await getJob(app.url, jobId)).json.job.stage, "probing");
+      // Accept walks to probing; the instant fake engine may already have
+      // finished into waiting_for_page_selection (defect-1 fix).
+      assert.ok(["probing", "waiting_for_page_selection"].includes((await getJob(app.url, jobId)).json.job.stage));
       const probeDone = await waitLedger(app.url, jobId, "u-probe");
       assert.equal(probeDone.kind, "pipeline:finished");
+      assert.equal((await getJob(app.url, jobId)).json.job.stage, "waiting_for_page_selection");
 
       const probeReplay = await postCommand(app.url, jobId, { commandId: "u-probe", type: "probe", payload: {} });
       assert.deepEqual(probeReplay.json, probe.json);
@@ -239,7 +242,8 @@ describe("UI workflow: Probe -> Approve -> Scrape -> Finalize -> Detect via POST
       const det = await postCommand(app.url, jobId, { commandId: "u-det", type: "detect", payload: {} });
       assert.deepEqual(det.json, { accepted: true, reason: "started", jobId, commandId: "u-det" });
       await waitLedger(app.url, jobId, "u-det");
-      assert.equal((await getJob(app.url, jobId)).json.job.stage, "detecting_backend");
+      // Detect success advances to dry_running (defect-1 fix).
+      assert.equal((await getJob(app.url, jobId)).json.job.stage, "dry_running");
 
       const ledger = (await getJob(app.url, jobId)).json.job.ledger.map((e) => e.kind);
       assert.ok(ledger.includes("pipeline:started") && ledger.includes("pipeline:finished"));

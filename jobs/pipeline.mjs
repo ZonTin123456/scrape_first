@@ -874,6 +874,26 @@ async function runBgStep(bg) {
         appendLedger(fresh, "pipeline:deferred", `ui scrape: review seed skipped (${e?.code ?? "error"})`);
       }
     }
+    // Human-acceptance fix: a successful background step advances the Job to
+    // the next stable stage (probe -> page selection, scrape -> people
+    // review, detect -> dry). walkUiTo is forward-only and idempotent
+    // (already at/past = no-op, terminals throw but returned above), so
+    // command replay — which never re-runs this worker — and operator moves
+    // between accept and completion cannot double-advance. Advance applies
+    // only when the record still sits at the in-flight stage or already
+    // reached/passed the target; any other operator-moved stage is left
+    // untouched (finished ledger + artifacts still recorded below).
+    // Cancel/terminal supersession, blockers, single-flight, and fail-closed
+    // failure handling are unchanged.
+    const NEXT_STABLE = {
+      probe: "waiting_for_page_selection",
+      scrape: "waiting_for_people_review",
+      detect: "dry_running",
+    };
+    const stable = NEXT_STABLE[op];
+    if (stable && (fresh.stage === UI_STEP_STAGES[op] || spineIndex(fresh.stage) >= spineIndex(stable))) {
+      walkUiTo(fresh, stable, { step: `ui:${op}` });
+    }
     appendLedger(fresh, "pipeline:finished", message, commandId ? { commandId } : {});
     writeJob(outDir, fresh);
     for (const a of artifacts) emit(hub, jobId, "artifact:written", a);
