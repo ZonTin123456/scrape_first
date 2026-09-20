@@ -201,6 +201,19 @@ async function handleWith(req, res, ctx) {
   const path = u.pathname;
   let m;
 
+  // Light-workspace SPA intercept (#39, locked #33): browser navigation to job
+  // page deep links serves the new parallel shell. API/CLI fetches asking for
+  // JSON (fetch/curl send Accept */*) keep existing JSON shapes; POST, SSE,
+  // and thumbnail routes never divert. Root / still serves the old UI (#44 flips).
+  if (
+    (req.method === "GET" || req.method === "HEAD") &&
+    String(req.headers?.accept || "").includes("text/html") &&
+    /^\/jobs\/[^/]+(\/(pages|review|safety))?\/?$/.test(path)
+  ) {
+    serveStatic(req, res, "/shell.html");
+    return;
+  }
+
   // P5 review: HTTP-pointer thumbnails. Must precede generic /review routes.
   if ((m = path.match(/^\/jobs\/([^/]+)\/review\/thumbs\/([^/]+)$/))) {
     const jobId = decodeURIComponent(m[1]);
