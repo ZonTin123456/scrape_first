@@ -247,12 +247,16 @@ export function createCommandStore({ hub = null, engine = null } = {}) {
             sha256: result.sha256,
             byteLength: result.byteLength,
           });
-          runUploadRowsBg({ outDir, jobId, hub, engine, payload: p, commandId }).catch(() => null);
           reason = "upload-started";
         } catch (e) {
           if (ownClaim) releaseEngineOp(jobId);
           throw e;
         }
+        // Handoff: release the accept claim; the bg worker re-claims for
+        // setup + row loop. Immediate follow-up commands therefore evaluate
+        // on the merits (bad-stage/not-armed) instead of single-flight.
+        if (ownClaim) releaseEngineOp(jobId);
+        runUploadRowsBg({ outDir, jobId, hub, engine, payload: p, commandId }).catch(() => null);
       } else if (type === "finish-row") {
         // P8 upload-stop path: the engine finished the current row truthfully
         // after stop_requested; this records cancelled (consumes arm) over the

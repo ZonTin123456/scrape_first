@@ -14,8 +14,8 @@ import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { resolvePort } from "./cdp-port.mjs";
 import { buildDeptIndex, executeUploadRows } from "./upload-core.mjs";
-import { resolveTargetGroup } from "../services/sectioning.mjs";
-import { verifyPageIdentity } from "../services/identity.mjs";
+import { resolveTargetGroup } from "../../services/sectioning.mjs";
+import { verifyPageIdentity } from "../../services/identity.mjs";
 
 function readJson(path) {
   try {
@@ -92,7 +92,10 @@ export async function createUploadRowRunner({ outDir, job, port = "auto", onRow 
   let closed = false;
   return {
     backend: ctx.backend,
-    async uploadRow(entry) {
+    // Same envelope as pipeline uploadStep runners: {outDir, job, entry, dir}.
+    // Accepts a bare entry too (tests/debug callers).
+    async uploadRow(args) {
+      const entry = args && typeof args === "object" && "entry" in args ? args.entry : args;
       const person = ctx.personBySeq.get(Number(entry?.seq));
       if (!person) {
         return { seq: Number(entry?.seq), status: "failed", detail: "person missing from people.json" };

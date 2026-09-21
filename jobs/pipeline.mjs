@@ -998,6 +998,25 @@ export async function runUploadRowsBg({ outDir, jobId, hub = null, engine = null
       }
     }
     activePipelineJobs.add(jobId);
+    // Claim for the row loop (released in finally). Bounded wait: another
+    // engine op may briefly hold the claim; rows must never run concurrently
+    // with it. On persistent contention the worker defers visibly instead of
+    // starting blind.
+    let claimed = false;
+    for (let i = 0; i < 120 && !claimed; i++) {
+      try {
+        claimEngineOp(jobId, "ui:upload-rows");
+        claimed = true;
+      } catch {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+    if (!claimed) {
+      appendLedger(fresh, "pipeline:deferred", "ui upload-rows: engine busy, rows pending (retry the upload when free)", commandId ? { commandId } : {});
+      writeJob(outDir, fresh);
+      emit(hub, jobId, "job:advanced", { step: "upload-rows", stage: fresh.stage, deferred: true });
+      return { status: "deferred", stage: fresh.stage };
+    }
     const guardCheck = typeof engine?.guardCheck === "function" ? engine.guardCheck : null;
     const rowResults = [];
     for (const q of queue) {
@@ -1036,7 +1055,7 @@ export async function runUploadRowsBg({ outDir, jobId, hub = null, engine = null
         return { status: "record-unreadable" };
       }
       if (status === "failed") {
-        failJob(fresh, { reason: `upload:row-failed:seq-${q.seq}` });
+        failJob(fresh, { reason: `upload:row-failed:seq-${q.seq}:${String(result?.detail ?? "unknown").slice(0, 120)}` });
         writeJob(outDir, fresh);
         emit(hub, jobId, "job:advanced", { step: "upload-rows", to: "failed", stage: fresh.stage });
         return { status: "failed", stage: fresh.stage, rowResults };
