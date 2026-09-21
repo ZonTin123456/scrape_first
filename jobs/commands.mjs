@@ -3,14 +3,14 @@
 // Client-generated commandId on all mutating commands.
 // Replay returns original disposition, never executes twice.
 // Cancel records intent/audit before ack via jobs/store (ledger append + write).
-import { findJobById, writeJob, requestCancel, advance, retry, resume, addArtifact, appendLedger, finishUploadRowAndCancel, currentEngineOp, jobDirFor } from "./store.mjs";
+import { findJobById, writeJob, requestCancel, advance, retry, resume, addArtifact, appendLedger, claimEngineOp, releaseEngineOp, finishUploadRowAndCancel, currentEngineOp, jobDirFor } from "./store.mjs";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { assertArtifactPointer } from "./events.mjs";
 import { beginUploadWithProof, grantArmFromSafety, recordDryPass } from "./safety.mjs";
 import { buildDryDefaults } from "./dry-defaults.mjs";
-import { runUiStepSync, startUiStep } from "./pipeline.mjs";
+import { runUiStepSync, startUiStep, runUploadRowsBg } from "./pipeline.mjs";
 
 export const SUPPORTED = new Set(["cancel", "advance", "retry", "resume", "artifact", "dry", "arm", "begin-upload", "finish-row", "probe", "approve-page", "scrape", "finalize", "detect", "run-step"]);
 
@@ -228,18 +228,31 @@ export function createCommandStore({ hub = null, engine = null } = {}) {
         // P6 real-upload entry: prerequisite dry verified fail-closed, then
         // the single-use arm is consumed and the immutable save proof (which
         // references that dry) is written. Any attempt consumes the arm.
+        // Row execution binds here: the shared real upload core runs in the
+        // background under a synchronously-claimed single-flight hold (same
+        // pattern as probe/scrape/detect bg steps). Replay returns the stored
+        // disposition and never re-runs rows.
         const p = payload ?? {};
-        const result = beginUploadWithProof(outDir, job, { saveRunId: p.saveRunId ?? null });
-        writeJob(outDir, job);
-        emitSafe(hub, jobId, "arm:consumed", { reason: "upload-attempt", save_run_id: result.saveRunId });
-        emitSafe(hub, jobId, "job:advanced", { to: "uploading", stage: job.stage, save_run_id: result.saveRunId });
-        emitSafe(hub, jobId, "artifact:written", {
-          kind: "save-report",
-          relPath: result.relPath,
-          sha256: result.sha256,
-          byteLength: result.byteLength,
-        });
-        reason = "upload-started";
+        const hadHolder = !!currentEngineOp();
+        claimEngineOp(jobId, "ui:upload-rows");
+        const ownClaim = !hadHolder;
+        try {
+          const result = beginUploadWithProof(outDir, job, { saveRunId: p.saveRunId ?? null });
+          writeJob(outDir, job);
+          emitSafe(hub, jobId, "arm:consumed", { reason: "upload-attempt", save_run_id: result.saveRunId });
+          emitSafe(hub, jobId, "job:advanced", { to: "uploading", stage: job.stage, save_run_id: result.saveRunId });
+          emitSafe(hub, jobId, "artifact:written", {
+            kind: "save-report",
+            relPath: result.relPath,
+            sha256: result.sha256,
+            byteLength: result.byteLength,
+          });
+          runUploadRowsBg({ outDir, jobId, hub, engine, payload: p, commandId }).catch(() => null);
+          reason = "upload-started";
+        } catch (e) {
+          if (ownClaim) releaseEngineOp(jobId);
+          throw e;
+        }
       } else if (type === "finish-row") {
         // P8 upload-stop path: the engine finished the current row truthfully
         // after stop_requested; this records cancelled (consumes arm) over the

@@ -9,7 +9,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
-import { advance, appendLedger, canAdvance, claimEngineOp, clearBlocker, failJob, finishUpload, finishUploadRowAndCancel, hasBlocker, isTerminal, notifyGuardRegression, notifyProofLost, raiseBlocker, readJob, releaseEngineOp, SPINE, writeJob } from "./store.mjs";
+import { advance, appendLedger, canAdvance, claimEngineOp, clearBlocker, failJob, findJobById, finishUpload, finishUploadRowAndCancel, hasBlocker, isTerminal, notifyGuardRegression, notifyProofLost, raiseBlocker, readJob, releaseEngineOp, SPINE, writeJob } from "./store.mjs";
 import {
   beginUploadWithProof,
   grantArmFromSafety,
@@ -916,6 +916,149 @@ async function runBgStep(bg) {
     }
     emit(hub, jobId, "job:advanced", { step: op, stage: fresh.stage, finished: true });
   } finally {
+    done();
+  }
+}
+
+// Background row-execution worker: runs the shared real upload core
+// (uploader/lib/upload-core.mjs via an injected or default uploadRow runner)
+// after begin-upload entered uploading. Mirrors the probe/scrape/detect bg
+// pattern: single-flight held across the run, cancel-safe fresh reads,
+// proof re-verified at every row boundary, truthful failure (never done
+// unless every row completes), command replay never re-runs rows.
+export async function runUploadRowsBg({ outDir, jobId, hub = null, engine = null, payload = {}, commandId = null } = {}) {
+  const done = () => { activePipelineJobs.delete(jobId); releaseEngineOp(jobId); };
+  let runner = null;
+  let runnerOwned = false;
+  try {
+    let fresh = null;
+    try {
+      const found = findJobById(outDir, jobId);
+      fresh = found?.job ?? null;
+    } catch {
+      fresh = null;
+    }
+    if (!fresh) {
+      emit(hub, jobId, "job:advanced", { step: "upload-rows", error: "record-unreadable" });
+      return { status: "record-unreadable" };
+    }
+    if (fresh.stage === "done" || fresh.stage === "failed" || fresh.stage === "cancelled") {
+      appendLedger(fresh, "pipeline:superseded", `ui upload-rows finished after ${fresh.stage} (record untouched)`, commandId ? { commandId } : {});
+      writeJob(outDir, fresh);
+      emit(hub, jobId, "job:advanced", { step: "upload-rows", stage: fresh.stage, superseded: true });
+      return { status: "superseded", stage: fresh.stage };
+    }
+    if (fresh.stopRequested) {
+      finishUploadRowAndCancel(fresh, { reason: "stop_requested: before first row" });
+      writeJob(outDir, fresh);
+      emit(hub, jobId, "job:advanced", { step: "upload-rows", to: "cancelled", stage: fresh.stage });
+      return { status: "cancelled", stage: fresh.stage };
+    }
+    if (fresh.stage !== "uploading") {
+      appendLedger(fresh, "pipeline:deferred", `ui upload-rows: stage ${fresh.stage} is not uploading (rows not started)`, commandId ? { commandId } : {});
+      writeJob(outDir, fresh);
+      return { status: "deferred", stage: fresh.stage };
+    }
+    // Re-verify the dry proof at row-execution start (fail closed).
+    const pv = verifyDryReport(outDir, fresh);
+    if (!pv.ok) {
+      failJob(fresh, { reason: `upload:proof-invalid:${pv.reasons.join(",")}` });
+      writeJob(outDir, fresh);
+      emit(hub, jobId, "job:advanced", { step: "upload-rows", to: "failed", stage: fresh.stage });
+      return { status: "failed", stage: fresh.stage };
+    }
+    const dryRows = Array.isArray(pv.report?.rows) ? pv.report.rows : [];
+    const queue = dryRows
+      .filter((r) => r && (r.status === "dry" || r.status === "dry-partial"))
+      .map((r) => ({ seq: Number(r.seq), name: r.name ?? null, group: r.group ?? null, target: r.target ?? null }));
+    if (!queue.length) {
+      failJob(fresh, { reason: "upload:no-uploadable-rows" });
+      writeJob(outDir, fresh);
+      emit(hub, jobId, "job:advanced", { step: "upload-rows", to: "failed", stage: fresh.stage });
+      return { status: "failed", stage: fresh.stage };
+    }
+    // Runner: injected uploadRow wins (tests/fakes); otherwise the production
+    // Playwright binding over CDP against the dry backend. No runner and no
+    // browser means rows cannot start: stay uploading with a visible deferred
+    // note (today's behavior — never fail a healthy upload for lack of a
+    // driver, never report done without row execution).
+    let uploadRow = typeof engine?.uploadRow === "function" ? engine.uploadRow : null;
+    if (!uploadRow) {
+      try {
+        const { createUploadRowRunner } = await import("../uploader/lib/upload-runner.mjs");
+        const port = payload?.port ?? "auto";
+        runner = await createUploadRowRunner({ outDir, job: fresh, port });
+        runnerOwned = true;
+        uploadRow = (args) => runner.uploadRow(args);
+      } catch (e) {
+        appendLedger(fresh, "pipeline:deferred", `ui upload-rows: no row driver (${String(e?.message ?? e).slice(0, 120)}); rows await a runner`, commandId ? { commandId } : {});
+        writeJob(outDir, fresh);
+        emit(hub, jobId, "job:advanced", { step: "upload-rows", stage: fresh.stage, deferred: true });
+        return { status: "deferred", stage: fresh.stage };
+      }
+    }
+    activePipelineJobs.add(jobId);
+    const guardCheck = typeof engine?.guardCheck === "function" ? engine.guardCheck : null;
+    const rowResults = [];
+    for (const q of queue) {
+      if (syncStopAndProof(outDir, fresh, hub, { queue, rowResults })) {
+        return { status: "cancelled", stage: fresh.stage, saveRunId: fresh.save_run_id, rowResults };
+      }
+      // Re-read the live record each boundary so SSE/GET stay truthful.
+      try {
+        fresh = readJob(outDir, fresh.slug, jobId);
+      } catch {
+        emit(hub, jobId, "job:advanced", { step: "upload-rows", error: "record-unreadable" });
+        return { status: "record-unreadable" };
+      }
+      if (guardCheck) {
+        const gc = await guardCheck({ outDir, job: fresh, entry: q });
+        if (gc && (gc.regression === true || gc.guardStatus === "red")) {
+          failOnGuardRegression(outDir, fresh, hub, { queue, rowResults, detail: gc.detail ?? "guardCheck red" });
+        }
+      }
+      let result = null;
+      try {
+        result = await uploadRow({ outDir, job: fresh, entry: q });
+      } catch (e) {
+        result = { seq: q.seq, status: "failed", detail: String(e?.message ?? e).slice(0, 200) };
+      }
+      if (result?.guardStatus === "red") {
+        failOnGuardRegression(outDir, fresh, hub, { queue, rowResults, detail: result?.detail ?? "row reported guard red" });
+      }
+      const status = result?.status === "failed" ? "failed" : "done";
+      rowResults.push({ ...q, status, detail: result?.detail ?? null });
+      emit(hub, jobId, "upload:row-finished", { seq: q.seq, status });
+      try {
+        fresh = readJob(outDir, fresh.slug, jobId);
+      } catch {
+        emit(hub, jobId, "job:advanced", { step: "upload-rows", error: "record-unreadable" });
+        return { status: "record-unreadable" };
+      }
+      if (status === "failed") {
+        failJob(fresh, { reason: `upload:row-failed:seq-${q.seq}` });
+        writeJob(outDir, fresh);
+        emit(hub, jobId, "job:advanced", { step: "upload-rows", to: "failed", stage: fresh.stage });
+        return { status: "failed", stage: fresh.stage, rowResults };
+      }
+      writeJob(outDir, fresh);
+    }
+    if (syncStopAndProof(outDir, fresh, hub, { queue, rowResults })) {
+      return { status: "cancelled", stage: fresh.stage, saveRunId: fresh.save_run_id, rowResults };
+    }
+    finishUpload(fresh, { reason: `pipeline:upload:${fresh.save_run_id}` });
+    writeJob(outDir, fresh);
+    emit(hub, jobId, "upload:report-written", { slug: fresh.slug, mode: "save", total: queue.length, save_run_id: fresh.save_run_id });
+    emit(hub, jobId, "job:advanced", { step: "upload-rows", to: "done", stage: fresh.stage });
+    return { status: "done", stage: fresh.stage, saveRunId: fresh.save_run_id, rowResults };
+  } finally {
+    if (runnerOwned) {
+      try {
+        await runner.close();
+      } catch {
+        // ignore
+      }
+    }
     done();
   }
 }

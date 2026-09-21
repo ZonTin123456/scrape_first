@@ -27,8 +27,10 @@ describe("upload-people.mjs dry-run gates (fail-closed, zero writes on dry)", ()
   });
   it("dry plan renders WOULD-CREATE with zero writes; rows skip", () => {
     has(up, "WOULD-CREATE");
-    has(up, "dry: zero writes");
-    has(up, "skip-would-create");
+    // Row-execution strings live in the shared core (CLI is the adapter).
+    const core = src("uploader/lib/upload-core.mjs");
+    has(core, "dry: zero writes");
+    has(core, "skip-would-create");
   });
   it("created departments are re-discovered, never trusted from computed ids", () => {
     has(up, "re-discovering backend after creation");
@@ -40,7 +42,7 @@ describe("upload-people.mjs dry-run gates (fail-closed, zero writes on dry)", ()
   });
   it("every row verifies target identity before any fill", () => {
     has(up, "verifyPageIdentity");
-    has(up, "target identity:");
+    has(src("uploader/lib/upload-core.mjs"), "target identity:");
   });
 });
 
@@ -66,14 +68,16 @@ describe("report contract: mode + per-row status taxonomy", () => {
 
   it("mode is save|dry and every status the UI will render exists", () => {
     has(up, 'mode: SAVE ? "save" : "dry"');
+    // Status taxonomy lives in the shared row core.
+    const core = src("uploader/lib/upload-core.mjs");
     for (const s of ["dry", "dry-partial", "skip-would-create", "created", "created-partial", "failed"]) {
-      has(up, `"${s}"`);
+      has(core, `"${s}"`);
     }
     has(up, "by_status");
   });
   it("save path resolves the photo-form submit (never a guessed button)", () => {
-    has(up, "resolvePhotoFormSubmit");
-    has(up, "save unresolved: no submit button in photo form");
+    has(src("uploader/lib/upload-core.mjs"), "resolvePhotoFormSubmit");
+    has(src("uploader/lib/upload-core.mjs"), "save unresolved: no submit button in photo form");
   });
 });
 
