@@ -280,6 +280,7 @@ export function recordDryPass(
     const e = new Error(`G1 red: ${gateReasons.join("; ")}`);
     e.code = "gate1-failed";
     e.reasons = gateReasons;
+    e.ledgered = true; // detail already on the record; callers only persist it
     throw e;
   }
   const dryRunId = newDryRunId();

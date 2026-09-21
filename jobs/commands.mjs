@@ -3,21 +3,24 @@
 // Client-generated commandId on all mutating commands.
 // Replay returns original disposition, never executes twice.
 // Cancel records intent/audit before ack via jobs/store (ledger append + write).
-import { findJobById, writeJob, requestCancel, advance, retry, resume, addArtifact, finishUploadRowAndCancel, currentEngineOp, jobDirFor } from "./store.mjs";
+import { findJobById, writeJob, requestCancel, advance, retry, resume, addArtifact, appendLedger, finishUploadRowAndCancel, currentEngineOp, jobDirFor } from "./store.mjs";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { assertArtifactPointer } from "./events.mjs";
 import { beginUploadWithProof, grantArmFromSafety, recordDryPass } from "./safety.mjs";
+import { buildDryDefaults } from "./dry-defaults.mjs";
+import { runUiStepSync, startUiStep } from "./pipeline.mjs";
 
-export const SUPPORTED = new Set(["cancel", "advance", "retry", "resume", "artifact", "dry", "arm", "begin-upload", "finish-row"]);
+export const SUPPORTED = new Set(["cancel", "advance", "retry", "resume", "artifact", "dry", "arm", "begin-upload", "finish-row", "probe", "approve-page", "scrape", "finalize", "detect", "run-step"]);
 
 // Engine-mutating commands yield to an active engine op (single-flight v1,
-// Wayfinder #12): while runPipelineAsJobOps holds the claim, dry/arm/
-// begin-upload are refused transiently. Cancel/finish-row/review traffic is
-// never gated (stop must always get through). Refusals are NOT cached: the
-// same commandId retries fresh after release.
-export const ENGINE_OPS = new Set(["dry", "arm", "begin-upload"]);
+// Wayfinder #12): while runPipelineAsJobOps or a background UI step holds the
+// claim, dry/arm/begin-upload/probe/scrape/finalize/detect/run-step are
+// refused transiently. Cancel/finish-row/review/approve-page traffic is never
+// gated (stop and human gates must always get through). Refusals are NOT
+// cached: the same commandId retries fresh after release.
+export const ENGINE_OPS = new Set(["dry", "arm", "begin-upload", "probe", "scrape", "finalize", "detect", "run-step"]);
 
 // Emit helper: hub failures never block the command ack.
 function emitSafe(hub, jobId, type, payload) {
@@ -70,7 +73,7 @@ export function isSupported(type) {
   return SUPPORTED.has(type);
 }
 
-export function createCommandStore({ hub = null } = {}) {
+export function createCommandStore({ hub = null, engine = null } = {}) {
   const seen = new Map();
   const k = (jobId, commandId) => `${jobId}:${commandId}`;
 
@@ -145,28 +148,55 @@ export function createCommandStore({ hub = null } = {}) {
         emitSafe(hub, jobId, "job:advanced", { stage: job.stage, reason: rreason });
         reason = "resumed";
       } else if (type === "dry") {
-        // P6 G1: record a dry pass. Payload carries the dry inputs; the gate
-        // (row policy + guard + snapshot) is enforced in jobs/safety and
-        // fails closed — the job stays dry_running on gate1-failed.
+        // P6 G1: record a dry pass. An explicit Advanced payload (any dry key
+        // supplied) runs exactly as before; an empty or keyless payload builds the authoritative inputs server-side from the
+        // finalized selection + scrape people + detect snapshot (one-click
+        // dry, locked #35/#43). The gate (row policy + guard + snapshot) is
+        // enforced in jobs/safety and fails closed — the job stays dry_running
+        // on gate1-failed or missing/invalid inputs.
         const p = payload ?? {};
+        // Any supplied dry key takes the explicit Advanced path (exact legacy
+        // behavior, including fail-closed refusals); a bare {} (or a payload
+        // with no dry keys) builds the authoritative inputs server-side.
+        const DRY_KEYS = ["snapshotInput", "snapshotId", "rows", "mapMode", "guardStatus", "listedPath",
+          "destinationOrigin", "targetDepts", "wouldCreate", "identity", "unmapped", "shots"];
+        const explicit = DRY_KEYS.some((k) => p[k] !== undefined);
         let result;
         try {
-          result = recordDryPass(outDir, job, {
-            snapshotInput: p.snapshotInput ?? null,
-            snapshotId: p.snapshotId ?? null,
-            rows: p.rows ?? [],
-            mapMode: p.mapMode ?? "pinned",
-            guardStatus: p.guardStatus ?? "green",
-            listedPath: p.listedPath ?? null,
-            destinationOrigin: p.destinationOrigin ?? null,
-            targetDepts: p.targetDepts ?? [],
-            wouldCreate: p.wouldCreate ?? [],
-            identity: p.identity ?? null,
-            unmapped: p.unmapped ?? [],
-            shots: p.shots ?? [],
-          });
+          // Defaults build inside try so missing/invalid inputs land in the
+          // refusal path below (persisted note + visible reason) too.
+          const dryInputs = explicit
+            ? {
+                snapshotInput: p.snapshotInput ?? null,
+                snapshotId: p.snapshotId ?? null,
+                rows: p.rows ?? [],
+                mapMode: p.mapMode ?? "pinned",
+                guardStatus: p.guardStatus ?? "green",
+                listedPath: p.listedPath ?? null,
+                destinationOrigin: p.destinationOrigin ?? null,
+                targetDepts: p.targetDepts ?? [],
+                wouldCreate: p.wouldCreate ?? [],
+                identity: p.identity ?? null,
+                unmapped: p.unmapped ?? [],
+                shots: p.shots ?? [],
+              }
+            : buildDryDefaults(outDir, job);
+          result = recordDryPass(outDir, job, dryInputs);
         } catch (e) {
           emitSafe(hub, jobId, "gate:failed", { gate: "G1", reason: e?.code ?? "gate1-failed" });
+          // Persist the refusal detail so Safety shows it after repaint or
+          // reload (the POST disposition alone is lost on repaint). Stage,
+          // ids, proofs untouched: display metadata only, still fail-closed.
+          // recordDryPass already ledgered G1-red detail (e.ledgered); other
+          // input failures get one refusal note here.
+          try {
+            if (!e?.ledgered) {
+              appendLedger(job, "gate:failed", `dry refused: ${e?.message ?? e?.code ?? "failed"}`.slice(0, 300), commandId ? { commandId } : {});
+            }
+            writeJob(outDir, job);
+          } catch {
+            // Noting the refusal must never mask the refusal itself.
+          }
           throw e;
         }
         writeJob(outDir, job);
@@ -219,6 +249,29 @@ export function createCommandStore({ hub = null } = {}) {
         writeJob(outDir, job);
         emitSafe(hub, jobId, "job:advanced", { to: "cancelled", stage: job.stage, reason: rreason ?? "row-finished" });
         reason = "cancelled";
+      } else if (type === "probe" || type === "scrape" || type === "detect" || type === "run-step") {
+        // PR #30 gap fix: real engine steps from the workspace (no CLI).
+        // startUiStep walks the stage synchronously and accepts immediately
+        // ({accepted:true, reason:"started"}); the lifted CDP engine runs in
+        // the background under the single-flight claim and completes via
+        // ledger + SSE + GET. commandId tags the ledger for UI polling.
+        // Throws fail-closed (terminal/illegal-transition/single-flight,
+        // page-deselected) for outer catch mapping. Replay returns the
+        // accepted disposition, never executes twice (note: after a server
+        // restart mid-run, replay the step with a NEW commandId).
+        const result = startUiStep({ outDir, job, uiStep: type, hub, payload: { ...(payload ?? {}), commandId }, engine });
+        if (result?.status === "already-past") reason = "already-past";
+        else if (result?.status === "awaiting-approval") reason = "awaiting-approval";
+        else if (result?.status === "started") reason = "started";
+        else reason = "step-ran";
+      } else if (type === "approve-page" || type === "finalize") {
+        // Human gate + pure review validation complete synchronously.
+        // Throws fail-closed for outer catch mapping. Idempotent via the
+        // outer commandId wrapper.
+        const result = runUiStepSync({ outDir, job, uiStep: type, hub, payload: payload ?? {} });
+        if (result?.status === "already-past") reason = "already-past";
+        else if (type === "approve-page") reason = "page-approved";
+        else reason = "finalized";
       } else if (type === "artifact") {
         const art = payload?.artifact ?? payload;
         assertArtifactPointer(art);

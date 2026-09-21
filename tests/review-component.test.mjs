@@ -21,6 +21,7 @@ import {
   buildWarningPreview,
   fingerprintSelection,
   seedReview,
+  importScrapeSelection,
   loadReviewModel,
   groupBySrc,
 } from "../jobs/review.mjs";
@@ -332,5 +333,35 @@ describe("P5 server: POST-only save, stale conflict, preview, thumbs", () => {
     assert.ok(!/src=["']data:/i.test(client), "no inline bytes in client");
     assert.match(client, /waiting_for_people_review/);
     assert.match(client, /log-strip/);
+  });
+});
+
+describe("P5 scrape->review handoff: importScrapeSelection seeds once", () => {
+  it("seeds rev 1 from slug selection; second call already-seeded; missing file reports missing", () => {
+    const outDir = tmpOut();
+    const job = createJob({ slug: "s1", source: "https://example.go.th/p1", group: "g" });
+    writeJob(outDir, job);
+    assert.deepEqual(importScrapeSelection(outDir, job), { status: "missing" });
+    mkdirSync(join(outDir, "s1", "review"), { recursive: true });
+    writeFileSync(join(outDir, "s1", "review", "selection.json"),
+      JSON.stringify([{ seq: 0, file: "images/0000-100x100.jpg", keep: true, order: 0 }]), "utf8");
+    const seeded = importScrapeSelection(outDir, job);
+    assert.equal(seeded.status, "seeded");
+    assert.equal(seeded.revision, 1);
+    assert.equal(seeded.kept, 1);
+    writeJob(outDir, job);
+    const model = loadReviewModel(outDir, readJob(outDir, "s1", job.jobId));
+    assert.equal(model.selection.length, 1);
+    assert.equal(model.revision, 1);
+    assert.deepEqual(importScrapeSelection(outDir, job), { status: "already-seeded", revision: 1 });
+  });
+
+  it("invalid slug selection fails closed with invalid-selection", () => {
+    const outDir = tmpOut();
+    const job = createJob({ slug: "s1", source: "https://example.go.th/p1", group: "g" });
+    writeJob(outDir, job);
+    mkdirSync(join(outDir, "s1", "review"), { recursive: true });
+    writeFileSync(join(outDir, "s1", "review", "selection.json"), "not json", "utf8");
+    assert.throws(() => importScrapeSelection(outDir, job), (e) => e.code === "invalid-selection");
   });
 });
