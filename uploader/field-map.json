@@ -1,0 +1,23 @@
+{
+  "_status": "draft - OPEN the personnel create/edit form tab on the logged-in Chrome, run: node map-check.mjs --port 9444, then fill selectors below and set _status to locked",
+  "_evidence": {
+    "list_pages_seen": ["/personal (filter only: POST _token + text pg_name + submit, no rows until department picked)"],
+    "tenants_seen": ["lakchang.ratchasathit.go.th", "pulohpuyo.klongsaikhaw.go.th"]
+  },
+  "create_url": "{backend}/personal/create",
+  "list_url": "{backend}/personal",
+  "fields": {
+    "photo": { "selector": "TBD (input[type=file])", "kind": "file" },
+    "name": { "selector": "TBD", "kind": "text" },
+    "position": { "selector": "TBD", "kind": "text" },
+    "phone": { "selector": "TBD (or null if the form has no phone field)", "kind": "text-or-null" },
+    "department": { "selector": "TBD (select)", "kind": "select", "note": "option matched by visible text from section-map.json" },
+    "publish": { "selector": "TBD (or null)", "kind": "checkbox-or-null" },
+    "save": { "selector": "TBD (submit button)", "kind": "button" }
+  },
+  "success_mark": "TBD (text shown after successful save, e.g. part of flash message)",
+  "duplicate": {
+    "strategy": "list-text-search",
+    "note": "v1: goto list_url, search body text for exact person name. If the list needs a department filter first, map-check the filtered list page and extend this block."
+  }
+}

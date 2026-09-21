@@ -1,0 +1,19 @@
+{
+  "_note": "Built-in fingerprint for the STS local-gov personnel form (same vendor template across tenants). Attr-based selectors are host-independent. deptId/URLs still discovered live per backend.",
+  "name": "sts-personnel-v1",
+  "fingerprint": {
+    "file": ["img_path"],
+    "text": ["p_name", "p_position"]
+  },
+  "fields": {
+    "photo": { "selector": "input[name=\"img_path\"]", "kind": "file", "confidence": "profile", "label": "ภาพ" },
+    "name": { "selector": "input[name=\"p_name\"]", "kind": "text", "confidence": "profile", "label": "ชื่อ-สกุล" },
+    "position": { "selector": "input[name=\"p_position\"]", "kind": "text", "confidence": "profile", "label": "ตำแหน่ง" },
+    "phone": { "selector": null, "kind": null, "confidence": "missing", "label": "no phone field on STS form (phone goes to detail)" },
+    "detail": { "selector": "input[name=\"p_detail\"]", "kind": "text", "confidence": "profile", "label": "รายละเอียด" },
+    "order": { "selector": "input[name=\"prarent_id\"]", "kind": "text", "confidence": "profile", "label": "ตำแหน่งภาพ" },
+    "department": { "selector": null, "kind": null, "confidence": "missing", "label": "department = the person/{id} page itself" },
+    "publish": { "selector": null, "kind": null, "confidence": "missing", "label": "publish = per-row toggle" },
+    "save": { "strategy": "photo-form-submit", "kind": "button", "confidence": "profile", "label": "submit in photo form" }
+  }
+}

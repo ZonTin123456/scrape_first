@@ -1,0 +1,23 @@
+{
+  "_note": "Evidence tables for zero-map runtime discovery. Keywords are EVIDENCE (scored), never hard routing. Labels observed live: khiansa[สภาท้องถิ่น,คณะผู้บริหาร,สมาชิกสภา], nathamnuae[คณะผู้บริหาร,พนักงานส่วนท้องถิ่น], pulohpuyo[สภา อบต.,คณะผู้บริหาร,หัวหน้าส่วนราชการ,สำนักปลัด,กองคลัง,ส่วนโยธา,กองศึกษา ศาสนาและวัฒนธรรม]",
+  "section_aliases": {
+    "สภาท้องถิ่น": ["สภา อบต", "สภา"],
+    "สภา อบต.": ["สภาท้องถิ่น", "สภา"],
+    "พนักงานส่วนท้องถิ่น": ["พนักงานส่วนตำบล", "พนักงาน"],
+    "พนักงานส่วนตำบล": ["พนักงานส่วนท้องถิ่น", "พนักงาน"]
+  },
+  "section_signals_th": ["สภา", "คณะผู้บริหาร", "สมาชิก", "พนักงาน", "สำนัก", "กอง", "ฝ่าย", "แผนก", "งาน", "หัวหน้า", "ครู", "โรงเรียน", "ศูนย์พัฒนาเด็กเล็ก", "นายก", "รองนายก", "เลขานุการ", "ปลัด"],
+  "section_signals_en": ["council", "executive", "member", "staff", "personnel", "division", "department", "director", "mayor", "deputy", "secretary", "school", "teacher"],
+  "personnel_page_signals_th": ["บุคลากร", "ทำเนียบ", "โครงสร้าง", "คณะผู้บริหาร", "สมาชิกสภา", "พนักงาน", "ชื่อ-สกุล", "ตำแหน่ง", "ตำแหน่งภาพ", "รายละเอียด"],
+  "personnel_page_signals_en": ["personnel", "staff", "team", "members", "council", "executive", "directory", "officer", "position", "photo"],
+  "personnel_url_signals": ["personal", "personnel", "staff", "member", "officer", "team", "executive", "council", "manage", "house", "บุคลากร"],
+  "form_field_signals": {
+    "photo": ["img_path", "photo", "pic", "image", "รูป", "ภาพ"],
+    "name": ["p_name", "fname", "fullname", "name", "ชื่อ"],
+    "position": ["p_position", "position", "title", "ตำแหน่ง"],
+    "detail": ["p_detail", "detail", "desc", "รายละเอียด"],
+    "order": ["prarent_id", "parent_id", "order", "sort", "seq", "ตำแหน่งภาพ", "ลำดับ"],
+    "phone": ["p_tel", "phone", "tel", "mobile", "เบอร์", "โทร"],
+    "save": ["บันทึก", "ตกลง", "save", "submit", "confirm"]
+  }
+}

@@ -20,13 +20,13 @@ Status: draft for review · ที่มา: [Wayfinder map](https://github.com/
 
 ## 3. วิธีดึง (ล็อกจาก ticket #2)
 
-1. เปิด headless Chrome เอง (`--remote-debugging-port=<port>`) — ไม่พึ่งเบราว์เซอร์คน
-2. `Page.navigate` → รอ `loadEventFired` + network idle
+1. ใช้ Chrome headed ที่มีอยู่ (`--port auto` สแกน 9333→9444→9222) — เปิดเองแบบ persistent profile สำหรับเว็บติด Cloudflare; ไม่มี instance ค่อย launch headless
+2. `Page.navigate` → รอ `loadEventFired` + ตรวจ Cloudflare challenge (title/body/Turnstile) → รอ `--cf-wait` แล้วหยุดให้คนติ๊กเอง (ยกเว้น `--no-cf-manual`) → ค่อย extract
 3. `Page.getFrameTree` — แจง iframe (proof + ประกอบ placeholder)
 4. `Runtime.evaluate` ด้วย TreeWalker (`SHOW_ELEMENT|SHOW_TEXT`) เดิน `document.body` **ครั้งเดียว**: text node ไม่ว่าง (ข้าม `SCRIPT/STYLE/NOSCRIPT/TEMPLATE`) + `IMG` + `IFRAME` → ได้ interleave ตาม DOM ถูกต้อง
 5. รูปเต็ม: `img.currentSrc` (ผ่าน srcset แล้ว) → absolute URL + `naturalWidth/Height`; parent `a[href]` ที่เป็นไฟล์รูป = `fullres_candidate`
 6. Encoding: **ห้าม decode bytes เอง** — CDP คืน string ไทยถูกแล้ว (ทุกเว็บคือ windows-874, header ส่วนใหญ่ไม่ประกาศ)
-7. ดาวน์โหลดรูป: direct fetch ด้วย browser UA + Referer ก่อน; ถ้าโดนบล็อก (เช่น 403) และรูปอยู่ same-origin ให้ดึงผ่านหน้าเว็บเองด้วย `Runtime.evaluate` fetch→dataURL (ใช้ cookies/TLS ของ render)
+7. ดาวน์โหลดรูป: direct fetch ด้วย browser UA + Referer ก่อน (`--via fetch` บังคับทางนี้); ถ้าโดนบล็อก 401/403 (รวม Cloudflare) หรือหน้าเพจเจอ challenge ให้ดึงผ่านหน้าเว็บเองด้วย `Runtime.evaluate` fetch→dataURL (ใช้ cookies/TLS ของ render) — `--via cdp` บังคับทางนี้, `--via auto` เลือกเอง
 
 ## 4. โครง output (ล็อกจาก ticket #4, v2)
 
@@ -73,11 +73,20 @@ Status: draft for review · ที่มา: [Wayfinder map](https://github.com/
 ## 6. CLI (เสนอ)
 
 ```text
-backup-page <url> [--out ./out] [--port 9444] [--timeout 60]
+backup-page <url> [--out ./out] [--port auto] [--timeout 60] [--via auto] [--cf-wait 60] [--no-cf-manual]
 # exit 0 + พิมพ์ path โฟลเดอร์ผลลัพธ์; exit != 0 พร้อมเหตุผลเมื่อ navigate/evaluate ล้มเหลว
+node backup-page.mjs --finalize <outdir>   # ตัดรูปตาม review/selection.json (ดูข้อ 8)
 ```
 
-## 7. Acceptance (ตรวจกับ 5 หน้าตัวอย่างใน CDP :9444)
+## 8. People shortlist (เลือกรูปคน — คนนั่งจิ้มเอง)
+
+เอาเฉพาะรูปคนชัด: โปรแกรมไม่ detect คนเอง แต่โชว์รูปที่โหลดได้ทั้งหมด (`n.type==="image" && n.file`, ไม่กรองขนาด) มาให้คนเลือก
+
+1. หลังดึงเสร็จ โปรแกรมเขียน `review/selection.json` (`[{seq, file, keep:true, order}]`, order = เลขกลุ่มแถวภาพที่แนะนำอัตโนมัติ: รูปแถวเดียวกันเลขเดียวกัน แก้ได้) + `review/index.html` (contact sheet เปิดด้วยเบราว์เซอร์)
+2. คนเปิด `review/index.html` ติ๊กเฉพาะรูปคนชัด → กดบันทึก → เอาไฟล์ทับ `review/selection.json`
+3. รัน `--finalize`: ลบไฟล์รูป + node ที่ไม่ถูกเลือก, อัปเดต counts, `manifest.reviewed=true`
+
+## 7. Acceptance (ตรวจกับ 5 หน้าตัวอย่างใน CDP auto: 9333→9444)
 
 - [ ] `content.json` เปิดอ่านไทยถูกทุกหน้า (ไม่มีเพี้ยน)
 - [ ] ลำดับ textสลับรูปตรงกับที่เห็นในเบราว์เซอร์ (สุ่มตรวจ 20 nodes/หน้า)
@@ -85,3 +94,4 @@ backup-page <url> [--out ./out] [--port 9444] [--timeout 60]
 - [ ] iframe ภายนอกทุกตัวกลายเป็น placeholder (เช็ค maps/sharethis/hotmenu)
 - [ ] raikaocity (บล็อก fetch ธรรมดา 403) ดึงผ่าน
 - [ ] รูปทุกรูปเปิดได้ (sniff magic bytes: png/jpg/gif/webp/svg), ขนาดรวมรายงานใน manifest (หน้าตัวอย่าง 0.2–5.5MB), งานไม่ล้มเมื่อรูปบางรูปโหลดเสีย
+- [ ] หน้าติด Cloudflare: สคริปต์ตรวจเจอ challenge, รอ + หยุดให้คนติ๊กใน headed Chrome, ติ๊กผ่านแล้วได้เนื้อหาจริง (ไม่ใช่หน้ากำแพง), รูปบังคับผ่าน CDP (`via: cdp`)
