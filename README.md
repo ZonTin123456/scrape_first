@@ -1,31 +1,45 @@
-# คำสั่งเดียวจบสาย (เลือก/เรียงขั้นได้, ข้ามขั้นได้):
-node pipeline.mjs --from urls.txt
-node pipeline.mjs --from urls.txt --steps probe,run,finalize,upload --yes --limit 3
-# ยิงรวมเลือกลำดับ: --order officer7,house (จับคู่ชื่อ slug ที่เหลือต่อท้าย)
-# ขั้นคน (pick-links/master) หยุดรอ Enter — เปิดไฟล์ HTML จากดิสก์ ติ๊ก กด "บันทึกทับไฟล์เดิม"
+0. เตรียม
+Remove-Item -Recurse -Force .\out
 
-# กฎข้อมูล: name/position = ข้อความ 2 ตัวแรกหลังรูป, phone = เบอร์ตัวแรก,
-# note = ข้อความที่เหลือต่อด้วย <br> (หยุดที่ตัวคั่นขยะ) -> ลงรายละเอียดเป็น "เบอร์<br>note"
-# order = ลำดับรูปตามหน้าเว็บ เริ่ม 0 (ตำแหน่งภาพหลังบ้านเริ่ม 0)
-# review/index.html มีช่องตำแหน่งภาพทุกใบ: ติ๊กหลายใบใส่เลขเดียวแล้วกดตั้งเลขใบที่ติ๊ก
-# (เลขซ้ำได้ finalize เตือน; finalize เขียนเลขลง people.json)
-# finalize หมู่: node backup-page.mjs --finalize --all (หรือระบุหลายโฟลเดอร์)
+start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9333 --user-data-dir="C:\ChromeCDP9333"
 
-# 0. เปิดแท็บหลังบ้านเว็บนั้นทิ้งไว้ใน Chrome (login ค้าง)
+1. PROBE
+   node backup-page.mjs --probe --from urls.txt --out ./out
+   → เช็ค out/probe.json (caption/sections/tops)
 
-# 1. ดูดต้นทาง
-node backup-page.mjs --probe --from urls.txt
-# ติ๊กรวมทีเดียว: เปิด out/_staging/master-pick.html ติ๊ก กด "บันทึกทับไฟล์เดิม" (master.json)
-node backup-page.mjs --apply-master out/_staging/master.json
-# หรือติ๊กแยกหน้า: pick-links.html + pick-images.html (ปุ่ม File Picker บันทึกทับไฟล์เดิมได้เลย)
-# ติ๊กแล้ว
-node backup-page.mjs --run --from out/_staging/picked-links.json
+2. PICK LINKS (manual)
+   - เปิด pick-links.html → ติ๊ก link ที่ต้องการ
+   - ถ้าหลายหน้า → ติ๊ก master-pick ด้วย
+   - กด "บันทึกทับไฟล์เดิม" → ได้ out/_staging/picked-links.json
+   - ถ้าใช้ master: node backup-page.mjs --apply-master out/_staging/master.json
 
-# 2. ยิงเลย (หา port+backend+ฟอร์มเอง)
-node uploader/upload-people.mjs --from out/<slug>/people.json --limit 3
-# ดู shots/ ถูก → ของจริง:
-node uploader/upload-people.mjs --from out/<slug>/people.json --save --i-verified
+3. RUN
+   node backup-page.mjs --run --from out/_staging/picked-links.json --out ./out --page-sections sections.json
+   → เช็ค summary.json: ok + ตรวจเลขกลุ่ม auto
 
-node uploader/upload-people.mjs --from out/nathamnuaego-officer3-php/people.json --save --i-verified
+4. REVIEW (manual)
+   - เปิด review ทีละ slug → ตัดหน้าซ้ำ/แถวว่าง/noise + เช็คเลข
+   - "บันทึกทับไฟล์เดิม"
+   - ถ้า grouping ผิด → ห้ามไปต่อ
 
-Remove-Item .\out\* -Recurse -Force
+5. FINALIZE
+   node backup-page.mjs --finalize --all --out ./out --compact-orders
+   → เช็ค people order ตรง selection (duplicate warn = ปกติ)
+
+6. ลบแถวเก่าที่สร้างไว้บน backend (manual)
+
+7. UPLOAD dry-run (ทีละ slug)
+   node uploader/upload-people.mjs --from out/<slug>/people.json --backend <host>
+   → เช็ค report: dry, ไม่มี partial/failed/unresolved
+
+8. UPLOAD จริง
+   node uploader/upload-people.mjs --from out/<slug>/people.json --save --i-verified
+
+9. UPLOAD ทุกอัน
+
+node pipeline.mjs --from urls.txt --steps upload --order officer7,house --limit 3
+
+node pipeline.mjs --from urls.txt --steps upload --save --i-verified
+
+9. VERIFY (manual)
+   - แถวครบ เลขถูก form ถูกหน้า + จัดกลุ่ม display ถูก
