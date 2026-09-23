@@ -1,7 +1,2 @@
 https://www.hongcharoen.go.th/manage.php
 https://www.hongcharoen.go.th/house.php
-https://www.hongcharoen.go.th/officer5.php
-https://www.hongcharoen.go.th/officer1.php
-https://www.hongcharoen.go.th/officer2.php
-https://www.hongcharoen.go.th/officer3.php
-https://www.hongcharoen.go.th/officer4.php

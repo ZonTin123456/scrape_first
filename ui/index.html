@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ระบบสำรองข้อมูล อบต. — UI</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">🗂️</span>
+      <div>
+        <h1>ระบบสำรองข้อมูล อบต.</h1>
+        <p class="sub">ครบทุกขั้นตอนในหน้าเดียว · ลาก-วางไฟล์ได้</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span id="cdp-pill" class="pill">CDP: กำลังตรวจ…</span>
+      <button id="btn-refresh" class="ghost" type="button">↻ รีเฟรช</button>
+    </div>
+  </header>
+
+  <main>
+    <nav id="crumbs" class="crumbs" aria-label="ความคืบหน้า"></nav>
+    <div id="app"></div>
+  </main>
+
+  <section id="console" class="console" aria-label="บันทึกการทำงาน">
+    <div class="console-head">
+      <strong>บันทึกการทำงาน</strong>
+      <span id="job-status" class="pill small">ว่าง</span>
+      <span class="spacer"></span>
+      <button id="btn-kill" class="ghost small danger" type="button" hidden>■ หยุด</button>
+      <button id="btn-clear" class="ghost small" type="button">ล้าง</button>
+      <button id="btn-toggle-console" class="ghost small" type="button" aria-label="ย่อ/ขยาย">▾</button>
+    </div>
+    <pre id="log" class="log"></pre>
+  </section>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="/app.js"></script>
+</body>
+</html>
