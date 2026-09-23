@@ -1,6 +1,7 @@
 /* app.js — dashboard logic for the backup -> upload pipeline.
-   Talks to ui/server.mjs. Renders every pipeline step, streams job output
-   over SSE, supports drag & drop (urls.txt, people.json, reorder photos). */
+   Talks to ui/server.mjs. Renders every pipeline step, streams job output over
+   SSE, supports drag & drop (urls.txt, people.json batch -> upload queue,
+   reorder photos and reorder queue rows) and whole-card ticking. */
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -20,7 +21,11 @@ const form = {
   compact: true,
   iVerified: false, confirmSlug: null, confirmText: "",
   imageSlug: null, reviewSlug: null,
+  queue: [],                                          // [{slug, rows}] drop order — memory only, by design
+  queueConfirm: false, queueText: "", queueVerified: false,
 };
+
+const QUEUE_PHRASE = "ยิงจริง"; // must match QUEUE_CONFIRM in ui/server.mjs
 
 // ---------- api ----------
 async function api(path, opts) {
@@ -61,10 +66,10 @@ function showKill(on) {
 }
 
 // ---------- job runner ----------
-async function runJob(step, opts, label) {
+async function runJob(step, opts, label, payload = null) {
   if (current && !current.done) { toast("มีงานกำลังรันอยู่ รอให้เสร็จก่อน", "err"); return; }
   let info;
-  try { info = await post("/api/job", { step, opts }); }
+  try { info = await post("/api/job", payload || { step, opts }); }
   catch (e) { toast(e.message, "err"); logLine("✖ " + e.message + "\n", "err"); $("#console").classList.remove("collapsed"); return; }
   current = { id: info.id, step, label, done: false };
   setJobStatus("กำลังรัน: " + (label || step), "warn");
@@ -77,21 +82,26 @@ async function runJob(step, opts, label) {
     let d; try { d = JSON.parse(ev.data); } catch { return; }
     if (d.type === "out") logLine(d.text);
     else if (d.type === "err") logLine(d.text, "err");
-    else if (d.type === "exit") {
+    else if (d.type === "step") {
+      setJobStatus(`รายการ ${d.index}/${d.total}: ${d.slug}`, "warn");
+      logLine(`\n===== [${d.index}/${d.total}] ${d.slug} — ${d.save ? "ยิงจริง" : "dry-run"} =====\n`, "sys");
+    } else if (d.type === "exit") {
       current.done = true;
       setJobStatus(d.code === 0 ? "เสร็จแล้ว" : `ผิดพลาด (exit ${d.code})`, d.code === 0 ? "ok" : "err");
       logLine(`\n— จบการทำงาน (exit ${d.code}) —\n`, d.code === 0 ? "sys" : "err");
       showKill(false);
       if (es) { es.close(); es = null; }
-      afterJob(step, opts);
+      afterJob(step, opts, payload);
     }
   };
   es.onerror = () => { if (current && current.done && es) { es.close(); es = null; } };
 }
 
-async function afterJob(step, opts) {
-  if (step === "upload" && opts?.slug) {
-    try { reports[opts.slug] = (await api("/api/report/" + opts.slug)).report; } catch { /* no report */ }
+async function afterJob(step, opts, payload) {
+  // refresh the report of every slug the job touched (single run or whole queue)
+  const slugs = payload?.steps ? payload.steps.map((s) => s?.opts?.slug).filter(Boolean) : (opts?.slug ? [opts.slug] : []);
+  for (const s of slugs) {
+    try { reports[s] = (await api("/api/report/" + s)).report; } catch { /* no report */ }
   }
   probeCache.clear();
   reviewCache.clear();
@@ -317,6 +327,34 @@ function reportBlock(slug) {
   </div>`;
 }
 
+// ---------- upload queue (memory only: a refresh clears it, by design) ----------
+function queueRows() {
+  const by = new Map(S.pages.map((p) => [p.slug, p]));
+  return form.queue.map((q) => {
+    const p = by.get(q.slug);
+    return { slug: q.slug, rows: p?.people ?? q.rows ?? null, hasSelection: !!p?.hasSelection, known: !!p };
+  });
+}
+const queueSteps = (save) => form.queue.map((q) => ({ step: "upload", opts: uploadOpts(q.slug, save) }));
+
+function queueBadge(slug) {
+  const r = reports[slug];
+  if (!r) return "";
+  const failed = r.by_status?.failed || 0;
+  return `<span class="badge ${failed ? "err" : "ok"}">${r.mode === "save" ? "ยิงจริง" : "dry"} · ${failed ? `ล้ม ${failed}` : "ผ่าน"} · ${r.total} แถว</span>`;
+}
+
+function queueListHtml(q) {
+  if (!q.length) return `<div class="empty">ยังไม่มีรายการในคิว — ลาก people.json มาวาง หรือกด “เพิ่มทุกหน้าจากตาราง”</div>`;
+  return `<ol id="queue-list" class="queue">${q.map((x, i) => `<li data-qslug="${esc(x.slug)}" draggable="true" title="ลากเพื่อสลับลำดับ">
+    <span class="grip" aria-hidden="true">⠿</span>
+    <span class="q-idx">${i + 1}</span>
+    <span class="q-name"><b>${esc(x.slug)}</b><div class="u">${x.rows ?? "?"} แถว · ${x.hasSelection ? "ติ๊กคนแล้ว" : "ยังไม่ติ๊กคน"}${x.known ? "" : " · ไม่พบ people.json"}</div></span>
+    ${queueBadge(x.slug)}
+    <button class="ghost small" data-action="queue-remove" data-slug="${esc(x.slug)}" title="เอาออกจากคิว">✕</button>
+  </li>`).join("")}</ol>`;
+}
+
 function cardUpload() {
   const pages = S.pages.filter((p) => p.people != null);
   const rows = pages.map((p) => `<tr>
@@ -326,6 +364,10 @@ function cardUpload() {
     <td><button class="ghost small" data-action="upload-dry" data-slug="${esc(p.slug)}">ตรวจ (dry-run)</button></td>
     <td><button class="ghost danger small" data-action="upload-real" data-slug="${esc(p.slug)}">ยิงจริง…</button></td>
   </tr>`).join("");
+
+  const q = queueRows();
+  const qBad = q.filter((x) => !x.hasSelection);
+  const qTotal = q.reduce((n, x) => n + (x.rows || 0), 0);
 
   const confirm = form.confirmSlug ? (() => {
     const pg = pages.find((p) => p.slug === form.confirmSlug);
@@ -339,12 +381,23 @@ function cardUpload() {
     </div>`;
   })() : "";
 
+  const qConfirm = form.queueConfirm ? `<div class="callout danger" style="margin-top:14px">
+      <b>ยืนยันยิงจริงทั้งคิว — ${q.length} รายการ · ${qTotal} แถว</b>
+      <div style="margin:6px 0">${q.map((x, i) => `<div class="u">${i + 1}. ${esc(x.slug)} — ${x.rows ?? "?"} แถว${x.hasSelection ? "" : " (ยังไม่ติ๊กคน)"}</div>`).join("")}</div>
+      ${qBad.length ? `<div class="u" style="color:var(--danger)">⚠ ${qBad.length} รายการยังไม่ได้ติ๊กคน (selection.json) — รายการนั้นจะล้ม และคิวจะหยุดทันที</div>` : ""}
+      <label class="check" style="margin-top:8px;display:flex"><input type="checkbox" data-form="queueVerified" ${form.queueVerified ? "checked" : ""}> ข้าพเจ้าตรวจ report dry-run ครบทุกหน้าแล้ว และยืนยันให้บันทึกจริงลง backend</label>
+      <label class="field" style="margin-top:8px"><span>พิมพ์คำยืนยันให้ตรงเป๊ะ: <code>${QUEUE_PHRASE}</code></span>
+        <input data-form="queueText" value="${esc(form.queueText)}" placeholder="พิมพ์คำยืนยัน"></label>
+      <div class="row"><button class="danger" data-action="queue-go">ยิงจริงทั้งคิว</button>
+        <button class="ghost" data-action="queue-cancel">ยกเลิก</button></div>
+    </div>` : "";
+
   return `<div class="card">
     <div class="card-head"><span class="num">9</span>
       <div><h2>Upload — ยิงขึ้น backend</h2><p>เริ่มด้วย dry-run ตรวจก่อนเสมอ แล้วค่อยยิงจริง</p></div></div>
     <div class="card-body">
-      <div class="dropzone small" id="drop-people"><strong>ลาก people.json มาวางที่นี่</strong>เพื่ออัปโหลดไฟล์ที่เตรียมไว้แล้ว (วางในโฟลเดอร์ out ให้อัตโนมัติ)</div>
-      <input type="file" id="file-people" accept=".json,application/json" hidden>
+      <div class="dropzone small" id="drop-people"><strong>ลาก people.json มาวางที่นี่</strong>วางได้หลายไฟล์พร้อมกัน — จะต่อท้ายคิวตามลำดับที่วาง</div>
+      <input type="file" id="file-people" accept=".json,application/json" multiple hidden>
       <div class="grid cols-3" style="margin-top:14px">
         ${field("backend", "Backend (ไม่ใส่ = หาจากแท็บเอง)", 'placeholder="https://host"')}
         ${field("limit", "จำกัดจำนวนแถว (limit)", 'type="number" min="0" placeholder="ทั้งหมด"')}
@@ -355,6 +408,17 @@ function cardUpload() {
         ${field("port", "พอร์ต CDP", 'placeholder="auto"')}
         <label class="check" style="align-self:end;padding-bottom:8px"><input type="checkbox" data-form="strict" ${form.strict ? "checked" : ""}> strict-sections (ปฏิเสธถ้าแผนกไม่ตรง)</label>
       </div>
+      <div class="section-title">คิวอัปโหลด ${q.length ? `<span class="badge ${qBad.length ? "warn" : "ok"}">${q.length} รายการ · ${qTotal} แถว</span>` : ""}</div>
+      <p class="hint">วางไฟล์ = ต่อท้ายคิวตามลำดับที่วาง · ลากแถวเพื่อสลับลำดับ · “ยิงจริงทั้งหมด” จะรันทีละรายการตามคิว และหยุดทันทีถ้ารายการใดล้ม</p>
+      ${queueListHtml(q)}
+      <div class="row" style="margin-top:12px">
+        <button class="ghost small" data-action="queue-seed">เพิ่มทุกหน้าจากตาราง</button>
+        <button class="ghost small" data-action="queue-clear" ${q.length ? "" : "disabled"}>ล้างคิว</button>
+        <span class="spacer"></span>
+        <button class="ghost" data-action="queue-dry" ${q.length ? "" : "disabled"}>ตรวจทั้งหมดตามลำดับ (dry-run)</button>
+        <button class="danger" data-action="queue-real" ${q.length ? "" : "disabled"}>ยิงจริงทั้งหมด…</button>
+      </div>
+      ${qConfirm}
       ${pages.length ? `<div class="section-title">หน้าที่พร้อมอัปโหลด (${pages.length})</div>
         <table><thead><tr><th>หน้า</th><th>จำนวน</th><th>ติ๊กคน</th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table>` : `<div class="empty">ยังไม่มี people.json — รัน run + finalize ก่อน หรือลากไฟล์มาวาง</div>`}
       ${confirm}
@@ -414,8 +478,8 @@ async function loadPickImages(slug) {
     const keep = keepBySrc.has(im.src) ? keepBySrc.get(im.src) : !!(im.name && !im.likely_header);
     const who = [im.name, im.position].filter(Boolean).join(" | ") || im.alt || "(ไม่มีชื่อ)";
     const flags = [im.likely_header ? "ป้ายแผนก" : "", im.vacant ? "เก้าอี้ว่าง" : ""].filter(Boolean).join(" · ");
-    return `<figure class="pic">
-      <img src="${esc(im.src)}" loading="lazy" onerror="this.style.visibility='hidden'">
+    return `<figure class="pic ${keep ? "kept" : ""}">
+      <img src="${esc(im.src)}" loading="lazy" draggable="false" onerror="this.style.visibility='hidden'">
       <figcaption><b>${esc(who)}</b>${esc(im.width)}x${esc(im.height)}${flags ? `<br><i>${esc(flags)}</i>` : ""}</figcaption>
       <label class="check"><input type="checkbox" data-pick="${esc(im.src)}" data-seq="${im.seq}" ${keep ? "checked" : ""}> โหลดรูปนี้</label>
     </figure>`;
@@ -443,8 +507,8 @@ async function loadReview(slug) {
   const cands = data.candidates || [];
   if (!cands.length) { box.innerHTML = `<div class="empty">หน้านี้ไม่มีรูปให้เลือก</div>`; updateReviewCount(); return; }
   box.className = "imgs";
-  box.innerHTML = cands.map((c, i) => `<figure class="pic" draggable="true" data-rseq="${c.seq}">
-    <img src="${esc(c.src)}" loading="lazy" onerror="this.style.visibility='hidden'">
+  box.innerHTML = cands.map((c) => `<figure class="pic ${c.keep ? "kept" : ""}" draggable="true" data-rseq="${c.seq}">
+    <img src="${esc(c.src)}" loading="lazy" draggable="false" onerror="this.style.visibility='hidden'">
     <figcaption><b>${esc(c.caption || c.alt || "(ไม่มีชื่อ)")}</b>
       ${c.phone ? `<br>โทร: ${esc(c.phone)}` : ""}${c.note ? `<br><small>${esc(String(c.note).replace(/<br>/g, " "))}</small>` : ""}</figcaption>
     <label class="check"><input type="checkbox" data-rkeep="${c.seq}" ${c.keep ? "checked" : ""}> เก็บรูปนี้</label>
@@ -499,8 +563,8 @@ async function act(name, el) {
       catch (e) { toast(e.message, "err"); }
       break;
     }
-    case "review-all": $$("#review-grid input[data-rkeep]").forEach((c) => (c.checked = true)); updateReviewCount(); break;
-    case "review-none": $$("#review-grid input[data-rkeep]").forEach((c) => (c.checked = false)); updateReviewCount(); break;
+    case "review-all": $$("#review-grid input[data-rkeep]").forEach((c) => (c.checked = true)); $$("#review-grid figure.pic").forEach(syncKept); updateReviewCount(); break;
+    case "review-none": $$("#review-grid input[data-rkeep]").forEach((c) => (c.checked = false)); $$("#review-grid figure.pic").forEach(syncKept); updateReviewCount(); break;
     case "bulk-order": {
       const v = parseInt($("#bulk-ord")?.value, 10);
       if (!Number.isFinite(v) || v < 0) return toast("เลขไม่ถูกต้อง", "err");
@@ -521,6 +585,41 @@ async function act(name, el) {
       try { const r = await post("/api/review/" + form.reviewSlug, { selection }); toast(`บันทึก selection.json แล้ว (เก็บ ${r.kept})`, "ok"); await load(); }
       catch (e) { toast(e.message, "err"); }
       break;
+    }
+    case "queue-seed": {
+      const have = new Set(form.queue.map((x) => x.slug));
+      const add = S.pages.filter((p) => p.people != null && !have.has(p.slug));
+      for (const p of add) form.queue.push({ slug: p.slug, rows: p.people });
+      form.queueConfirm = false;
+      render();
+      toast(add.length ? `เพิ่มเข้าคิว ${add.length} รายการ (รวม ${form.queue.length})` : "มีครบทุกหน้าในคิวแล้ว", add.length ? "ok" : "");
+      break;
+    }
+    case "queue-remove":
+      form.queue = form.queue.filter((x) => x.slug !== slug);
+      form.queueConfirm = false;
+      render();
+      break;
+    case "queue-clear":
+      form.queue = []; form.queueConfirm = false;
+      render();
+      break;
+    case "queue-dry":
+      if (!form.queue.length) return toast("คิวว่าง", "err");
+      return runJob("upload-queue", null, `ตรวจคิว ${form.queue.length} รายการ (dry-run)`, { steps: queueSteps(false) });
+    case "queue-real":
+      if (!form.queue.length) return toast("คิวว่าง", "err");
+      form.queueConfirm = true; form.queueText = ""; form.queueVerified = false;
+      render();
+      break;
+    case "queue-cancel": form.queueConfirm = false; render(); break;
+    case "queue-go": {
+      if (!form.queueVerified) return toast("ต้องติ๊กยืนยันก่อน", "err");
+      if (form.queueText.trim() !== QUEUE_PHRASE) return toast(`พิมพ์ยืนยันไม่ตรง — ต้องเป็น "${QUEUE_PHRASE}"`, "err");
+      const steps = queueSteps(true);
+      form.queueConfirm = false;
+      render();
+      return runJob("upload-queue", null, `ยิงจริงทั้งคิว ${steps.length} รายการ`, { steps, confirm: QUEUE_PHRASE });
     }
     case "upload-dry": return runJob("upload", uploadOpts(slug, false), `upload dry-run ${slug}`);
     case "upload-real": form.confirmSlug = slug; form.confirmText = ""; form.iVerified = false; render(); break;
@@ -544,8 +643,10 @@ $("#app").addEventListener("click", (e) => {
 $("#app").addEventListener("input", (e) => {
   const t = e.target;
   if (t.dataset.form) { form[t.dataset.form] = t.type === "checkbox" ? t.checked : t.value; return; }
-  if (t.dataset.pick) return updatePickCount();
-  if (t.dataset.rkeep) return updateReviewCount();
+  if (t.dataset.pick || t.dataset.rkeep) {
+    syncKept(t.closest("figure.pic"));
+    if (t.dataset.rkeep) updateReviewCount(); else updatePickCount();
+  }
 });
 $("#app").addEventListener("change", (e) => {
   const t = e.target;
@@ -554,66 +655,120 @@ $("#app").addEventListener("change", (e) => {
   else if (t.dataset.form) { form[t.dataset.form] = t.type === "checkbox" ? t.checked : t.value; }
 });
 
-// drag & drop reorder in review grid
+// ---------- picking/keeping: bigger targets, the whole card toggles ----------
+function keptBox(fig) { return fig ? $("input[data-rkeep], input[data-pick]", fig) : null; }
+function syncKept(fig) {
+  const box = keptBox(fig);
+  if (fig && box) fig.classList.toggle("kept", box.checked);
+}
+// clicking anywhere on a card toggles it; controls inside keep their own behaviour
+$("#app").addEventListener("click", (e) => {
+  if (justDragged) return;
+  if (e.target.closest("input, label, button, select, textarea, a")) return;
+  const fig = e.target.closest("figure.pic");
+  const box = keptBox(fig);
+  if (!box) return;
+  box.checked = !box.checked;
+  box.dispatchEvent(new Event("input", { bubbles: true })); // counts + card frame follow
+});
+
+// ---------- drag & drop reorder (review photos and the upload queue) ----------
+const REORDER_SEL = "#review-grid figure[data-rseq], #queue-list li[data-qslug]";
+const reorderItem = (node) => node?.closest?.(REORDER_SEL) || null;
 let dragEl = null;
-$("#app").addEventListener("dragstart", (e) => {
-  const f = e.target.closest("#review-grid figure[data-rseq]");
-  if (!f) return;
-  dragEl = f; f.classList.add("dragging");
-  e.dataTransfer.effectAllowed = "move";
-});
-$("#app").addEventListener("dragover", (e) => {
-  const f = e.target.closest("#review-grid figure[data-rseq]");
-  if (!f || !dragEl || f === dragEl) return;
-  e.preventDefault();
-  f.classList.add("drop-target");
-});
-$("#app").addEventListener("dragleave", (e) => {
-  const f = e.target.closest("#review-grid figure[data-rseq]");
-  if (f) f.classList.remove("drop-target");
-});
-$("#app").addEventListener("drop", (e) => {
-  const f = e.target.closest("#review-grid figure[data-rseq]");
-  if (!f || !dragEl || f === dragEl) return;
-  e.preventDefault();
-  const box = f.parentElement;
-  const figs = [...box.children];
-  if (figs.indexOf(dragEl) < figs.indexOf(f)) f.after(dragEl); else f.before(dragEl);
+let justDragged = false;
+
+// the queue order IS the DOM order: keep the two in sync after a drop
+function applyQueueOrder() {
+  const items = $$("#queue-list li[data-qslug]");
+  if (!items.length) return;
+  const by = new Map(form.queue.map((x) => [x.slug, x]));
+  form.queue = items.map((el) => by.get(el.dataset.qslug)).filter(Boolean);
+  items.forEach((el, i) => { const n = $(".q-idx", el); if (n) n.textContent = String(i + 1); });
+}
+function renumberOrders() {
   $$("#review-grid figure[data-rseq]").forEach((fig, i) => {
     const o = $("input[data-rorder]", fig);
     if (o) o.value = i;
   });
+  updateReviewCount();
+}
+
+$("#app").addEventListener("dragstart", (e) => {
+  const f = reorderItem(e.target);
+  if (!f) return;
+  dragEl = f; justDragged = true;
+  f.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+});
+$("#app").addEventListener("dragover", (e) => {
+  const f = reorderItem(e.target);
+  if (!f || !dragEl || f === dragEl || f.parentElement !== dragEl.parentElement) return;
+  e.preventDefault();
+  f.classList.add("drop-target");
+});
+$("#app").addEventListener("dragleave", (e) => {
+  const f = reorderItem(e.target);
+  if (f) f.classList.remove("drop-target");
+});
+$("#app").addEventListener("drop", (e) => {
+  const f = reorderItem(e.target);
+  if (!f || !dragEl || f === dragEl || f.parentElement !== dragEl.parentElement) return;
+  e.preventDefault();
+  const box = f.parentElement;
+  const items = [...box.children];
+  if (items.indexOf(dragEl) < items.indexOf(f)) f.after(dragEl); else f.before(dragEl);
+  if (dragEl.matches("li[data-qslug]")) applyQueueOrder(); else renumberOrders();
 });
 $("#app").addEventListener("dragend", () => {
-  $$("#review-grid .dragging").forEach((x) => x.classList.remove("dragging"));
-  $$("#review-grid .drop-target").forEach((x) => x.classList.remove("drop-target"));
+  $$("#app .dragging").forEach((x) => x.classList.remove("dragging"));
+  $$("#app .drop-target").forEach((x) => x.classList.remove("drop-target"));
   dragEl = null;
+  setTimeout(() => (justDragged = false), 200); // swallow the click a drag can leave behind
 });
 
 // ---------- dropzones ----------
-function wireDropzone(zoneSel, inputSel, onFile) {
+function wireDropzone(zoneSel, inputSel, onFiles) {
   const zone = $(zoneSel), input = $(inputSel);
   if (!zone || !input) return;
   zone.onclick = () => input.click();
-  input.onchange = () => { if (input.files[0]) onFile(input.files[0]); input.value = ""; };
+  input.onchange = () => { const files = [...input.files]; if (files.length) onFiles(files); input.value = ""; };
   zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("drag"); });
   zone.addEventListener("dragleave", () => zone.classList.remove("drag"));
-  zone.addEventListener("drop", (e) => { e.preventDefault(); zone.classList.remove("drag"); if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]); });
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault(); zone.classList.remove("drag");
+    const files = [...(e.dataTransfer?.files || [])];
+    if (files.length) onFiles(files);
+  });
 }
 const readText = (file) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsText(file); });
 
 function wireDrops() {
-  wireDropzone("#drop-urls", "#file-urls", async (file) => {
-    const text = await readText(file);
+  wireDropzone("#drop-urls", "#file-urls", async (files) => {
+    const text = await readText(files[0]);
     form.urls = text;
     const ta = $("#urls"); if (ta) ta.value = text;
     try { const r = await post("/api/urls", { text }); toast(`โหลด urls.txt แล้ว (${r.count} URL)`, "ok"); await load(); }
     catch (e) { toast(e.message, "err"); }
   });
-  wireDropzone("#drop-people", "#file-people", async (file) => {
-    const content = await readText(file);
-    try { const r = await post("/api/drop-people", { name: file.name, content }); toast(`เพิ่ม ${r.slug} (${r.rows} แถว)`, "ok"); await load(); }
-    catch (e) { toast("อ่านไฟล์ไม่ได้: " + e.message, "err"); }
+  wireDropzone("#drop-people", "#file-people", async (files) => {
+    // every dropped file lands in out/<slug>/people.json, then joins the queue in drop order
+    const payload = [];
+    for (const f of files) payload.push({ name: f.name, content: await readText(f) });
+    try {
+      const r = await post("/api/drop-people", { files: payload });
+      const dup = [];
+      let overwritten = 0;
+      for (const f of r.files) {
+        if (f.existed) overwritten++;
+        if (form.queue.some((x) => x.slug === f.slug)) { dup.push(f.slug); continue; }
+        form.queue.push({ slug: f.slug, rows: f.rows });
+      }
+      form.queueConfirm = false;
+      const added = r.files.length - dup.length;
+      toast(`ต่อท้ายคิว ${added} รายการ${overwritten ? ` · เขียนทับ people.json เดิม ${overwritten} ไฟล์` : ""}${dup.length ? ` · ข้ามซ้ำ ${dup.join(", ")}` : ""}`, "ok");
+      await load();
+    } catch (e) { toast("อ่านไฟล์ไม่ได้: " + e.message, "err"); }
   });
 }
 

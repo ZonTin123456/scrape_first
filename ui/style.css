@@ -102,6 +102,8 @@ textarea { resize: vertical; font-family: ui-monospace, "Cascadia Code", Consola
 label.field { display: block; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
 label.field > span { display: block; margin-bottom: 4px; }
 label.check { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; cursor: pointer; }
+/* ticking is the main gesture on this page: keep the target comfortably large */
+input[type="checkbox"] { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--brand); cursor: pointer; }
 .grid { display: grid; gap: 12px; }
 .grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -134,20 +136,44 @@ td .u { font-size: 11.5px; color: var(--muted); word-break: break-all; }
 .badge.err { background: #fdeaea; color: var(--danger); }
 
 /* ---------- image grids ---------- */
-.imgs { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.imgs { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
 figure.pic {
-  margin: 0; border: 1px solid var(--line); border-radius: 10px; padding: 8px;
-  background: #fff; display: flex; flex-direction: column; gap: 6px;
+  margin: 0; border: 1px solid var(--line); border-radius: 10px; padding: 10px;
+  background: #fff; display: flex; flex-direction: column; gap: 8px;
+  cursor: pointer; transition: border-color .12s ease, box-shadow .12s ease, background .12s ease;
 }
-figure.pic img { width: 100%; height: 130px; object-fit: contain; background: #f4f6fb; border-radius: 6px; }
+figure.pic:hover { border-color: #c2d3f5; }
+figure.pic img { width: 100%; height: 160px; object-fit: contain; background: #f4f6fb; border-radius: 6px; }
 figure.pic figcaption { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
 figure.pic figcaption b { color: var(--ink); font-size: 12.5px; display: block; }
-figure.pic.off { opacity: .5; }
-figure.pic[draggable="true"] { cursor: grab; }
+/* ticking: a big box, and the whole card reads as selected */
+figure.pic input[type="checkbox"] { width: 26px; height: 26px; }
+figure.pic label.check { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+figure.pic.kept { border-color: var(--brand); background: #f4f8ff; box-shadow: 0 0 0 2px rgba(47, 109, 246, .18); }
+figure.pic.kept figcaption b { color: var(--brand-dark); }
 figure.pic.dragging { opacity: .35; }
 figure.pic.drop-target { outline: 2px dashed var(--brand); outline-offset: 2px; }
-.ord { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); }
-.ord input { width: 58px; }
+.ord { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 12px; color: var(--muted); }
+.ord input { width: 68px; }
+
+/* ---------- upload queue ---------- */
+.queue { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.queue li {
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: #fff;
+  cursor: pointer; transition: border-color .12s ease, box-shadow .12s ease;
+}
+.queue li:hover { border-color: #c2d3f5; }
+.queue li.dragging { opacity: .35; }
+.queue li.drop-target { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(47, 109, 246, .18); }
+.queue .grip { cursor: grab; color: #b7c2d8; font-size: 17px; line-height: 1; }
+.queue .q-idx {
+  flex: none; min-width: 26px; height: 26px; border-radius: 8px;
+  background: #eaf1ff; color: var(--brand);
+  display: grid; place-items: center; font-size: 12px; font-weight: 700;
+}
+.queue .q-name { flex: 1; min-width: 0; }
+.queue .q-name .u { font-size: 11.5px; color: var(--muted); }
 
 /* ---------- console ---------- */
 .console {

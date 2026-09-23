@@ -236,27 +236,66 @@ function buildArgs(step, o = {}) {
   }
 }
 
-function startJob(step, opts) {
-  const args = buildArgs(step, opts);
+// A job is one SSE stream. It runs either a single script or a sequential
+// queue of scripts (the upload card). Every item of a queue is validated up
+// front, so one bad item refuses the whole queue instead of half-running it.
+const QUEUE_STEP = "upload";      // only uploads may be queued, by design
+const QUEUE_CONFIRM = "ยิงจริง"; // phrase the user must type for a --save queue
+
+const emit = (job, ev) => { job.events.push(ev); for (const l of job.listeners) { try { l(ev); } catch { /* closed */ } } };
+function newJob(step, line) {
   const id = `j${nextJob++}`;
-  const job = { id, step, line: `node ${args.join(" ")}`, events: [], listeners: new Set(), done: false, code: null };
+  const job = { id, step, line, events: [], listeners: new Set(), done: false, code: null, child: null, cancelled: false };
   jobs.set(id, job);
-  const emit = (ev) => { job.events.push(ev); for (const l of job.listeners) { try { l(ev); } catch { /* closed */ } } };
-  let child;
-  try {
-    child = spawn(NODE, args, { cwd: ROOT, env: process.env });
-  } catch (e) {
-    emit({ type: "err", text: String(e.message) + "\n" });
-    emit({ type: "exit", code: 1 });
-    job.done = true; job.code = 1;
-    return job;
+  return job;
+}
+const finish = (job, code) => { job.done = true; job.code = code; emit(job, { type: "exit", code }); };
+
+function spawnChild(job, args) {
+  return new Promise((resolve) => {
+    let child;
+    try { child = spawn(NODE, args, { cwd: ROOT, env: process.env }); }
+    catch (e) { emit(job, { type: "err", text: String(e.message) + "\n" }); return resolve(1); }
+    job.child = child;
+    child.stdout.on("data", (d) => emit(job, { type: "out", text: d.toString() }));
+    child.stderr.on("data", (d) => emit(job, { type: "err", text: d.toString() }));
+    child.on("error", (e) => emit(job, { type: "err", text: String(e.message) + "\n" }));
+    child.on("close", (code) => resolve(Number.isFinite(code) ? code : 1));
+  });
+}
+
+function startJob(step, opts) {
+  const args = buildArgs(step, opts); // throws before the job exists -> route returns 400
+  const job = newJob(step, `node ${args.join(" ")}`);
+  emit(job, { type: "start", line: job.line });
+  spawnChild(job, args).then((code) => finish(job, code));
+  return job;
+}
+
+function startQueue(items, reqBody = {}) {
+  // validate every item first: nothing runs unless the whole queue is runnable
+  const prepared = items.map((s) => ({ opts: s?.opts || {}, args: buildArgs(QUEUE_STEP, s?.opts || {}) }));
+  const total = prepared.length;
+  const saves = prepared.filter((p) => p.opts.save).length;
+  if (saves) {
+    if (saves !== total) throw new Error("คิวผสมโหมดยิงจริงกับโหมดตรวจไม่ได้ — แยกเป็นคิวละโหมด");
+    if (!prepared.every((p) => p.opts.iVerified)) throw new Error("ยิงจริงทั้งคิวต้องติ๊กยืนยัน i-verified ก่อน");
+    if (String(reqBody.confirm || "").trim() !== QUEUE_CONFIRM) throw new Error(`ต้องพิมพ์ "${QUEUE_CONFIRM}" เพื่อยืนยันการยิงจริงทั้งคิว`);
   }
-  job.child = child;
-  emit({ type: "start", line: job.line });
-  child.stdout.on("data", (d) => emit({ type: "out", text: d.toString() }));
-  child.stderr.on("data", (d) => emit({ type: "err", text: d.toString() }));
-  child.on("error", (e) => emit({ type: "err", text: String(e.message) + "\n" }));
-  child.on("close", (code) => { job.done = true; job.code = code; emit({ type: "exit", code }); });
+  const job = newJob("upload-queue", `queue ${total} รายการ${saves ? " (ยิงจริง)" : " (dry-run)"}`);
+  emit(job, { type: "start", line: job.line });
+  (async () => {
+    let code = 0;
+    for (let i = 0; i < total; i++) {
+      const { opts, args } = prepared[i];
+      if (job.cancelled) { code = 1; emit(job, { type: "err", text: `\n— ยกเลิกคิวที่รายการ ${i + 1}/${total} —\n` }); break; }
+      emit(job, { type: "step", index: i + 1, total, slug: opts.slug || "", save: !!opts.save, line: `node ${args.join(" ")}` });
+      code = await spawnChild(job, args);
+      if (job.cancelled) { code = 1; emit(job, { type: "err", text: `\n— หยุดคิวที่รายการ ${i + 1}/${total} —\n` }); break; }
+      if (code !== 0) { emit(job, { type: "err", text: `\n— หยุดคิว: รายการ ${i + 1}/${total}${opts.slug ? ` (${opts.slug})` : ""} จบด้วย exit ${code} —\n` }); break; }
+    }
+    finish(job, code);
+  })();
   return job;
 }
 
@@ -393,23 +432,46 @@ const server = createServer(async (req, res) => {
       }
       if (p === "/api/drop-people") {
         const b = await body(req);
-        const rows = typeof b.content === "string" ? JSON.parse(b.content) : b.content;
-        if (!Array.isArray(rows)) return json(res, 400, { error: "people.json ต้องเป็น array" });
-        const group = rows.find((r) => r && r.source_group)?.source_group || String(b.name || "people").replace(/\.json$/i, "");
-        const slug = slugOf(String(group).toLowerCase().replace(/[^a-z0-9._-]+/g, "-"));
-        mkdirSync(join(OUT, slug), { recursive: true });
-        writeFileSync(join(OUT, slug, "people.json"), JSON.stringify(rows, null, 1), "utf8");
-        return json(res, 200, { slug, rows: rows.length });
+        // one file ({name, content}) or a batch ({files:[{name, content}]})
+        const files = Array.isArray(b.files) ? b.files : [{ name: b.name, content: b.content }];
+        if (!files.length) return json(res, 400, { error: "ไม่มีไฟล์" });
+        // pass 1: parse + derive slug for every file (nothing written yet)
+        const seen = new Set();
+        const staged = files.map((f) => {
+          let rows;
+          try { rows = typeof f?.content === "string" ? JSON.parse(f.content) : f?.content; }
+          catch { throw new Error(`${f?.name || "ไฟล์"}: อ่าน JSON ไม่ได้`); }
+          if (!Array.isArray(rows)) throw new Error(`${f?.name || "ไฟล์"}: people.json ต้องเป็น array`);
+          const group = rows.find((r) => r && r.source_group)?.source_group || String(f?.name || "people").replace(/\.json$/i, "");
+          const slug = slugOf(String(group).toLowerCase().replace(/[^a-z0-9._-]+/g, "-"));
+          if (seen.has(slug)) throw new Error(`slug ซ้ำในชุดที่วาง: ${slug} — ลากไฟล์ซ้ำกันสองครั้งหรือตั้ง source_group ชนกัน`);
+          seen.add(slug);
+          return { slug, name: f?.name || "", rows, existed: existsSync(join(OUT, slug, "people.json")) };
+        });
+        // pass 2: write all, only after the whole batch passed validation
+        for (const s of staged) {
+          mkdirSync(join(OUT, s.slug), { recursive: true });
+          writeFileSync(join(OUT, s.slug, "people.json"), JSON.stringify(s.rows, null, 1), "utf8");
+        }
+        const results = staged.map((s) => ({ slug: s.slug, name: s.name, rows: s.rows.length, existed: s.existed }));
+        return json(res, 200, { files: results, slug: results[0].slug, rows: results[0].rows, existed: results[0].existed });
       }
       if (p === "/api/job") {
         const b = await body(req);
+        if (Array.isArray(b.steps)) {
+          if (!b.steps.length) return json(res, 400, { error: "คิวว่าง" });
+          if (b.steps.length > 200) return json(res, 400, { error: "คิวเกิน 200 รายการ — แยกเป็นหลายรอบ" });
+          const job = startQueue(b.steps, b);
+          return json(res, 200, { id: job.id, line: job.line, count: b.steps.length });
+        }
         const job = startJob(b.step, b.opts || {});
         return json(res, 200, { id: job.id, line: job.line });
       }
       if (p.match(/^\/api\/job\/[^/]+\/kill$/)) {
         const id = p.split("/")[3];
         const j = jobs.get(id);
-        if (j?.child) { try { j.child.kill(); } catch { /* gone */ } }
+        // mark the queue cancelled so it does not advance to the next item
+        if (j) { j.cancelled = true; if (j.child) { try { j.child.kill(); } catch { /* gone */ } } }
         return json(res, 200, { ok: true });
       }
       if (p === "/api/refresh") return json(res, 200, await buildState());
