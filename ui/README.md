@@ -5,9 +5,20 @@
 
 ## เริ่มใช้
 
+ต้องมี **Node 22+** (สคริปต์เช็คให้ตั้งแต่เปิด) และติดตั้ง dependency ของขั้น upload ครั้งเดียว:
+
+```bash
+cd uploader && npm install && cd ..
+```
+
 ```bash
 # 1) เปิด Chrome ให้ login ค้างไว้ (แบบเดียวกับที่ CLI ใช้)
-start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9333 --user-data-dir="C:\ChromeCDP9333"
+#    --remote-allow-origins=* จำเป็นสำหรับ Chrome 111+ · ดูคำสั่งครบทุก OS ใน README.md หัวข้อ "สิ่งที่ต้องมี"
+# macOS
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir="$HOME/.chrome-cdp-9333"
+# Linux
+google-chrome --remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir="$HOME/.chrome-cdp-9333"
+# Windows cmd: start "" "%PROGRAMFILES%\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir="%USERPROFILE%\.chrome-cdp-9333"
 
 # 2) รันเซิร์ฟเวอร์ UI
 node ui/server.mjs            # เปิด http://localhost:4173

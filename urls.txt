@@ -1,2 +1,6 @@
-https://www.hongcharoen.go.th/manage.php
-https://www.hongcharoen.go.th/house.php
+https://maluan.go.th/manage.php
+https://maluan.go.th/house.php
+https://maluan.go.th/officer4.php
+https://maluan.go.th/officer1.php
+https://maluan.go.th/officer2.php
+https://maluan.go.th/officer3.php

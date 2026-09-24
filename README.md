@@ -11,10 +11,43 @@ node ui/server.mjs
 
 ---
 
-0. เตรียม
-Remove-Item -Recurse -Force .\out
+## สิ่งที่ต้องมี (คนที่ clone มาครั้งแรก)
 
-start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9333 --user-data-dir="C:\ChromeCDP9333"
+- **Node 22 ขึ้นไป** — สคริปต์คุยกับ Chrome ผ่าน `WebSocket` ที่มีในตัวตั้งแต่ Node 22 (Node 18/20 จะพังกลางทาง; ทุกสคริปต์เช็คให้ตั้งแต่เปิด พร้อมบอกวิธีแก้)
+- **Chrome หรือ Chromium** — สคริปต์หาตำแหน่งเองตาม OS (Windows/macOS/Linux) ถ้าหาไม่เจอต้องเปิดเองค้างไว้
+- **`playwright-core` ติดตั้งครั้งเดียว** — เฉพาะขั้น upload (สคริปต์ root อย่าง `backup-page.mjs`, `pipeline.mjs`, `ui/server.mjs` ไม่ใช้ dependency ใด ๆ)
+
+```bash
+cd uploader && npm install && cd ..   # ครั้งแรกครั้งเดียว (มี package-lock.json → ใช้ npm ci ก็ได้)
+```
+
+## 0. เตรียม
+
+```bash
+rm -rf ./out            # Windows PowerShell: Remove-Item -Recurse -Force .\out
+```
+
+เปิด Chrome แบบ headed ค้างไว้ (หน้าต่างนี้ใช้ login backend ที่จะอัปโหลดด้วย) — `--remote-allow-origins=*` จำเป็นสำหรับ Chrome 111+:
+
+```bash
+# macOS
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir="$HOME/.chrome-cdp-9333"
+
+# Linux
+google-chrome --remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir="$HOME/.chrome-cdp-9333"
+```
+
+```bat
+:: Windows (cmd)
+start "" "%PROGRAMFILES%\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir="%USERPROFILE%\.chrome-cdp-9333"
+```
+
+```powershell
+# Windows (PowerShell)
+& "$env:PROGRAMFILES\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir="$env:USERPROFILE\.chrome-cdp-9333"
+```
+
+`--user-data-dir` = โปรไฟล์แยกสำหรับงานนี้ เก็บ login ค้างไว้และไม่ไปยุ่งโปรไฟล์ Chrome ปกติ · ถ้าไม่มี Chrome ที่ 9333 สคริปต์จะเปิด headless ให้เอง (ใช้กับเว็บติด Cloudflare ไม่ได้)
 
 1. PROBE
    node backup-page.mjs --probe --from urls.txt --out ./out
@@ -42,6 +75,7 @@ start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugg
 6. ลบแถวเก่าที่สร้างไว้บน backend (manual)
 
 7. UPLOAD dry-run (ทีละ slug)
+   (ครั้งแรกต้อง `cd uploader && npm install` ก่อน — ดูหัวข้อ "สิ่งที่ต้องมี")
    node uploader/upload-people.mjs --from out/<slug>/people.json --backend <host>
    → เช็ค report: dry, ไม่มี partial/failed/unresolved
 

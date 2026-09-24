@@ -7,10 +7,12 @@
 //   node backup-page.mjs --probe --from urls.txt      (phase 1: metadata only, no image bytes)
 //   node backup-page.mjs --run --from picked-links.json
 //   node backup-page.mjs --finalize <outdir>
-// Needs: Node 18+, Chrome (uses running headed instance via --port auto 9333->9444->9222, else launches headless).
+// Needs: Node 22+ (global WebSocket), Chrome (uses a running headed instance via --port auto 9333->9444->9222, else launches a throwaway headless one).
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, basename } from "node:path";
+import { tmpdir } from "node:os";
+import { assertNode, chromeCandidates } from "./runtime.mjs";
 
 const VERSION = "1.3.0";
 const RETRY = 2;
@@ -32,6 +34,7 @@ function usage() {
 }
 const argv = process.argv.slice(2);
 if (!argv.length || argv.includes("-h") || argv.includes("--help")) usage();
+assertNode("backup-page"); // --help stays usable on any Node; real work needs 22+
 const opt = (name, def) => {
   const i = argv.indexOf(name);
   return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : def;
@@ -126,15 +129,14 @@ async function ensureChrome() {
     }
     PORT = 9444; // nothing listening: fall through and launch on default
   }
-  const cands = [
-    process.env.PROGRAMFILES + "\\Google\\Chrome\\Application\\chrome.exe",
-    process.env["PROGRAMFILES(X86)"] + "\\Google\\Chrome\\Application\\chrome.exe",
-    process.env.LOCALAPPDATA + "\\Google\\Chrome\\Application\\chrome.exe",
-  ].filter(Boolean);
-  const bin = cands.find((p) => existsSync(p));
-  if (!bin) fail(`no Chrome reachable (scanned 9333/9444/9222) and no chrome.exe found — start headed Chrome: chrome.exe --remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir="C:\\tmp\\chrome-cdp-profile"`);
+  const bin = chromeCandidates().find((p) => existsSync(p));
+  if (!bin) fail("no Chrome reachable (scanned 9333/9444/9222) and none found on this machine — "
+    + "start a headed, logged-in Chrome yourself with CDP on :9333:\n"
+    + "  chrome --remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir=\"<any empty dir>\"");
+  // Throwaway profile on purpose: launching against the default profile just
+  // hands the request to an already-running Chrome and the debug port never opens.
   spawn(bin, [`--headless=new`, `--remote-debugging-port=${PORT}`,
-    `--remote-allow-origins=*`, `--no-first-run`, `about:blank`],
+    `--remote-allow-origins=*`, `--no-first-run`, `--user-data-dir=${join(tmpdir(), "chrome-cdp-profile")}`, "about:blank"],
     { detached: true, stdio: "ignore" }).unref();
   for (let i = 0; i < 50; i++) {
     await new Promise((r) => setTimeout(r, 200));

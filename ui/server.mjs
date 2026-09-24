@@ -16,6 +16,7 @@ import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 // same source-identity rules as the uploader, not a re-implementation
 import { slugBaseOf, resolveTargetGroup } from "../sectioning.mjs";
+import { assertNode } from "../runtime.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
@@ -31,6 +32,7 @@ const portArg = (() => {
   return i >= 0 && process.argv[i + 1] ? Number(process.argv[i + 1]) : NaN;
 })();
 const PORT = Number.isFinite(portArg) ? portArg : Number(process.env.PORT || 4173);
+assertNode("ui"); // the steps it spawns drive Chrome over WebSocket
 
 // ---------- tiny helpers ----------
 const SLUG_RE = /^[A-Za-z0-9._-]+$/;

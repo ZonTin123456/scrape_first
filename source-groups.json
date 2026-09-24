@@ -1,7 +1,13 @@
 {
   "_note": "OPTIONAL intentional merges: '<url substring>' -> '<backend target group name>'. URLs with no entry upload under their own stable source identity (slug of the source URL). Matching is substring, first hit wins. Normal zero-map workflow needs no entry here: adding a website = adding its input URL, never editing this file.",
   "map": {
+    "https://www.hongcharoen.go.th/house.php": "ททท",
     "https://www.hongcharoen.go.th/manage.php": "นนน",
-    "https://www.hongcharoen.go.th/house.php": "ททท"
+    "https://maluan.go.th/manage.php": "คณะผู้บริหาร",
+    "https://maluan.go.th/house.php": "สภาเทศบาล",
+    "https://maluan.go.th/officer4.php": "หน่วยตรวจสอบภายใน",
+    "https://maluan.go.th/officer1.php": "สำนักปลัด",
+    "https://maluan.go.th/officer2.php": "กองคลัง",
+    "https://maluan.go.th/officer3.php": "กองช่าง"
   }
 }

@@ -4,11 +4,12 @@
 // Human steps pause for you to tick pages opened straight from disk
 // (File Picker buttons save over the real files, no server needed).
 // --yes accepts all defaults and skips every pause.
-// Needs: Node 18+, Chrome on CDP (see backup-page.mjs --help).
+// Needs: Node 22+, Chrome on CDP (see backup-page.mjs --help).
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertNode } from "./runtime.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -28,6 +29,7 @@ if (!argv.length || has("-h") || has("--help")) {
   console.log("  (pick-images step still available for per-page ticking instead of master)");
   process.exit(2);
 }
+assertNode("pipeline");
 const ALL = ["probe", "pick-links", "master", "apply-master", "run", "pick-images", "finalize", "upload"];
 const steps = String(opt("--steps", ALL.join(","))).split(",").map((s) => s.trim()).filter(Boolean);
 for (const s of steps) if (!ALL.includes(s)) fail(`unknown step ${s} (want ${ALL.join("|")})`);
