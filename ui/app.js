@@ -7,6 +7,30 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+// ---------- drawn marks ----------
+// Geometry only — one stroke weight and currentColor, so every mark sits in the
+// same ink as the text around it. No emoji or stray glyphs standing in as icons.
+const ICONS = {
+  tick: `<path d="M4.6 12.8l4.6 4.6L19.4 7"/>`,
+  grip: `<circle cx="9.5" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="14.5" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="9.5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="14.5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="9.5" cy="18" r="1.5" fill="currentColor" stroke="none"/><circle cx="14.5" cy="18" r="1.5" fill="currentColor" stroke="none"/>`,
+  close: `<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>`,
+  scan: `<path d="M4 5.6h8.4M4 9h5.4"/><circle cx="14.6" cy="13.6" r="5.1"/><path d="M18.3 17.4L21.2 20.2"/>`,
+  stack: `<rect x="8.6" y="3.6" width="11" height="13.4" rx="1.6"/><path d="M4.4 7.4v13h10.2"/>`,
+  people: `<circle cx="12" cy="8.6" r="3.5"/><path d="M5.4 19.6c1.3-3.5 3.8-5.2 6.6-5.2s5.3 1.7 6.6 5.2"/>`,
+  upload: `<path d="M12 16.4V4.6M7.6 9L12 4.6 16.4 9"/><path d="M4.6 14.6v4.8h14.8v-4.8"/>`,
+  list: `<path d="M4.4 7l1.9 1.9 3.4-3.5"/><path d="M12.4 7.4h7.2M4.4 14.2l1.9 1.9 3.4-3.5"/><path d="M12.4 14.6h7.2M12.4 19h7.2"/>`,
+  link: `<path d="M9.6 14.4l4.8-4.8"/><path d="M12.8 6.7l1.5-1.5a3.6 3.6 0 0 1 5.1 5.1l-1.5 1.5"/><path d="M11.2 17.3l-1.5 1.5a3.6 3.6 0 0 1-5.1-5.1l1.5-1.5"/>`,
+  seal: `<path d="M5.6 20.6h12.8"/><path d="M8.2 17.4h7.6V11a3.8 3.8 0 1 0-7.6 0z"/>`,
+  tape: `<path d="M5.4 4.6h13.2v14.8H5.4z"/><path d="M8.6 8.9h6.8M8.6 12.3h6.8M8.6 15.6h3.8"/>`,
+};
+const icon = (name, cls = "", sw = 1.6) =>
+  `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
+
+// first-use / empty states: a drawn motif, then the next action — never a bare line
+const emptyState = (name, text, hint = "") =>
+  `<div class="empty">${icon(name)}<div><b>${text}</b>${hint ? `<br><span class="u">${hint}</span>` : ""}</div></div>`;
+
+
 let S = null;
 let current = null; // running job
 let es = null;
@@ -72,7 +96,7 @@ async function runJob(step, opts, label, payload = null) {
   if (current && !current.done) { toast("มีงานกำลังรันอยู่ รอให้เสร็จก่อน", "err"); return; }
   let info;
   try { info = await post("/api/job", payload || { step, opts }); }
-  catch (e) { toast(e.message, "err"); logLine("✖ " + e.message + "\n", "err"); $("#console").classList.remove("collapsed"); return; }
+  catch (e) { toast(e.message, "err"); logLine("!! " + e.message + "\n", "err"); $("#console").classList.remove("collapsed"); return; }
   current = { id: info.id, step, label, done: false, planSlug: step === "upload" ? opts?.slug || null : null, planBuf: "" };
   setJobStatus("กำลังรัน: " + (label || step), "warn");
   showKill(true);
@@ -167,7 +191,7 @@ const selectField = (key, label, options) =>
 // ชื่อหน่วยงานปลายทาง — 1 URL = 1 หน่วยงานบน backend (ไฟล์ source-groups.json)
 function groupNameTable() {
   const rows = S.urlRows || [];
-  if (!rows.length) return `<div class="section-title">ชื่อหน่วยงานปลายทางบน backend</div><div class="empty">ยังไม่มี URL — ใส่รายการด้านบนก่อน</div>`;
+  if (!rows.length) return `<div class="section-title">ชื่อหน่วยงานปลายทางบน backend</div>${emptyState("upload", "ยังไม่มี URL", "ใส่รายการด้านบนก่อน")}`;
   return `<div class="section-title">ชื่อหน่วยงานปลายทางบน backend (${rows.length})</div>
     <p class="hint">การยิงจริงจะใช้/สร้างแผนกตามชื่อนี้ · เว้นว่าง = ใช้ชื่อเดิมจาก slug · เก็บใน <code>source-groups.json</code></p>
     <table><thead><tr><th>URL (หน้านี้)</th><th style="width:36%">ชื่อหน่วยงานปลายทาง</th></tr></thead><tbody>
@@ -225,7 +249,7 @@ function cardProbe() {
 function cardLinks() {
   if (!S.links.length) return `<div class="card">
     <div class="card-head"><span class="num">3</span><div><h2>เลือกหน้าจะโหลด</h2><p>ติ๊กลิงก์ที่ต้องการ</p></div></div>
-    <div class="card-body"><div class="empty">ยังไม่มีข้อมูล probe — รัน probe ก่อน</div></div></div>`;
+    <div class="card-body">${emptyState("link", "ยังไม่มีข้อมูล probe", "รัน probe ที่การ์ด 2 ก่อน")}</div></div>`;
   const rows = S.links.map((l) => `<tr>
     <td><input type="checkbox" data-link="${esc(l.slug)}" ${l.keep ? "checked" : ""}></td>
     <td><b>${esc(l.title || "(ไม่มีชื่อ)")}</b><div class="u">${esc(l.url)}</div></td>
@@ -253,7 +277,7 @@ function cardMaster() {
     <div class="card-head"><span class="num">4</span>
       <div><h2>ติ๊กรวมรูปซ้ำทุกหน้า <span class="badge">ทางเลือก</span></h2><p>ติ๊กครั้งเดียวใช้กับทุกหน้า (รูปไอคอน/แบนเนอร์ที่ซ้ำกัน) · คลิกที่ตัวการ์ด = ติ๊ก</p></div></div>
     <div class="card-body">
-      ${!m || !m.groups.length ? `<div class="empty">ยังไม่มีรูปไม่ซ้ำ — รัน probe ก่อน</div>` : `
+      ${!m || !m.groups.length ? emptyState("stack", "ยังไม่มีรูปไม่ซ้ำ", "รัน probe ที่การ์ด 2 ก่อน") : `
         <div class="row"><span class="muted">พบ ${m.groups.length} รูปไม่ซ้ำใน ${m.pages.length} หน้า</span>
           <span class="spacer"></span>
           <button class="ghost small" data-action="master-all">เลือกทั้งหมด</button>
@@ -277,7 +301,7 @@ function cardMaster() {
 function cardPickImages() {
   if (!S.probes.length) return `<div class="card">
     <div class="card-head"><span class="num">5</span><div><h2>เลือกรูปที่จะโหลด (รายหน้า)</h2><p>ตัดไอคอน/ป้ายที่ไม่ต้องการก่อนดึงจริง</p></div></div>
-    <div class="card-body"><div class="empty">ยังไม่มีข้อมูล — รัน probe ก่อน</div></div></div>`;
+    <div class="card-body">${emptyState("scan", "ยังไม่มีข้อมูลรายหน้า", "รัน probe ที่การ์ด 2 ก่อน")}</div></div>`;
   const opts = S.probes.map((p) => `<option value="${esc(p.slug)}" ${form.imageSlug === p.slug ? "selected" : ""}>${esc(p.slug)} — เก็บ ${p.keeps} รูป</option>`).join("");
   return `<div class="card">
     <div class="card-head"><span class="num">5</span>
@@ -316,7 +340,7 @@ function cardRun() {
 function cardReview() {
   if (!contentPages().length) return `<div class="card">
     <div class="card-head"><span class="num">7</span><div><h2>ติ๊กรูปคน + จัดลำดับ</h2><p>เลือกรูปที่จะอัปโหลด</p></div></div>
-    <div class="card-body"><div class="empty">ยังไม่มีหน้า — รัน run ก่อน</div></div></div>`;
+    <div class="card-body">${emptyState("people", "ยังไม่มีหน้าที่ดึงมาแล้ว", "รัน run ที่การ์ด 6 ก่อน")}</div></div>`;
   const opts = contentPages().map((p) => `<option value="${esc(p.slug)}" ${form.reviewSlug === p.slug ? "selected" : ""}>${esc(groupName(p))}${p.group && p.group !== p.slug ? ` (${esc(p.slug)})` : ""} — ${p.people ?? "?"} แถว</option>`).join("");
   return `<div class="card">
     <div class="card-head"><span class="num">7</span>
@@ -407,9 +431,9 @@ function queueBadge(slug) {
 }
 
 function queueListHtml(q) {
-  if (!q.length) return `<div class="empty">ยังไม่มีรายการในคิว — ลาก people.json มาวาง หรือกด “เพิ่มทุกหน้าจากตาราง”</div>`;
+  if (!q.length) return emptyState("upload", "ยังไม่มีรายการในคิว", "ลาก people.json มาวาง หรือกด “เพิ่มทุกหน้าจากตาราง”");
   return `<ol id="queue-list" class="queue">${q.map((x, i) => `<li data-qslug="${esc(x.slug)}" draggable="true" title="ลากเพื่อสลับลำดับ">
-    <span class="grip" aria-hidden="true">⠿</span>
+    <span class="grip" aria-hidden="true">${icon("grip")}</span>
     <span class="q-idx">${i + 1}</span>
     <span class="q-name"><b>${esc(x.group)}</b><div class="u">${esc(x.slug)} · ${x.rows ?? "?"} แถว · ${x.hasSelection ? "ติ๊กคนแล้ว" : "ยังไม่ติ๊กคน"}${x.known ? "" : " · ไม่พบ people.json"}</div>
       ${x.url
@@ -417,7 +441,7 @@ function queueListHtml(q) {
         : `<div class="u">ไม่มี source_url ใน people.json — เปลี่ยนชื่อไม่ได้</div>`}
     </span>
     ${planBadge(x.slug)} ${queueBadge(x.slug)}
-    <button class="ghost small" data-action="queue-remove" data-slug="${esc(x.slug)}" title="เอาออกจากคิว">✕</button>
+    <button class="ghost small q-remove" data-action="queue-remove" data-slug="${esc(x.slug)}" title="เอาออกจากคิว" aria-label="เอาออกจากคิว">${icon("close", "", 2.2)}</button>
   </li>`).join("")}</ol>`;
 }
 
@@ -446,21 +470,23 @@ function cardUpload() {
       <label class="check" style="margin-top:8px;display:flex"><input type="checkbox" data-form="iVerified" ${form.iVerified ? "checked" : ""}> ข้าพเจ้าตรวจ report dry-run แล้ว และยืนยันให้บันทึกจริงลง backend</label>
       <label class="field" style="margin-top:8px"><span>พิมพ์ slug เพื่อยืนยัน: <code>${esc(form.confirmSlug)}</code></span>
         <input data-form="confirmText" value="${esc(form.confirmText)}" placeholder="พิมพ์ให้ตรงเป๊ะ"></label>
-      <div class="row"><button class="danger" data-action="confirm-upload" data-slug="${esc(form.confirmSlug)}">ยิงจริงเลย</button>
-        <button class="ghost" data-action="cancel-upload">ยกเลิก</button></div>
+      <div class="row"><button class="danger${form.iVerified && form.confirmText.trim() === form.confirmSlug ? " armed" : ""}" data-action="confirm-upload" data-slug="${esc(form.confirmSlug)}">${icon("seal")} ยิงจริงเลย</button>
+        <button class="ghost" data-action="cancel-upload">ยกเลิก</button>
+        <span class="hint" data-match="confirm-upload" style="margin:0"></span></div>
     </div>`;
   })() : "";
 
   const qConfirm = form.queueConfirm ? `<div class="callout danger" style="margin-top:14px">
       <b>ยืนยันยิงจริงทั้งคิว — ${q.length} รายการ · ${qTotal} แถว</b>
       <div style="margin:6px 0">${q.map((x, i) => `<div class="u">${i + 1}. ${esc(x.group)} — ${x.rows ?? "?"} แถว · slug ${esc(x.slug)}${x.hasSelection ? "" : " (ยังไม่ติ๊กคน)"}${planLine(x.slug) ? ` · ${esc(planLine(x.slug))}` : ""}</div>`).join("")}</div>
-      ${qBad.length ? `<div class="u" style="color:var(--danger)">⚠ ${qBad.length} รายการยังไม่ได้ติ๊กคน (selection.json) — รายการนั้นจะล้ม และคิวจะหยุดทันที</div>` : ""}
-      ${q.some((x) => !plans[x.slug]) ? `<div class="u">⚠ บางรายการยังไม่มีผล dry-run — ถ้า backend ยังไม่มีชื่อหน่วยงานที่ตั้งไว้ ระบบจะ <b>สร้างแผนกใหม่</b> ตามชื่อนั้น (กด “ตรวจทั้งหมดตามลำดับ” ก่อนเพื่อดูให้ชัด)</div>` : ""}
+      ${qBad.length ? `<div class="u" style="color:var(--seal-700)">${icon("seal", "mark-seal")} ${qBad.length} รายการยังไม่ได้ติ๊กคน (selection.json) — รายการนั้นจะล้ม และคิวจะหยุดทันที</div>` : ""}
+      ${q.some((x) => !plans[x.slug]) ? `<div class="u">${icon("seal", "mark-seal")} บางรายการยังไม่มีผล dry-run — ถ้า backend ยังไม่มีชื่อหน่วยงานที่ตั้งไว้ ระบบจะ <b>สร้างแผนกใหม่</b> ตามชื่อนั้น (กด “ตรวจทั้งหมดตามลำดับ” ก่อนเพื่อดูให้ชัด)</div>` : ""}
       <label class="check" style="margin-top:8px;display:flex"><input type="checkbox" data-form="queueVerified" ${form.queueVerified ? "checked" : ""}> ข้าพเจ้าตรวจ report dry-run ครบทุกหน้าแล้ว และยืนยันให้บันทึกจริงลง backend</label>
       <label class="field" style="margin-top:8px"><span>พิมพ์คำยืนยันให้ตรงเป๊ะ: <code>${QUEUE_PHRASE}</code></span>
         <input data-form="queueText" value="${esc(form.queueText)}" placeholder="พิมพ์คำยืนยัน"></label>
-      <div class="row"><button class="danger" data-action="queue-go">ยิงจริงทั้งคิว</button>
-        <button class="ghost" data-action="queue-cancel">ยกเลิก</button></div>
+      <div class="row"><button class="danger${form.queueVerified && form.queueText.trim() === QUEUE_PHRASE ? " armed" : ""}" data-action="queue-go">${icon("seal")} ยิงจริงทั้งคิว</button>
+        <button class="ghost" data-action="queue-cancel">ยกเลิก</button>
+        <span class="hint" data-match="queue-go" style="margin:0"></span></div>
     </div>` : "";
 
   return `<div class="card">
@@ -492,7 +518,7 @@ function cardUpload() {
       </div>
       ${qConfirm}
       ${pages.length ? `<div class="section-title">หน้าที่พร้อมอัปโหลด (${pages.length})</div>
-        <table><thead><tr><th>หน้า</th><th>จำนวน</th><th>ติ๊กคน</th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table>` : `<div class="empty">ยังไม่มี people.json — รัน run + finalize ก่อน หรือลากไฟล์มาวาง</div>`}
+        <table><thead><tr><th>หน้า</th><th>จำนวน</th><th>ติ๊กคน</th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table>` : emptyState("upload", "ยังไม่มี people.json", "รัน run + finalize ก่อน หรือลากไฟล์มาวาง")}
       ${confirm}
       ${Object.keys(reports).map(reportBlock).join("")}
     </div>
@@ -500,17 +526,31 @@ function cardUpload() {
 }
 
 // ---------- page render ----------
+// The pipeline is the spine of this tool, so the rail reports real progress:
+// numbered stages, a fill rule, and exactly one current stage.
+const STAGES = ["URL", "Probe", "เลือกหน้า", "Run", "ติ๊กคน", "Finalize", "Upload"];
 function renderCrumbs() {
-  const items = [
-    ["URL", (S.urlList || []).length > 0],
-    ["Probe", S.links.length > 0],
-    ["เลือกหน้า", (S.links || []).some((l) => l.keep) && S.links.length > 0],
-    ["Run", contentPages().length > 0],
-    ["ติ๊กคน", contentPages().length > 0 && contentPages().every((p) => p.hasSelection)],
-    ["Finalize", contentPages().some((p) => p.reviewed)],
-    ["Upload", false],
+  const pages = contentPages();
+  const done = [
+    (S.urlList || []).length > 0,
+    S.links.length > 0,
+    S.links.length > 0 && (S.links || []).some((l) => l.keep),
+    pages.length > 0,
+    pages.length > 0 && pages.every((p) => p.hasSelection),
+    pages.some((p) => p.reviewed),
+    false, // uploads are never inferred — card 9 reports what actually went up
   ];
-  $("#crumbs").innerHTML = items.map(([t, done]) => `<span class="crumb ${done ? "done" : ""}"><span class="dot"></span>${t}</span>`).join("");
+  const current = done.findIndex((d) => !d);
+  $("#crumbs").innerHTML = STAGES.map((name, i) => {
+    const cls = done[i] ? "done" : (i === current ? "current" : "");
+    return `<span class="crumb ${cls}"><span class="idx">${i + 1}</span>${icon("tick", "tick", 2.6)}${name}</span>`;
+  }).join("");
+  const fill = $("#rail-fill");
+  if (fill) fill.style.transform = `scaleX(${(done.filter(Boolean).length / STAGES.length).toFixed(3)})`;
+  const label = $("#rail-label");
+  if (label) label.innerHTML = current < 0
+    ? "ทำครบทุกขั้นแล้ว — ตรวจ report dry-run อีกครั้งก่อนยิงจริง"
+    : `ทำแล้ว <b>${done.filter(Boolean).length}/${STAGES.length}</b> ขั้น · ขั้นถัดไป: <b>${STAGES[current]}</b>`;
 }
 
 function renderCdp() {
@@ -544,7 +584,7 @@ async function loadPickImages(slug) {
   probeCache.set(slug, data);
   const keepBySrc = new Map((data.picked || []).map((e) => [e.src, e.keep]));
   const imgs = data.probe.images || [];
-  if (!imgs.length) { box.innerHTML = `<div class="empty">หน้านี้ไม่มีรูป</div>`; updatePickCount(); return; }
+  if (!imgs.length) { box.innerHTML = emptyState("stack", "หน้านี้ไม่มีรูปให้เลือก", "probe ตรวจไม่พบรูปที่ผ่านเกณฑ์ขนาด"); updatePickCount(); return; }
   box.className = "imgs";
   box.innerHTML = imgs.map((im) => {
     const keep = keepBySrc.has(im.src) ? keepBySrc.get(im.src) : !!(im.name && !im.likely_header);
@@ -577,7 +617,7 @@ async function loadReview(slug) {
   if (req !== reviewReq || !$("#review-grid")) return;
   reviewCache.set(slug, data);
   const cands = data.candidates || [];
-  if (!cands.length) { box.innerHTML = `<div class="empty">หน้านี้ไม่มีรูปให้เลือก</div>`; updateReviewCount(); return; }
+  if (!cands.length) { box.innerHTML = emptyState("people", "หน้านี้ไม่มีรูปให้ติ๊ก", "ลองรัน run ใหม่ที่การ์ด 6"); updateReviewCount(); return; }
   box.className = "imgs";
   box.innerHTML = cands.map((c) => `<figure class="pic ${c.keep ? "kept" : ""}" draggable="true" data-rseq="${c.seq}">
     <img src="${esc(c.src)}" loading="lazy" draggable="false" onerror="this.style.visibility='hidden'">
@@ -722,6 +762,22 @@ async function act(name, el) {
   }
 }
 
+// Arm-before-fire: the seal button only reads as ready once the typed phrase
+// matches exactly — the same check the server makes, shown live.
+function armConfirm() {
+  for (const [action, key, want] of [
+    ["confirm-upload", "confirmText", form.confirmSlug || ""],
+    ["queue-go", "queueText", QUEUE_PHRASE],
+  ]) {
+    const btn = $(`#app [data-action="${action}"]`);
+    if (!btn) continue;
+    const ok = !!want && String(form[key] ?? "").trim() === want;
+    btn.classList.toggle("armed", ok);
+    const hint = $(`#app [data-match="${action}"]`);
+    if (hint) hint.textContent = ok ? "คำยืนยันตรงแล้ว — กดเพื่อยิงจริง" : "ยังพิมพ์ไม่ตรง — ปุ่มจะพร้อมยิงเมื่อตรงเท่านั้น";
+  }
+}
+
 // ---------- events ----------
 $("#app").addEventListener("click", (e) => {
   const t = e.target.closest("[data-action]");
@@ -729,7 +785,11 @@ $("#app").addEventListener("click", (e) => {
 });
 $("#app").addEventListener("input", (e) => {
   const t = e.target;
-  if (t.dataset.form) { form[t.dataset.form] = t.type === "checkbox" ? t.checked : t.value; return; }
+  if (t.dataset.form) {
+    form[t.dataset.form] = t.type === "checkbox" ? t.checked : t.value;
+    if (t.dataset.form === "confirmText" || t.dataset.form === "queueText" || t.dataset.form === "iVerified" || t.dataset.form === "queueVerified") armConfirm();
+    return;
+  }
   if (t.dataset.groupUrl) {
     // the same URL can be edited from card 1 and from card 9 — keep every editor
     // in sync so a save can never fire a stale value from the other one
@@ -795,7 +855,7 @@ $("#app").addEventListener("dragstart", (e) => {
   if (!f) return;
   dragEl = f; justDragged = true;
   f.classList.add("dragging");
-  e.dataTransfer.effectAllowed = "move";
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = "move"; // not every drag event carries one
 });
 $("#app").addEventListener("dragover", (e) => {
   const f = reorderItem(e.target);

@@ -3,26 +3,49 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f7f5f0">
   <title>ระบบสำรองข้อมูล อบต. — UI</title>
+  <!-- ฟอนต์สำนักงาน: Sarabun (เว้นบรรทัดนี้ = กลับไปใช้ฟอนต์ระบบ) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <span class="logo" aria-hidden="true">🗂️</span>
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 3.6h9.1L19 8.5v11.9H5z"/>
+          <path d="M14 3.6v5h5"/>
+          <path d="M8.2 12.4h7.6M8.2 15.6h4.6"/>
+          <circle cx="17" cy="17" r="2.7" fill="currentColor" stroke="none" opacity=".2"/>
+        </svg>
+      </span>
       <div>
-        <h1>ระบบสำรองข้อมูล อบต.</h1>
-        <p class="sub">ครบทุกขั้นตอนในหน้าเดียว · ลาก-วางไฟล์ได้</p>
+        <h1>ระบบสำรองข้อมูล อบต. <span class="mark">ทะเบียน</span></h1>
+        <p class="sub">ครบทุกขั้นตอนในหน้าเดียว · ลาก-วางไฟล์ได้ · log สดอยู่แถบล่างจอ</p>
       </div>
     </div>
     <div class="topbar-right">
       <span id="cdp-pill" class="pill">CDP: กำลังตรวจ…</span>
-      <button id="btn-refresh" class="ghost" type="button">↻ รีเฟรช</button>
+      <button id="btn-refresh" class="ghost" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20.2 12a8.2 8.2 0 1 1-2.4-5.8"/>
+          <path d="M20.4 4.4v5.4h-5.4"/>
+        </svg>
+        รีเฟรช
+      </button>
     </div>
   </header>
 
   <main>
-    <nav id="crumbs" class="crumbs" aria-label="ความคืบหน้า"></nav>
+    <div class="rail">
+      <nav id="crumbs" class="crumbs" aria-label="ความคืบหน้า"></nav>
+      <div class="rail-track" role="presentation"><div class="rail-fill" id="rail-fill"></div></div>
+      <p class="rail-label" id="rail-label"></p>
+    </div>
     <div id="app"></div>
   </main>
 
@@ -31,14 +54,24 @@
       <strong>บันทึกการทำงาน</strong>
       <span id="job-status" class="pill small">ว่าง</span>
       <span class="spacer"></span>
-      <button id="btn-kill" class="ghost small danger" type="button" hidden>■ หยุด</button>
-      <button id="btn-clear" class="ghost small" type="button">ล้าง</button>
-      <button id="btn-toggle-console" class="ghost small" type="button" aria-label="ย่อ/ขยาย">▾</button>
+      <button id="btn-kill" class="ghost small danger" type="button" hidden>
+        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="1.6"/></svg>
+        หยุด
+      </button>
+      <button id="btn-clear" class="ghost small" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 7h16M9.6 7V5.3h4.8V7M6.6 7l.9 12.1h9l.9-12.1"/>
+        </svg>
+        ล้าง
+      </button>
+      <button id="btn-toggle-console" class="ghost small" type="button" aria-label="ย่อ/ขยาย">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.6l6 6 6-6"/></svg>
+      </button>
     </div>
     <pre id="log" class="log"></pre>
   </section>
 
-  <div id="toast" class="toast" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <script src="/app.js"></script>
 </body>
 </html>
