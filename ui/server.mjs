@@ -14,12 +14,17 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+// same source-identity rules as the uploader, not a re-implementation
+import { slugBaseOf, resolveTargetGroup } from "../sectioning.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
 const OUT = join(ROOT, "out");
 const STAGING = join(OUT, "_staging");
+const SGROUPS = join(ROOT, "source-groups.json");
 const NODE = process.execPath;
+const SGROUPS_NOTE =
+  "OPTIONAL intentional merges: '<url substring>' -> '<backend target group name>'. URLs with no entry upload under their own stable source identity (slug of the source URL). Matching is substring, first hit wins. Normal zero-map workflow needs no entry here: adding a website = adding its input URL, never editing this file.";
 
 const portArg = (() => {
   const i = process.argv.indexOf("--port");
@@ -113,6 +118,25 @@ function applySavedMasterDecisions(groups, master) {
   return groups.map((g) => (bySrc.has(g.src) ? { ...g, keep: bySrc.get(g.src) } : g));
 }
 
+// ---------- backend target names (source-groups.json) ----------
+// The backend department a page is filed under is resolveTargetGroup(source_url,
+// source_group, registry) inside the uploader; the UI only ever reads/writes the
+// registry itself, so a rename here IS the rename there.
+function readSourceGroups() {
+  const j = readJsonSafe(SGROUPS) || {};
+  return { note: typeof j._note === "string" ? j._note : SGROUPS_NOTE, map: j && typeof j.map === "object" && j.map ? j.map : {} };
+}
+// mirrors resolveTargetGroup's first-hit rule, only to report WHICH key applied
+function aliasKeyOf(url, map) {
+  const u = String(url || "");
+  for (const k of Object.keys(map || {})) if (k && !k.startsWith("_") && u.includes(k)) return k;
+  return null;
+}
+function groupInfoFor(url, fallback, registry) {
+  const key = aliasKeyOf(url, registry.map);
+  return { group: resolveTargetGroup(url, fallback, registry), aliasKey: key, alias: key ? registry.map[key] : null };
+}
+
 function readPages() {
   const out = [];
   if (!existsSync(OUT)) return out;
@@ -125,6 +149,7 @@ function readPages() {
     out.push({
       slug: d.name,
       url: cj?.manifest?.source_url || pj?.[0]?.source_url || "",
+      sourceGroup: (Array.isArray(pj) ? pj[0]?.source_group : "") || d.name,
       title: cj?.manifest?.source_title || "(ไม่มี content.json — อัปโหลดจาก people.json)",
       counts: cj?.manifest?.counts || {},
       nodes: (cj?.nodes || []).length,
@@ -160,10 +185,15 @@ async function buildState() {
   const master = readJsonSafe(join(STAGING, "master.json"));
   const stagingSummary = readJsonSafe(join(STAGING, "summary.json"));
   const failed = (stagingSummary?.results || []).filter((r) => r.error).map((r) => ({ url: r.url, error: r.error }));
+  const registry = readSourceGroups();
+  const urlList = parseUrls(readTextSafe(join(ROOT, "urls.txt")));
 
   return {
     urls: readTextSafe(join(ROOT, "urls.txt")),
-    urlList: parseUrls(readTextSafe(join(ROOT, "urls.txt"))),
+    urlList,
+    sourceGroups: registry.map,
+    // card 1 rows: one URL = one backend target group
+    urlRows: urlList.map((url) => ({ url, slug: slugBaseOf(url), ...groupInfoFor(url, slugBaseOf(url), registry) })),
     cdp: await cdpStatus(),
     links: probes.map((p) => ({
       slug: p.slug, url: p.url, title: p.title, counts: p.counts,
@@ -177,7 +207,7 @@ async function buildState() {
       groups: applySavedMasterDecisions(buildMasterGroups(probes), master),
       saved: !!master,
     } : null,
-    pages: readPages(),
+    pages: readPages().map((p) => ({ ...p, ...groupInfoFor(p.url, p.sourceGroup, registry) })),
     hasSections: existsSync(join(ROOT, "sections.json")),
   };
 }
@@ -429,6 +459,32 @@ const server = createServer(async (req, res) => {
         const b = await body(req);
         writeFileSync(join(dir, "selection.json"), JSON.stringify(b.selection || [], null, 1), "utf8");
         return json(res, 200, { ok: true, kept: (b.selection || []).filter((s) => s.keep).length });
+      }
+      if (p === "/api/source-groups") {
+        // writes source-groups.json only here, and only after every row validates:
+        // a bad row leaves the file untouched (no half-saved renames).
+        const b = await body(req);
+        const entries = Array.isArray(b.entries) ? b.entries : [{ url: b.url, name: b.name }];
+        const cur = readSourceGroups();
+        const map = { ...cur.map };
+        for (const e of entries) {
+          const url = String(e?.url || "").trim();
+          if (!url) continue; // rows with no source_url are not renamable — skip, never guess
+          const name = String(e?.name ?? "").trim();
+          const existing = aliasKeyOf(url, map); // one rule per URL
+          // a key that is not this exact URL but still matches it is ambiguous —
+          // deleting it would silently move another page's name, so refuse instead
+          if (existing && existing !== url) throw new Error(`มีคีย์ “${existing}” ครอบ URL ${url} อยู่แล้ว — ต้องใช้ URL เต็มเท่านั้น (แก้/ลบด้วยมือใน source-groups.json)`);
+          if (existing) delete map[existing];
+          if (!name) continue; // empty = back to the page's own stable identity (the slug)
+          if (name.length > 80) throw new Error(`ชื่อหน่วยงานยาวเกิน 80 ตัวอักษร: ${name}`);
+          if (name.startsWith("_")) throw new Error(`ชื่อหน่วยงานห้ามขึ้นต้นด้วย _ : ${name}`);
+          const clash = Object.keys(map).find((k) => k !== url && (k.includes(url) || url.includes(k)));
+          if (clash) throw new Error(`คีย์ซ้อนกัน: "${url}" กับ "${clash}" — การจับคู่เป็นแบบ substring จะเลือกผิด`);
+          map[url] = name;
+        }
+        writeFileSync(SGROUPS, JSON.stringify({ _note: cur.note, map }, null, 2) + "\n", "utf8");
+        return json(res, 200, { ok: true, map });
       }
       if (p === "/api/drop-people") {
         const b = await body(req);

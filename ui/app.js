@@ -13,6 +13,7 @@ let es = null;
 let reports = {};                 // slug -> upload report
 const probeCache = new Map();     // slug -> {probe, picked}
 const reviewCache = new Map();    // slug -> {candidates, ...}
+let plans = {};                   // slug -> what the last dry-run said about the backend department
 
 const form = {
   urls: null,
@@ -23,6 +24,7 @@ const form = {
   imageSlug: null, reviewSlug: null,
   queue: [],                                          // [{slug, rows}] drop order — memory only, by design
   queueConfirm: false, queueText: "", queueVerified: false,
+  groupNames: {},                                     // url -> edited backend name (unsaved typing)
 };
 
 const QUEUE_PHRASE = "ยิงจริง"; // must match QUEUE_CONFIRM in ui/server.mjs
@@ -71,7 +73,7 @@ async function runJob(step, opts, label, payload = null) {
   let info;
   try { info = await post("/api/job", payload || { step, opts }); }
   catch (e) { toast(e.message, "err"); logLine("✖ " + e.message + "\n", "err"); $("#console").classList.remove("collapsed"); return; }
-  current = { id: info.id, step, label, done: false };
+  current = { id: info.id, step, label, done: false, planSlug: step === "upload" ? opts?.slug || null : null, planBuf: "" };
   setJobStatus("กำลังรัน: " + (label || step), "warn");
   showKill(true);
   logLine(`\n$ ${info.line}\n`, "sys");
@@ -80,9 +82,12 @@ async function runJob(step, opts, label, payload = null) {
   es = new EventSource(`/api/job/${info.id}`);
   es.onmessage = (ev) => {
     let d; try { d = JSON.parse(ev.data); } catch { return; }
-    if (d.type === "out") logLine(d.text);
-    else if (d.type === "err") logLine(d.text, "err");
+    if (d.type === "out") {
+      logLine(d.text);
+      if (current?.planSlug) { current.planBuf += d.text; parsePlan(current.planSlug, current.planBuf); }
+    } else if (d.type === "err") logLine(d.text, "err");
     else if (d.type === "step") {
+      current.planSlug = d.slug; current.planBuf = "";
       setJobStatus(`รายการ ${d.index}/${d.total}: ${d.slug}`, "warn");
       logLine(`\n===== [${d.index}/${d.total}] ${d.slug} — ${d.save ? "ยิงจริง" : "dry-run"} =====\n`, "sys");
     } else if (d.type === "exit") {
@@ -97,6 +102,18 @@ async function runJob(step, opts, label, payload = null) {
   es.onerror = () => { if (current && current.done && es) { es.close(); es = null; } };
 }
 
+// The uploader's dry-run plan is the only honest evidence about the backend:
+//   - group "X" -> <url> (existing)   = แผนกนี้มีอยู่แล้วบน backend
+//   - WOULD-CREATE department "X"      = ยังไม่มี ตอน --save จะสร้างใหม่
+// We only surface what the script actually printed — never guess.
+function parsePlan(slug, buf) {
+  if (!slug) return;
+  const create = /WOULD-CREATE department "([^"]+)"/.exec(buf);
+  if (create) { plans[slug] = { action: "create", name: create[1] }; return; }
+  const exist = /- group "([^"]+)" -> (\S+) \(existing\)/.exec(buf);
+  if (exist) plans[slug] = { action: "existing", name: exist[1], target: exist[2] };
+}
+
 async function afterJob(step, opts, payload) {
   // refresh the report of every slug the job touched (single run or whole queue)
   const slugs = payload?.steps ? payload.steps.map((s) => s?.opts?.slug).filter(Boolean) : (opts?.slug ? [opts.slug] : []);
@@ -109,6 +126,10 @@ async function afterJob(step, opts, payload) {
 }
 
 const contentPages = () => (S?.pages || []).filter((p) => p.hasContent);
+// The name shown for a page IS the backend target group name (source-groups.json
+// alias when set, otherwise the page's own stable slug identity).
+const groupName = (o) => (o?.group && String(o.group).trim()) || o?.slug || "";
+const nameVal = (o) => form.groupNames[o?.url] ?? o?.alias ?? "";
 
 // ---------- state ----------
 async function load() {
@@ -143,6 +164,23 @@ const selectField = (key, label, options) =>
   `<label class="field"><span>${label}</span><select data-form="${key}">${options.map(([v, t]) => `<option value="${esc(v)}" ${form[key] === v ? "selected" : ""}>${esc(t)}</option>`).join("")}</select></label>`;
 
 // ---------- per-card renderers ----------
+// ชื่อหน่วยงานปลายทาง — 1 URL = 1 หน่วยงานบน backend (ไฟล์ source-groups.json)
+function groupNameTable() {
+  const rows = S.urlRows || [];
+  if (!rows.length) return `<div class="section-title">ชื่อหน่วยงานปลายทางบน backend</div><div class="empty">ยังไม่มี URL — ใส่รายการด้านบนก่อน</div>`;
+  return `<div class="section-title">ชื่อหน่วยงานปลายทางบน backend (${rows.length})</div>
+    <p class="hint">การยิงจริงจะใช้/สร้างแผนกตามชื่อนี้ · เว้นว่าง = ใช้ชื่อเดิมจาก slug · เก็บใน <code>source-groups.json</code></p>
+    <table><thead><tr><th>URL (หน้านี้)</th><th style="width:36%">ชื่อหน่วยงานปลายทาง</th></tr></thead><tbody>
+    ${rows.map((r) => `<tr>
+      <td><b>${esc(r.slug)}</b><div class="u">${esc(r.url)}</div></td>
+      <td><input data-group-url="${esc(r.url)}" value="${esc(nameVal(r))}" placeholder="${esc(r.slug)}" maxlength="80">
+        <div class="u">${r.alias ? `ตั้งไว้: ${esc(r.group)}` : "ยังไม่ได้ตั้ง — ใช้ชื่อจาก slug"}</div></td>
+    </tr>`).join("")}
+    </tbody></table>
+    <div class="row" style="margin-top:12px"><button data-action="save-groups">บันทึกชื่อหน่วยงาน</button>
+      <span class="muted">มีผลกับทุกการอัปโหลดที่มาจาก URL เหล่านี้ (รวมรายการที่ลากเข้าคิวในการ์ด 9)</span></div>`;
+}
+
 function cardUrls() {
   const n = (form.urls || "").split(/\r?\n/).filter((l) => l.trim() && !l.trim().startsWith("#")).length;
   return `<div class="card">
@@ -157,6 +195,7 @@ function cardUrls() {
         <button data-action="save-urls">บันทึก urls.txt</button>
         <span class="muted">มี ${(S.urlList || []).length} URL ในไฟล์ ${S.urlList.length ? "" : "(ยังว่าง)"}</span>
       </div>
+      ${groupNameTable()}
     </div>
   </div>`;
 }
@@ -264,7 +303,7 @@ function cardRun() {
       <div class="row" style="margin-top:12px"><button data-action="run-run">รัน run (ดึงทุกหน้าที่ติ๊ก)</button></div>
       ${contentPages().length ? `<div class="section-title">ผลลัพธ์</div>
         <table><thead><tr><th>หน้า</th><th>รูป</th><th>คน (แถว)</th><th>ติ๊กคนแล้ว</th></tr></thead><tbody>
-        ${contentPages().map((p) => `<tr><td><b>${esc(p.slug)}</b><div class="u">${esc(p.title)}</div></td>
+        ${contentPages().map((p) => `<tr><td><b>${esc(groupName(p))}</b><div class="u">${esc(p.slug)} · ${esc(p.title)}</div></td>
           <td>${p.counts.image ?? "?"}</td><td>${p.people ?? "?"}</td>
           <td>${p.hasSelection ? '<span class="badge ok">มี</span>' : '<span class="badge warn">ยังไม่มี</span>'}</td></tr>`).join("")}
         </tbody></table>` : ""}
@@ -276,7 +315,7 @@ function cardReview() {
   if (!contentPages().length) return `<div class="card">
     <div class="card-head"><span class="num">7</span><div><h2>ติ๊กรูปคน + จัดลำดับ</h2><p>เลือกรูปที่จะอัปโหลด</p></div></div>
     <div class="card-body"><div class="empty">ยังไม่มีหน้า — รัน run ก่อน</div></div></div>`;
-  const opts = contentPages().map((p) => `<option value="${esc(p.slug)}" ${form.reviewSlug === p.slug ? "selected" : ""}>${esc(p.slug)} — ${p.people ?? "?"} แถว</option>`).join("");
+  const opts = contentPages().map((p) => `<option value="${esc(p.slug)}" ${form.reviewSlug === p.slug ? "selected" : ""}>${esc(groupName(p))}${p.group && p.group !== p.slug ? ` (${esc(p.slug)})` : ""} — ${p.people ?? "?"} แถว</option>`).join("");
   return `<div class="card">
     <div class="card-head"><span class="num">7</span>
       <div><h2>ติ๊กรูปคน + จัดลำดับ</h2><p>ติ๊กเฉพาะรูปคนชัด · ลากการ์ดเพื่อจัดลำดับ (เลขตำแหน่งภาพอัปเดตตาม)</p></div></div>
@@ -332,8 +371,28 @@ function queueRows() {
   const by = new Map(S.pages.map((p) => [p.slug, p]));
   return form.queue.map((q) => {
     const p = by.get(q.slug);
-    return { slug: q.slug, rows: p?.people ?? q.rows ?? null, hasSelection: !!p?.hasSelection, known: !!p };
+    return {
+      slug: q.slug, rows: p?.people ?? q.rows ?? null, hasSelection: !!p?.hasSelection, known: !!p,
+      url: p?.url || "", group: p?.group || q.slug, alias: p?.alias ?? null,
+    };
   });
+}
+
+// what the last dry-run reported for this slug: a plan is the only real evidence
+// about whether the backend already has that department name.
+function planBadge(slug) {
+  const p = plans[slug];
+  if (!p) return "";
+  return p.action === "create"
+    ? `<span class="badge warn">จะสร้างแผนกใหม่: ${esc(p.name)}</span>`
+    : `<span class="badge ok">เข้าแผนกที่มีอยู่: ${esc(p.name)}</span>`;
+}
+function planLine(slug) {
+  const p = plans[slug];
+  if (!p) return "";
+  return p.action === "create"
+    ? `จะสร้างแผนกใหม่ชื่อ “${p.name}” (ถ้าไม่จริง ไปแก้ชื่อที่การ์ด 1)`
+    : `เข้าแผนกที่มีอยู่ “${p.name}”`;
 }
 const queueSteps = (save) => form.queue.map((q) => ({ step: "upload", opts: uploadOpts(q.slug, save) }));
 
@@ -349,18 +408,26 @@ function queueListHtml(q) {
   return `<ol id="queue-list" class="queue">${q.map((x, i) => `<li data-qslug="${esc(x.slug)}" draggable="true" title="ลากเพื่อสลับลำดับ">
     <span class="grip" aria-hidden="true">⠿</span>
     <span class="q-idx">${i + 1}</span>
-    <span class="q-name"><b>${esc(x.slug)}</b><div class="u">${x.rows ?? "?"} แถว · ${x.hasSelection ? "ติ๊กคนแล้ว" : "ยังไม่ติ๊กคน"}${x.known ? "" : " · ไม่พบ people.json"}</div></span>
-    ${queueBadge(x.slug)}
+    <span class="q-name"><b>${esc(x.group)}</b><div class="u">${esc(x.slug)} · ${x.rows ?? "?"} แถว · ${x.hasSelection ? "ติ๊กคนแล้ว" : "ยังไม่ติ๊กคน"}${x.known ? "" : " · ไม่พบ people.json"}</div>
+      ${x.url
+        ? `<input class="q-rename" data-group-url="${esc(x.url)}" value="${esc(nameVal(x))}" placeholder="${esc(x.slug)}" maxlength="80" title="ชื่อหน่วยงานปลายทางบน backend">`
+        : `<div class="u">ไม่มี source_url ใน people.json — เปลี่ยนชื่อไม่ได้</div>`}
+    </span>
+    ${planBadge(x.slug)} ${queueBadge(x.slug)}
     <button class="ghost small" data-action="queue-remove" data-slug="${esc(x.slug)}" title="เอาออกจากคิว">✕</button>
   </li>`).join("")}</ol>`;
 }
 
 function cardUpload() {
   const pages = S.pages.filter((p) => p.people != null);
+  const inQueue = (slug) => form.queue.some((x) => x.slug === slug);
   const rows = pages.map((p) => `<tr>
-    <td><b>${esc(p.slug)}</b><div class="u">${esc(p.title)}</div></td>
+    <td><b>${esc(groupName(p))}</b><div class="u">${esc(p.slug)} · ${esc(p.title)}</div>
+      ${p.url && !inQueue(p.slug)
+        ? `<input class="q-rename" data-group-url="${esc(p.url)}" value="${esc(nameVal(p))}" placeholder="${esc(p.slug)}" maxlength="80" title="ชื่อหน่วยงานปลายทางบน backend">`
+        : ""}</td>
     <td>${p.people} แถว</td>
-    <td>${p.hasSelection ? '<span class="badge ok">ติ๊กแล้ว</span>' : '<span class="badge warn">ยังไม่ติ๊ก</span>'}</td>
+    <td>${p.hasSelection ? '<span class="badge ok">ติ๊กแล้ว</span>' : '<span class="badge warn">ยังไม่ติ๊ก</span>'} ${planBadge(p.slug)}</td>
     <td><button class="ghost small" data-action="upload-dry" data-slug="${esc(p.slug)}">ตรวจ (dry-run)</button></td>
     <td><button class="ghost danger small" data-action="upload-real" data-slug="${esc(p.slug)}">ยิงจริง…</button></td>
   </tr>`).join("");
@@ -383,8 +450,9 @@ function cardUpload() {
 
   const qConfirm = form.queueConfirm ? `<div class="callout danger" style="margin-top:14px">
       <b>ยืนยันยิงจริงทั้งคิว — ${q.length} รายการ · ${qTotal} แถว</b>
-      <div style="margin:6px 0">${q.map((x, i) => `<div class="u">${i + 1}. ${esc(x.slug)} — ${x.rows ?? "?"} แถว${x.hasSelection ? "" : " (ยังไม่ติ๊กคน)"}</div>`).join("")}</div>
+      <div style="margin:6px 0">${q.map((x, i) => `<div class="u">${i + 1}. ${esc(x.group)} — ${x.rows ?? "?"} แถว · slug ${esc(x.slug)}${x.hasSelection ? "" : " (ยังไม่ติ๊กคน)"}${planLine(x.slug) ? ` · ${esc(planLine(x.slug))}` : ""}</div>`).join("")}</div>
       ${qBad.length ? `<div class="u" style="color:var(--danger)">⚠ ${qBad.length} รายการยังไม่ได้ติ๊กคน (selection.json) — รายการนั้นจะล้ม และคิวจะหยุดทันที</div>` : ""}
+      ${q.some((x) => !plans[x.slug]) ? `<div class="u">⚠ บางรายการยังไม่มีผล dry-run — ถ้า backend ยังไม่มีชื่อหน่วยงานที่ตั้งไว้ ระบบจะ <b>สร้างแผนกใหม่</b> ตามชื่อนั้น (กด “ตรวจทั้งหมดตามลำดับ” ก่อนเพื่อดูให้ชัด)</div>` : ""}
       <label class="check" style="margin-top:8px;display:flex"><input type="checkbox" data-form="queueVerified" ${form.queueVerified ? "checked" : ""}> ข้าพเจ้าตรวจ report dry-run ครบทุกหน้าแล้ว และยืนยันให้บันทึกจริงลง backend</label>
       <label class="field" style="margin-top:8px"><span>พิมพ์คำยืนยันให้ตรงเป๊ะ: <code>${QUEUE_PHRASE}</code></span>
         <input data-form="queueText" value="${esc(form.queueText)}" placeholder="พิมพ์คำยืนยัน"></label>
@@ -414,6 +482,7 @@ function cardUpload() {
       <div class="row" style="margin-top:12px">
         <button class="ghost small" data-action="queue-seed">เพิ่มทุกหน้าจากตาราง</button>
         <button class="ghost small" data-action="queue-clear" ${q.length ? "" : "disabled"}>ล้างคิว</button>
+        <button class="ghost small" data-action="save-groups" ${q.some((x) => x.url) ? "" : "disabled"}>บันทึกชื่อหน่วยงาน</button>
         <span class="spacer"></span>
         <button class="ghost" data-action="queue-dry" ${q.length ? "" : "disabled"}>ตรวจทั้งหมดตามลำดับ (dry-run)</button>
         <button class="danger" data-action="queue-real" ${q.length ? "" : "disabled"}>ยิงจริงทั้งหมด…</button>
@@ -586,6 +655,21 @@ async function act(name, el) {
       catch (e) { toast(e.message, "err"); }
       break;
     }
+    case "save-groups": {
+      // one input per URL on the page (the queue row when queued, otherwise the
+      // table row) — so a URL can never be saved with a half-stale value
+      const byUrl = new Map();
+      $$("input[data-group-url]").forEach((i) => byUrl.set(i.dataset.groupUrl, i.value));
+      if (!byUrl.size) return toast("ไม่มี URL ให้ตั้งชื่อ", "err");
+      try {
+        const r = await post("/api/source-groups", { entries: [...byUrl].map(([url, name]) => ({ url, name })) });
+        form.groupNames = {};
+        plans = {}; // dry-run plans were computed under the old names
+        toast(`บันทึกชื่อหน่วยงานแล้ว — ตั้งไว้ ${Object.keys(r.map).length} รายการ`, "ok");
+        await load();
+      } catch (e) { toast(e.message, "err"); }
+      break;
+    }
     case "queue-seed": {
       const have = new Set(form.queue.map((x) => x.slug));
       const add = S.pages.filter((p) => p.people != null && !have.has(p.slug));
@@ -643,6 +727,14 @@ $("#app").addEventListener("click", (e) => {
 $("#app").addEventListener("input", (e) => {
   const t = e.target;
   if (t.dataset.form) { form[t.dataset.form] = t.type === "checkbox" ? t.checked : t.value; return; }
+  if (t.dataset.groupUrl) {
+    // the same URL can be edited from card 1 and from card 9 — keep every editor
+    // in sync so a save can never fire a stale value from the other one
+    const url = t.dataset.groupUrl;
+    form.groupNames[url] = t.value;
+    $$("input[data-group-url]").forEach((i) => { if (i !== t && i.dataset.groupUrl === url) i.value = t.value; });
+    return;
+  }
   if (t.dataset.pick || t.dataset.rkeep) {
     syncKept(t.closest("figure.pic"));
     if (t.dataset.rkeep) updateReviewCount(); else updatePickCount();

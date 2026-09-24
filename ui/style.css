@@ -174,6 +174,8 @@ figure.pic.drop-target { outline: 2px dashed var(--brand); outline-offset: 2px; 
 }
 .queue .q-name { flex: 1; min-width: 0; }
 .queue .q-name .u { font-size: 11.5px; color: var(--muted); }
+/* inline backend-name editors (queue rows + upload table rows) */
+.q-rename { margin-top: 5px; font-size: 12.5px; padding: 6px 8px; max-width: 260px; }
 
 /* ---------- console ---------- */
 .console {
