@@ -251,7 +251,7 @@ function cardMaster() {
   const m = S.master;
   return `<div class="card">
     <div class="card-head"><span class="num">4</span>
-      <div><h2>ติ๊กรวมรูปซ้ำทุกหน้า <span class="badge">ทางเลือก</span></h2><p>ติ๊กครั้งเดียวใช้กับทุกหน้า (รูปไอคอน/แบนเนอร์ที่ซ้ำกัน)</p></div></div>
+      <div><h2>ติ๊กรวมรูปซ้ำทุกหน้า <span class="badge">ทางเลือก</span></h2><p>ติ๊กครั้งเดียวใช้กับทุกหน้า (รูปไอคอน/แบนเนอร์ที่ซ้ำกัน) · คลิกที่ตัวการ์ด = ติ๊ก</p></div></div>
     <div class="card-body">
       ${!m || !m.groups.length ? `<div class="empty">ยังไม่มีรูปไม่ซ้ำ — รัน probe ก่อน</div>` : `
         <div class="row"><span class="muted">พบ ${m.groups.length} รูปไม่ซ้ำใน ${m.pages.length} หน้า</span>
@@ -259,11 +259,12 @@ function cardMaster() {
           <button class="ghost small" data-action="master-all">เลือกทั้งหมด</button>
           <button class="ghost small" data-action="master-none">ไม่เลือกเลย</button></div>
         <details style="margin-top:10px"><summary>แสดงรายการรูป (${m.groups.length})</summary>
-        <div class="imgs" style="margin-top:12px">${m.groups.map((g) => `<figure class="pic">
+        <p class="hint">คลิกที่ตัวการ์ด = ติ๊ก/ยกเลิก (การ์ดพื้นน้ำเงิน = เลือกไว้) · ช่องติ๊กถูกซ่อน แต่ยังใช้ Tab + Space ได้</p>
+        <div class="imgs" style="margin-top:12px">${m.groups.map((g) => `<figure class="pic ${g.keep ? "kept" : ""}">
           <img src="${esc(g.src)}" loading="lazy" onerror="this.style.visibility='hidden'">
           <figcaption><b>${esc(g.names.slice(0, 2).join(" | ") || "(ไม่มีชื่อ)")}</b>
             ${g.width}x${g.height}<br>${g.pages.length} หน้า</figcaption>
-          <label class="check"><input type="checkbox" data-master="${esc(g.src)}" ${g.keep ? "checked" : ""}> โหลดรูปนี้</label>
+          <input type="checkbox" class="sr" data-master="${esc(g.src)}" aria-label="โหลดรูปนี้" ${g.keep ? "checked" : ""}>
         </figure>`).join("")}</div></details>
         <div class="row" style="margin-top:14px">
           <button data-action="save-master">บันทึก master.json</button>
@@ -280,10 +281,11 @@ function cardPickImages() {
   const opts = S.probes.map((p) => `<option value="${esc(p.slug)}" ${form.imageSlug === p.slug ? "selected" : ""}>${esc(p.slug)} — เก็บ ${p.keeps} รูป</option>`).join("");
   return `<div class="card">
     <div class="card-head"><span class="num">5</span>
-      <div><h2>เลือกรูปที่จะโหลด (รายหน้า) <span class="badge">ทางเลือก</span></h2><p>ถ้าไม่ติ๊ก ขั้นตอน Run จะโหลดรูปรอไว้ทั้งหมดตาม master</p></div>
+      <div><h2>เลือกรูปที่จะโหลด (รายหน้า) <span class="badge">ทางเลือก</span></h2><p>ถ้าไม่ติ๊ก ขั้นตอน Run จะโหลดรูปรอไว้ทั้งหมดตาม master · คลิกที่ตัวการ์ด = ติ๊ก</p></div>
       <span class="spacer"></span><span class="badge">${S.probes.length} หน้า</span></div>
     <div class="card-body">
       <label class="field"><span>เลือกหน้า</span><select id="pick-slug">${opts}</select></label>
+      <p class="hint">คลิกที่ตัวการ์ด = ติ๊ก/ยกเลิก (การ์ดพื้นน้ำเงิน = เลือกไว้) · ช่องติ๊กถูกซ่อน แต่ยังใช้ Tab + Space ได้</p>
       <div id="pick-grid"><div class="empty">กำลังโหลด…</div></div>
       <div class="row" style="margin-top:12px">
         <button data-action="save-images">บันทึกรูปที่เลือก (picked-images.json)</button>
@@ -318,7 +320,7 @@ function cardReview() {
   const opts = contentPages().map((p) => `<option value="${esc(p.slug)}" ${form.reviewSlug === p.slug ? "selected" : ""}>${esc(groupName(p))}${p.group && p.group !== p.slug ? ` (${esc(p.slug)})` : ""} — ${p.people ?? "?"} แถว</option>`).join("");
   return `<div class="card">
     <div class="card-head"><span class="num">7</span>
-      <div><h2>ติ๊กรูปคน + จัดลำดับ</h2><p>ติ๊กเฉพาะรูปคนชัด · ลากการ์ดเพื่อจัดลำดับ (เลขตำแหน่งภาพอัปเดตตาม)</p></div></div>
+      <div><h2>ติ๊กรูปคน + จัดลำดับ</h2><p>ติ๊กเฉพาะรูปคนชัด · คลิกที่ตัวการ์ด = ติ๊ก · ลากการ์ดเพื่อจัดลำดับ (เลขตำแหน่งภาพอัปเดตตาม)</p></div></div>
     <div class="card-body">
       <label class="field"><span>เลือกหน้า</span><select id="review-slug">${opts}</select></label>
       <div class="row" style="margin-bottom:10px">
@@ -329,6 +331,7 @@ function cardReview() {
         <input id="bulk-ord" type="number" min="0" value="0" style="width:70px">
         <button class="ghost small" data-action="bulk-order">ตั้งเลข</button>
       </div>
+      <p class="hint">คลิกที่ตัวการ์ด = ติ๊ก/ยกเลิก (การ์ดพื้นน้ำเงิน = เลือกไว้) · ช่องติ๊กถูกซ่อน แต่ยังใช้ Tab + Space ได้</p>
       <div id="review-grid"><div class="empty">กำลังโหลด…</div></div>
       <div class="row" style="margin-top:12px">
         <button data-action="save-review">บันทึก selection.json</button>
@@ -550,7 +553,7 @@ async function loadPickImages(slug) {
     return `<figure class="pic ${keep ? "kept" : ""}">
       <img src="${esc(im.src)}" loading="lazy" draggable="false" onerror="this.style.visibility='hidden'">
       <figcaption><b>${esc(who)}</b>${esc(im.width)}x${esc(im.height)}${flags ? `<br><i>${esc(flags)}</i>` : ""}</figcaption>
-      <label class="check"><input type="checkbox" data-pick="${esc(im.src)}" data-seq="${im.seq}" ${keep ? "checked" : ""}> โหลดรูปนี้</label>
+      <input type="checkbox" class="sr" data-pick="${esc(im.src)}" data-seq="${im.seq}" aria-label="โหลดรูปนี้" ${keep ? "checked" : ""}>
     </figure>`;
   }).join("");
   updatePickCount();
@@ -580,7 +583,7 @@ async function loadReview(slug) {
     <img src="${esc(c.src)}" loading="lazy" draggable="false" onerror="this.style.visibility='hidden'">
     <figcaption><b>${esc(c.caption || c.alt || "(ไม่มีชื่อ)")}</b>
       ${c.phone ? `<br>โทร: ${esc(c.phone)}` : ""}${c.note ? `<br><small>${esc(String(c.note).replace(/<br>/g, " "))}</small>` : ""}</figcaption>
-    <label class="check"><input type="checkbox" data-rkeep="${c.seq}" ${c.keep ? "checked" : ""}> เก็บรูปนี้</label>
+    <input type="checkbox" class="sr" data-rkeep="${c.seq}" aria-label="เก็บรูปนี้" ${c.keep ? "checked" : ""}>
     <label class="ord">ตำแหน่งภาพ <input type="number" min="0" data-rorder="${c.seq}" value="${c.order}"></label>
   </figure>`).join("");
   updateReviewCount();
@@ -608,8 +611,8 @@ async function act(name, el) {
     case "run-apply-master": return runJob("apply-master", {}, "apply-master");
     case "links-all": $$("input[data-link]").forEach((c) => (c.checked = true)); break;
     case "links-none": $$("input[data-link]").forEach((c) => (c.checked = false)); break;
-    case "master-all": $$("input[data-master]").forEach((c) => (c.checked = true)); break;
-    case "master-none": $$("input[data-master]").forEach((c) => (c.checked = false)); break;
+    case "master-all": $$("input[data-master]").forEach((c) => { c.checked = true; syncKept(c.closest("figure.pic")); }); break;
+    case "master-none": $$("input[data-master]").forEach((c) => { c.checked = false; syncKept(c.closest("figure.pic")); }); break;
     case "save-links": {
       const links = $$("input[data-link]").map((c) => {
         const l = S.links.find((x) => x.slug === c.dataset.link);
@@ -735,9 +738,10 @@ $("#app").addEventListener("input", (e) => {
     $$("input[data-group-url]").forEach((i) => { if (i !== t && i.dataset.groupUrl === url) i.value = t.value; });
     return;
   }
-  if (t.dataset.pick || t.dataset.rkeep) {
+  if (t.dataset.pick || t.dataset.rkeep || t.dataset.master) {
     syncKept(t.closest("figure.pic"));
-    if (t.dataset.rkeep) updateReviewCount(); else updatePickCount();
+    if (t.dataset.rkeep) updateReviewCount();
+    else if (t.dataset.pick) updatePickCount();
   }
 });
 $("#app").addEventListener("change", (e) => {
@@ -748,7 +752,7 @@ $("#app").addEventListener("change", (e) => {
 });
 
 // ---------- picking/keeping: bigger targets, the whole card toggles ----------
-function keptBox(fig) { return fig ? $("input[data-rkeep], input[data-pick]", fig) : null; }
+function keptBox(fig) { return fig ? $("input[data-rkeep], input[data-pick], input[data-master]", fig) : null; }
 function syncKept(fig) {
   const box = keptBox(fig);
   if (fig && box) fig.classList.toggle("kept", box.checked);
