@@ -421,7 +421,13 @@ function planLine(slug) {
     ? `จะสร้างแผนกใหม่ชื่อ “${p.name}” (ถ้าไม่จริง ไปแก้ชื่อที่การ์ด 1)`
     : `เข้าแผนกที่มีอยู่ “${p.name}”`;
 }
-const queueSteps = (save) => form.queue.map((q) => ({ step: "upload", opts: uploadOpts(q.slug, save) }));
+// Batch real-fire has its own tick (queueVerified) — the per-page iVerified box
+// is never rendered in this flow, so without this the queued steps would reach
+// the server un-verified and the whole queue would be refused.
+const queueSteps = (save) => form.queue.map((q) => ({
+  step: "upload",
+  opts: { ...uploadOpts(q.slug, save), iVerified: save ? !!form.queueVerified : false },
+}));
 
 function queueBadge(slug) {
   const r = reports[slug];
