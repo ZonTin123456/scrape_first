@@ -29,6 +29,9 @@ rm -rf ./out            # Windows PowerShell: Remove-Item -Recurse -Force .\out
 
 เปิด Chrome แบบ headed ค้างไว้ (หน้าต่างนี้ใช้ login backend ที่จะอัปโหลดด้วย) — `--remote-allow-origins=*` จำเป็นสำหรับ Chrome 111+:
 
+> **ใช้เว็บ UI อยู่? ข้ามขั้นนี้ได้** — กดปุ่ม **“เปิด Chrome”** มุมขวาบนของแดชบอร์ด แล้วระบบจะเปิด Chrome headed ที่พอร์ต/โปรไฟล์เดียวกันกับคำสั่งด้านล่างให้เอง
+> (มีปุ่ม **“ดึงหน้าต่างขึ้น”** และ **“ปิด Chrome”** ด้วย · คำสั่งด้านล่างยังใช้ได้เหมือนเดิมเมื่อรัน UI ไม่ได้)
+
 ```bash
 # macOS
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir="$HOME/.chrome-cdp-9333"

@@ -13,6 +13,7 @@ cd uploader && npm install && cd ..
 
 ```bash
 # 1) เปิด Chrome ให้ login ค้างไว้ (แบบเดียวกับที่ CLI ใช้)
+#    หรือกดปุ่ม "เปิด Chrome" มุมขวาบนในหน้าแดชบอร์ด — ทำอันเดียวกัน (พอร์ต 9333 + โปรไฟล์เดิม)
 #    --remote-allow-origins=* จำเป็นสำหรับ Chrome 111+ · ดูคำสั่งครบทุก OS ใน README.md หัวข้อ "สิ่งที่ต้องมี"
 # macOS
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir="$HOME/.chrome-cdp-9333"
@@ -26,6 +27,23 @@ node ui/server.mjs --port 5000
 ```
 
 เปิดเบราว์เซอร์ที่ `http://localhost:4173` แล้วทำตามการ์ด 1 → 9
+
+## ขั้น 0 เป็นปุ่มแล้ว: เปิด / ปิด / ดึงหน้าต่าง Chrome (CDP :9333)
+
+มุมขวาบนข้าง pill สถานะ CDP มีปุ่มที่แทนการพิมพ์คำสั่งเปิด Chrome เอง:
+
+| ปุ่ม | โชว์เมื่อ | ทำอะไร |
+|---|---|---|
+| **เปิด Chrome** | ยังไม่พบ CDP | เปิด Chrome แบบ **headed** ด้วย `--remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir=~/.chrome-cdp-9333` แล้วรอจน CDP ตอบ (สูงสุด ~10 วิ) |
+| **ดึงหน้าต่างขึ้น** | พบ CDP แล้ว | ดึงหน้าต่าง Chrome ที่ต่อ CDP อยู่ขึ้นมาข้างหน้า |
+| **ปิด Chrome** | พบ CDP แล้ว | ปิด Chrome ทั้งตัว — **กดสองครั้ง**เพื่อยืนยัน (ทุกแท็บของโปรไฟล์นี้ปิด แต่ล็อกอินยังอยู่) |
+
+- **headed เท่านั้น** — ไม่เปิด headless เพราะเว็บติด Cloudflare จะโดนบล็อก (pill จะเตือนถ้าเจอ headless อยู่แล้ว · กด “ปิด Chrome” แล้วกดเปิดใหม่เพื่อได้ headed)
+- **โปรไฟล์เดิมทุกครั้ง** (`~/.chrome-cdp-9333`) — ล็อกอิน backend ค้างข้ามรอบ · ปุ่มกับคำสั่งในเอกสารใช้โปรไฟล์เดียวกัน จึงสลับกันได้
+- **ไม่เปิดซ้อน** — ถ้ามี CDP อยู่แล้ว ปุ่ม “เปิด Chrome” จะถูกซ่อน/ปิดไป
+- **หา Chrome ให้เองตาม OS** (Windows / macOS / Linux) · ถ้าหาไม่เจอจะแจ้งเป็น error ให้ติดตั้งก่อน
+- **ปิด/ดึงหน้าต่าง** ทำผ่าน browser WebSocket ของ CDP (`Browser.close`, `Target.activateTarget`) ไม่ต้องจำ PID — รีสตาร์ทเซิร์ฟเวอร์แล้วยังใช้ได้
+- **รับเฉพาะคำสั่งจากเครื่องที่รันเซิร์ฟเวอร์** (127.0.0.1 / ::1) · ไม่รับ argument จากหน้าเว็บเลย (argv ฝั่งเซิร์ฟเวอร์ล้วน)
 
 ## แดชบอร์ดทำอะไรได้ (เทียบกับ CLI)
 

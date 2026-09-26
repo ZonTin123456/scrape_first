@@ -34,6 +34,7 @@ const emptyState = (name, text, hint = "") =>
 let S = null;
 let current = null; // running job
 let es = null;
+let chromeBusy = false; // a chrome open/close/focus request is in flight
 let reports = {};                 // slug -> upload report
 const probeCache = new Map();     // slug -> {probe, picked}
 const reviewCache = new Map();    // slug -> {candidates, ...}
@@ -236,7 +237,7 @@ function cardProbe() {
         ${selectField("via", "วิธีดึงรูป", [["auto", "auto (แนะนำ)"], ["fetch", "fetch"], ["cdp", "cdp"]])}
         ${field("cfWait", "รอ Cloudflare (วินาที)", 'type="number" min="0"')}
       </div>
-      <p class="hint">ค่าเชื่อมต่อนี้ใช้ร่วมกับขั้นตอน “Run” ด้านล่าง · ต้องเปิด Chrome ด้วย <code>--remote-debugging-port=9333</code> ก่อน</p>
+      <p class="hint">ค่าเชื่อมต่อนี้ใช้ร่วมกับขั้นตอน “Run” ด้านล่าง · กดปุ่ม <b>เปิด Chrome</b> มุมขวาบน (headed + <code>--remote-debugging-port=9333</code> + โปรไฟล์เดิม) หรือเปิดเองตามคำสั่งใน README</p>
       <div class="row" style="margin-top:12px">
         <button data-action="run-probe">รัน probe</button>
         <span class="muted">อ่าน URL จาก urls.txt</span>
@@ -561,9 +562,20 @@ function renderCrumbs() {
 
 function renderCdp() {
   const p = $("#cdp-pill");
-  if (!S.cdp) { p.textContent = "CDP: ไม่พบ Chrome"; p.className = "pill warn"; return; }
-  p.textContent = `CDP: พอร์ต ${S.cdp.port}${S.cdp.headless ? " (headless!)" : ""}`;
-  p.className = "pill " + (S.cdp.headless ? "warn" : "ok");
+  const has = !!S.cdp;
+  if (!has) { p.textContent = "CDP: ไม่พบ Chrome"; p.className = "pill warn"; }
+  else {
+    p.textContent = `CDP: พอร์ต ${S.cdp.port}${S.cdp.headless ? " (headless!)" : ""}`;
+    p.className = "pill " + (S.cdp.headless ? "warn" : "ok");
+  }
+  // Buttons mirror that same truth: opening only makes sense when nothing is
+  // listening; raising/closing only when something is (however it was started).
+  const openBtn = $("#btn-chrome-open");
+  if (openBtn) { openBtn.hidden = has; openBtn.disabled = chromeBusy; }
+  for (const id of ["#btn-chrome-focus", "#btn-chrome-close"]) {
+    const b = $(id);
+    if (b) b.hidden = !has;
+  }
 }
 
 function render() {
@@ -933,6 +945,64 @@ function wireDrops() {
     } catch (e) { toast("อ่านไฟล์ไม่ได้: " + e.message, "err"); }
   });
 }
+
+// ---------- chrome CDP (ขั้น 0 เป็นปุ่ม) ----------
+// The pill is the single source of truth: every action ends with a state reload,
+// so the buttons never claim a Chrome that is not there.
+function setChromeBusy(on, label) {
+  chromeBusy = on;
+  const openBtn = $("#btn-chrome-open");
+  if (openBtn) openBtn.disabled = on;
+  if (on) {
+    const p = $("#cdp-pill");
+    p.textContent = label + "…";
+    p.className = "pill warn";
+  }
+}
+async function chromeAction(path, label, okMsg) {
+  if (chromeBusy) return;
+  setChromeBusy(true, label);
+  try {
+    const r = await post(path, {});
+    toast(okMsg(r), "ok");
+  } catch (e) {
+    toast(e.message, "err");
+  } finally {
+    setChromeBusy(false);
+    await load(); // re-read the real CDP state — the badge follows reality, not the click
+  }
+}
+$("#btn-chrome-open").onclick = () => chromeAction("/api/chrome/open", "กำลังเปิด Chrome", (r) => {
+  if (!r.already) return `เปิด Chrome แล้ว — CDP พอร์ต ${r.port}`;
+  return r.headless
+    ? `Chrome เปิดอยู่แล้ว (พอร์ต ${r.port}) แต่เป็น headless — กด “ปิด Chrome” ก่อน แล้วกดเปิดใหม่`
+    : `Chrome เปิดอยู่แล้ว (พอร์ต ${r.port}) — ล็อกอินในหน้าต่างนั้นได้เลย`;
+});
+$("#btn-chrome-focus").onclick = () => chromeAction("/api/chrome/focus", "กำลังดึงหน้าต่าง", () => "ดึงหน้าต่าง Chrome ขึ้นมาแล้ว");
+// Closing ends every tab of the dedicated profile, so it arms first — the same
+// "press twice" guard the upload buttons use, without a native dialog.
+let closeArmT = null;
+$("#btn-chrome-close").onclick = () => {
+  const btn = $("#btn-chrome-close");
+  const label = $("#chrome-close-label");
+  const disarm = () => {
+    btn.dataset.armed = "";
+    btn.classList.remove("armed");
+    if (label) label.textContent = "ปิด Chrome";
+  };
+  if (btn.dataset.armed !== "1") {
+    btn.dataset.armed = "1";
+    btn.classList.add("armed");
+    if (label) label.textContent = "กดอีกครั้งเพื่อปิด";
+    toast("กดอีกครั้งเพื่อยืนยัน — ทุกแท็บของโปรไฟล์นี้จะปิด (ล็อกอินยังอยู่)", "warn");
+    clearTimeout(closeArmT);
+    closeArmT = setTimeout(disarm, 3500);
+    return;
+  }
+  clearTimeout(closeArmT);
+  disarm();
+  chromeAction("/api/chrome/close", "กำลังปิด Chrome", () => "ปิด Chrome แล้ว");
+};
 
 // ---------- chrome ----------
 $("#btn-refresh").onclick = () => load();

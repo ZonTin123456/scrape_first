@@ -30,6 +30,28 @@
     </div>
     <div class="topbar-right">
       <span id="cdp-pill" class="pill">CDP: กำลังตรวจ…</span>
+      <!-- ขั้น 0 ในหน้าเดียว: ปุ่มนี้เปิด Chrome headed + CDP :9333 + โปรไฟล์เดิม
+           ให้เอง (เทียบเท่าคำสั่งใน README) · ซ่อน/โชว์ตามสถานะ CDP จริง -->
+      <button id="btn-chrome-open" class="ghost" type="button" title="เปิด Chrome แบบ headed พร้อม CDP :9333 ด้วยโปรไฟล์เดิม">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3.4" y="4.6" width="17.2" height="14.8" rx="2"/>
+          <path d="M3.4 9h17.2M6.6 6.8h.01M9.4 6.8h.01"/>
+        </svg>
+        เปิด Chrome
+      </button>
+      <button id="btn-chrome-focus" class="ghost" type="button" title="ดึงหน้าต่าง Chrome ที่เปิด CDP อยู่ขึ้นมาข้างหน้า" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 15.4V4.8M8.2 8.6L12 4.8l3.8 3.8"/>
+          <path d="M5 19h14"/>
+        </svg>
+        ดึงหน้าต่างขึ้น
+      </button>
+      <button id="btn-chrome-close" class="ghost danger" type="button" title="ปิด Chrome ที่เปิด CDP อยู่ (ทุกแท็บของโปรไฟล์นี้)" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>
+        </svg>
+        <span id="chrome-close-label">ปิด Chrome</span>
+      </button>
       <button id="btn-refresh" class="ghost" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M20.2 12a8.2 8.2 0 1 1-2.4-5.8"/>

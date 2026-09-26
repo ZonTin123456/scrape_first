@@ -16,7 +16,7 @@ import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 // same source-identity rules as the uploader, not a re-implementation
 import { slugBaseOf, resolveTargetGroup } from "../sectioning.mjs";
-import { assertNode } from "../runtime.mjs";
+import { assertNode, chromeCandidates } from "../runtime.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
@@ -179,6 +179,101 @@ async function cdpStatus() {
   }
   return null;
 }
+
+// ---------- Chrome CDP control (open / close / focus) ----------
+// The dashboard launches the same headed Chrome the README asks for by hand:
+// same port (9333), same persistent profile, so a button press is equivalent to
+// pasting that command and logins survive between runs.
+// Every argv is built here — no request body is ever passed to the process.
+const CDP_PORT = 9333;
+const CDP_PROFILE = process.env.CHROME_CDP_PROFILE
+  || join(process.env.USERPROFILE || process.env.HOME || ".", ".chrome-cdp-9333");
+
+const chromeBinary = () => chromeCandidates().find((p) => existsSync(p)) || null;
+
+// The browser-level websocket (from /json/version) lets us close or raise the
+// whole window without tracking a PID, on every OS, even after a server restart:
+// Browser.close ends that instance, Target.activateTarget brings it forward.
+// (Node 22 has a global WebSocket — assertNode already refused older runtimes.)
+async function browserWs() {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), 2000);
+  let v;
+  try {
+    const r = await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`, { signal: c.signal });
+    if (!r.ok) throw new Error(`CDP /json/version: http ${r.status}`);
+    v = await r.json();
+  } finally { clearTimeout(t); }
+  if (!v.webSocketDebuggerUrl) throw new Error("CDP ไม่ได้ให้ webSocketDebuggerUrl");
+  return v.webSocketDebuggerUrl;
+}
+function cdpCall(wsUrl, method, params = {}) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(wsUrl);
+    const done = (fn, arg) => { clearTimeout(t); try { ws.close(); } catch { /* already gone */ } fn(arg); };
+    const t = setTimeout(() => done(reject, new Error(`CDP ${method} ไม่ตอบภายใน 4 วินาที`)), 4000);
+    ws.onerror = () => done(reject, new Error("เชื่อมต่อ CDP ไม่ได้"));
+    ws.onopen = () => ws.send(JSON.stringify({ id: 1, method, params }));
+    ws.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      if (m.id !== 1) return;
+      if (m.error) done(reject, new Error(m.error.message || JSON.stringify(m.error)));
+      else done(resolve, m.result);
+    };
+  });
+}
+
+async function openChrome() {
+  const alive = await cdpStatus();
+  if (alive) return { ok: true, already: true, ...alive }; // never stack a second instance on the port
+  const bin = chromeBinary();
+  if (!bin) throw new Error("หา Chrome บนเครื่องนี้ไม่เจอ — ติดตั้ง Chrome ก่อน แล้วกดเปิดอีกครั้ง");
+  // headed on purpose (headless gets blocked by Cloudflare) and detached so the
+  // window outlives this server; throwaway profile is NOT used, logins must stick.
+  spawn(bin, [
+    `--remote-debugging-port=${CDP_PORT}`,
+    "--remote-allow-origins=*", // required by Chrome 111+
+    `--user-data-dir=${CDP_PROFILE}`,
+    "--no-first-run",
+    "--new-window",
+    "about:blank",
+  ], { detached: true, stdio: "ignore" }).unref();
+  for (let i = 0; i < 50; i++) {
+    await new Promise((r) => setTimeout(r, 200));
+    const s = await cdpStatus();
+    if (s) return { ok: true, launched: true, ...s };
+  }
+  throw new Error("สั่งเปิด Chrome แล้ว แต่ CDP ไม่ขึ้นภายใน 10 วินาที — กดเปิดอีกครั้ง หรือใช้คำสั่งใน README");
+}
+async function closeChrome() {
+  if (!(await cdpStatus())) throw new Error("ไม่พบ Chrome ที่เปิด CDP อยู่");
+  await cdpCall(await browserWs(), "Browser.close");
+  for (let i = 0; i < 25; i++) {
+    await new Promise((r) => setTimeout(r, 200));
+    if (!(await cdpStatus())) return { ok: true, closed: true };
+  }
+  throw new Error("ส่งคำสั่งปิดแล้ว แต่พอร์ต 9333 ยังตอบอยู่ — ปิดหน้าต่าง Chrome เองแล้วกดรีเฟรช");
+}
+async function focusChrome() {
+  if (!(await cdpStatus())) throw new Error("ไม่พบ Chrome ที่เปิด CDP อยู่");
+  const ws = await browserWs();
+  // raise an existing tab rather than piling up new ones; only a browser with no
+  // page at all gets a fresh one (that is what makes the window come forward).
+  const { targetInfos = [] } = await cdpCall(ws, "Target.getTargets");
+  const page = targetInfos.find((t) => t.type === "page" && !t.url.startsWith("about:"))
+    || targetInfos.find((t) => t.type === "page");
+  const targetId = page ? page.targetId : (await cdpCall(ws, "Target.createTarget", { url: "about:blank" }))?.targetId;
+  if (!targetId) throw new Error("ไม่พบแท็บให้ดึงขึ้นมา");
+  await cdpCall(ws, "Target.activateTarget", { targetId });
+  return { ok: true, focused: true };
+}
+
+// Launching a process is the one side effect here that is not a project file:
+// only a request that actually came from this machine may trigger it.
+const fromLocalhost = (req) => {
+  const a = req.socket?.remoteAddress || "";
+  return a === "127.0.0.1" || a === "::1" || a === "::ffff:127.0.0.1";
+};
 
 async function buildState() {
   const probes = readProbes();
@@ -513,6 +608,13 @@ const server = createServer(async (req, res) => {
         }
         const results = staged.map((s) => ({ slug: s.slug, name: s.name, rows: s.rows.length, existed: s.existed }));
         return json(res, 200, { files: results, slug: results[0].slug, rows: results[0].rows, existed: results[0].existed });
+      }
+      if (p === "/api/chrome/open" || p === "/api/chrome/close" || p === "/api/chrome/focus") {
+        req.resume(); // drain whatever the page sent — nothing from it is used here
+        if (!fromLocalhost(req)) return json(res, 403, { error: "คำสั่งนี้รับจากเครื่องที่รันเซิร์ฟเวอร์เท่านั้น" });
+        if (p === "/api/chrome/open") return json(res, 200, await openChrome());
+        if (p === "/api/chrome/close") return json(res, 200, await closeChrome());
+        return json(res, 200, await focusChrome());
       }
       if (p === "/api/job") {
         const b = await body(req);
