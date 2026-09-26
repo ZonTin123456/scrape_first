@@ -11,8 +11,8 @@
 // Then open http://localhost:4173
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { dirname, extname, join, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 // same source-identity rules as the uploader, not a re-implementation
 import { slugBaseOf, resolveTargetGroup } from "../sectioning.mjs";
@@ -426,6 +426,98 @@ function startQueue(items, reqBody = {}) {
   return job;
 }
 
+// ---------- clear data (card 10) ----------
+// Deleting output is the one irreversible thing the dashboard can do, so the
+// client never names a path: it names a scope from this whitelist and the server
+// works out the files itself. Two phases in one route, the same "ตรวจก่อน ->
+// ยิงจริง" every upload card uses — without `confirm` it only REPORTS what would
+// go, with the exact phrase that turns the report into a deletion.
+const CLEAR_CONFIRM = "ล้างข้อมูล";
+const SHOTS = join(ROOT, "uploader", "shots");
+
+// entries that really exist, never following a link out of the project
+function listChildren(dir) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((d) => !d.isSymbolicLink())
+    .map((d) => join(dir, d.name));
+}
+function measureDir(dir) {
+  let files = 0, bytes = 0;
+  for (const d of readdirSync(dir, { withFileTypes: true })) {
+    if (d.isSymbolicLink()) continue;
+    const p = join(dir, d.name);
+    if (d.isDirectory()) { const t = measureDir(p); files += t.files; bytes += t.bytes; }
+    else { files++; try { bytes += statSync(p).size; } catch { /* vanished mid-count */ } }
+  }
+  return { files, bytes };
+}
+const CLEAR_SCOPES = {
+  staging: {
+    what: "ผล probe และของที่ติ๊กไว้ (out/_staging)",
+    paths: () => listChildren(STAGING),
+  },
+  pages: {
+    what: "ผลลัพธ์ทุกหน้า (ทุกอย่างใต้ out/ ยกเว้น _staging)",
+    paths: () => [...listChildren(OUT).filter((p) => resolve(p) !== resolve(STAGING)), join(OUT, "summary.json")]
+      .filter((p) => existsSync(p)),
+  },
+  shots: {
+    what: "ภาพหน้าจอ (uploader/shots)",
+    paths: () => listChildren(SHOTS),
+  },
+  reports: {
+    what: "รายงาน dry-run (uploader/report-*.json)",
+    paths: () => (existsSync(join(ROOT, "uploader"))
+      ? readdirSync(join(ROOT, "uploader")).filter((n) => /^report-.*\.json$/.test(n)).map((n) => join(ROOT, "uploader", n))
+      : []),
+  },
+};
+const clearScopesOf = (scopes) => [...new Set(Array.isArray(scopes) ? scopes : [])].filter((s) => CLEAR_SCOPES[s]);
+
+// A resolved path that escaped the project root (a ".." or a link's target) is
+// refused outright — we never delete outside our own tree.
+function guardedPath(p) {
+  const abs = resolve(p);
+  if (!abs.startsWith(ROOT + sep)) throw new Error(`ปฏิเสธ path นอกโปรเจกต์: ${p}`);
+  return abs;
+}
+
+function clearPlan(scopes) {
+  const picked = clearScopesOf(scopes);
+  if (!picked.length) throw new Error("ยังไม่ได้เลือกขอบเขตที่จะลบ");
+  const byScope = {};
+  let files = 0, bytes = 0;
+  for (const s of picked) {
+    const paths = [...new Set(CLEAR_SCOPES[s].paths().map(guardedPath))];
+    let f = 0, b = 0;
+    for (const p of paths) {
+      try {
+        if (statSync(p).isDirectory()) { const t = measureDir(p); f += t.files; b += t.bytes; }
+        else { f++; b += statSync(p).size; }
+      } catch { /* already gone */ }
+    }
+    // a scope can be thousands of files: report the first few and the remainder
+    byScope[s] = { what: CLEAR_SCOPES[s].what, files: f, bytes: b, sample: paths.slice(0, 20).map((p) => p.slice(ROOT.length + 1)) };
+    files += f; bytes += b;
+  }
+  return { scopes: picked, byScope, total: { files, bytes } };
+}
+
+const anyJobRunning = () => [...jobs.values()].some((j) => !j.done);
+
+function clearNow(scopes) {
+  const plan = clearPlan(scopes); // same numbers we just showed — then delete them
+  let removed = 0;
+  for (const s of plan.scopes) {
+    for (const p of CLEAR_SCOPES[s].paths().map(guardedPath)) {
+      rmSync(p, { recursive: true, force: true, maxRetries: 3 });
+      removed++;
+    }
+  }
+  return { ok: true, scopes: plan.scopes, files: plan.total.files, bytes: plan.total.bytes, removed };
+}
+
 function sse(req, res, job) {
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -608,6 +700,14 @@ const server = createServer(async (req, res) => {
         }
         const results = staged.map((s) => ({ slug: s.slug, name: s.name, rows: s.rows.length, existed: s.existed }));
         return json(res, 200, { files: results, slug: results[0].slug, rows: results[0].rows, existed: results[0].existed });
+      }
+      if (p === "/api/clear") {
+        const b = await body(req);
+        // mid-run the tree is being written to; deleting under it would corrupt the run
+        if (anyJobRunning()) return json(res, 409, { error: "มีงานกำลังรันอยู่ — รอให้เสร็จก่อนลบข้อมูล" });
+        if (b.confirm === undefined) return json(res, 200, { dry: true, ...clearPlan(b.scopes) });
+        if (String(b.confirm).trim() !== CLEAR_CONFIRM) return json(res, 400, { error: `ต้องพิมพ์ "${CLEAR_CONFIRM}" เพื่อยืนยันการลบ` });
+        return json(res, 200, clearNow(b.scopes));
       }
       if (p === "/api/chrome/open" || p === "/api/chrome/close" || p === "/api/chrome/focus") {
         req.resume(); // drain whatever the page sent — nothing from it is used here

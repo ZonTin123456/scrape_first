@@ -6,6 +6,7 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtBytes = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} B`);
 
 // ---------- drawn marks ----------
 // Geometry only — one stroke weight and currentColor, so every mark sits in the
@@ -50,9 +51,21 @@ const form = {
   queue: [],                                          // [{slug, rows}] drop order — memory only, by design
   queueConfirm: false, queueText: "", queueVerified: false,
   groupNames: {},                                     // url -> edited backend name (unsaved typing)
+  clearScopes: {},                                    // scope -> true (card 10)
+  clearPlan: null,                                    // last dry-run report — the server's own numbers
+  clearConfirm: false, clearText: "", clearVerified: false,
 };
 
 const QUEUE_PHRASE = "ยิงจริง"; // must match QUEUE_CONFIRM in ui/server.mjs
+const CLEAR_PHRASE = "ล้างข้อมูล"; // must match CLEAR_CONFIRM in ui/server.mjs
+// label + the folder each scope names — the same whitelist the server holds, so
+// the card can never show a delete the server would refuse to perform.
+const CLEAR_SCOPES = [
+  ["staging", "ผล probe และของที่ติ๊กไว้", "out/_staging"],
+  ["pages", "ผลลัพธ์ทุกหน้า", "out/<slug> (ยกเว้น _staging)"],
+  ["shots", "ภาพหน้าจอ", "uploader/shots"],
+  ["reports", "รายงาน dry-run", "uploader/report-*.json"],
+];
 
 // ---------- api ----------
 async function api(path, opts) {
@@ -581,7 +594,7 @@ function renderCdp() {
 function render() {
   renderCdp();
   renderCrumbs();
-  $("#app").innerHTML = [cardUrls(), cardProbe(), cardLinks(), cardMaster(), cardPickImages(), cardRun(), cardReview(), cardFinalize(), cardUpload()].join("");
+  $("#app").innerHTML = [cardUrls(), cardProbe(), cardLinks(), cardMaster(), cardPickImages(), cardRun(), cardReview(), cardFinalize(), cardUpload(), cardClear()].join("");
   // async grids
   if (form.imageSlug && S.probes.length) loadPickImages(form.imageSlug);
   if (form.reviewSlug) loadReview(form.reviewSlug);
@@ -651,6 +664,55 @@ function updateReviewCount() {
   const total = $$("#review-grid figure[data-rseq]").length;
   const c = $("#review-count");
   if (c) c.textContent = total ? `ติ๊กไว้ ${n}/${total} รูป` : "";
+}
+
+// "ล้างข้อมูลรอบเก่า" — ย้อนกลับไม่ได้ จึงเป็นโซนตราแดง: เลือกขอบเขต → ตรวจรายการ
+// จริงจากเซิร์ฟเวอร์ → พิมพ์คำยืนยันแล้วจึงลบ · ไม่มี native dialog ที่ไหนเลย
+function cardClear() {
+  const busy = !!(current && !current.done);
+  const picked = CLEAR_SCOPES.filter(([k]) => form.clearScopes[k]).map(([k]) => k);
+  const p = form.clearPlan;
+  // the plan is only trustworthy while the ticks have not moved since it was made
+  const stale = !!p && !(p.scopes.length === picked.length && p.scopes.every((s) => picked.includes(s)));
+  const scopeRows = CLEAR_SCOPES.map(([k, label, path]) => `<label class="check" style="display:flex;margin-top:6px">
+    <input type="checkbox" data-clear="${k}" ${form.clearScopes[k] ? "checked" : ""} ${busy ? "disabled" : ""}>
+    <span><b>${esc(label)}</b> <span class="u">— <code>${esc(path)}</code></span></span></label>`).join("");
+  const planTable = p && !stale ? `<div class="section-title">รายการที่จะลบ (${p.total.files} ไฟล์ · ${fmtBytes(p.total.bytes)})</div>
+    <table><thead><tr><th>ขอบเขต</th><th style="width:90px">ไฟล์</th><th style="width:90px">ขนาด</th></tr></thead><tbody>
+    ${p.scopes.map((s) => {
+      const o = p.byScope[s] || { what: s, files: 0, bytes: 0, sample: [] };
+      const more = o.files - o.sample.length;
+      return `<tr><td><b>${esc(o.what)}</b><div class="u">${o.sample.map(esc).join("<br>")}${more > 0 ? `<br>… อีก ${more} รายการ` : ""}</div></td>
+        <td>${o.files}</td><td>${fmtBytes(o.bytes)}</td></tr>`;
+    }).join("")}
+    </tbody></table>` : "";
+  const confirm = form.clearConfirm && p && !stale ? `<div class="callout danger" style="margin-top:14px">
+      <b>ยืนยันการลบ — กู้คืนไม่ได้</b>
+      <div class="u" style="margin:6px 0">จะลบ ${p.total.files} ไฟล์ (${fmtBytes(p.total.bytes)}) อย่างถาวร · ไม่มีถังขยะ · ไม่แตะ urls.txt / source-groups.json / sections.json</div>
+      <label class="check" style="margin-top:8px;display:flex"><input type="checkbox" data-form="clearVerified" ${form.clearVerified ? "checked" : ""}> ข้าพเจ้าตรวจรายการที่จะลบแล้ว และยืนยันให้ลบถาวร</label>
+      <label class="field" style="margin-top:8px"><span>พิมพ์คำยืนยันให้ตรงเป๊ะ: <code>${CLEAR_PHRASE}</code></span>
+        <input data-form="clearText" value="${esc(form.clearText)}" placeholder="พิมพ์คำยืนยัน"></label>
+      <div class="row"><button class="danger${form.clearVerified && form.clearText.trim() === CLEAR_PHRASE ? " armed" : ""}" data-action="clear-go">${icon("seal")} ลบถาวร</button>
+        <button class="ghost" data-action="clear-cancel">ยกเลิก</button>
+        <span class="hint" data-match="clear-go" style="margin:0"></span></div>
+    </div>` : "";
+  return `<div class="card">
+    <div class="card-head"><span class="num">10</span>
+      <div><h2>ล้างข้อมูลรอบเก่า <span class="badge">ย้อนกลับไม่ได้</span></h2><p>เริ่มงานรอบใหม่ให้สะอาด — เลือกขอบเขต ตรวจรายการจริง แล้วจึงลบ</p></div>
+      <span class="spacer"></span>${busy ? `<span class="badge warn">มีงานกำลังรัน</span>` : ""}</div>
+    <div class="card-body">
+      <p class="hint">ไม่แตะ <code>urls.txt</code> · <code>source-groups.json</code> · <code>sections.json</code> · <code>uploader/verify-*.json</code> · <code>field-dump.json</code></p>
+      ${scopeRows}
+      ${stale ? `<div class="callout warn" style="margin-top:12px"><b>ขอบเขตเปลี่ยนแล้ว</b><br>รายการที่ตรวจไว้ไม่ตรงกับที่ติ๊กอยู่ — กด “ตรวจรายการที่จะลบ” ใหม่</div>` : ""}
+      ${planTable}
+      <div class="row" style="margin-top:14px">
+        <button class="ghost" data-action="clear-dry" ${picked.length && !busy ? "" : "disabled"}>ตรวจรายการที่จะลบ</button>
+        <button class="danger" data-action="clear-real" ${p && !stale && !busy ? "" : "disabled"}>ลบเลย…</button>
+        <span class="muted">${picked.length ? `เลือก ${picked.length} ขอบเขต` : "ยังไม่ได้เลือกขอบเขต"}</span>
+      </div>
+      ${confirm}
+    </div>
+  </div>`;
 }
 
 // ---------- actions ----------
@@ -766,6 +828,38 @@ async function act(name, el) {
       render();
       return runJob("upload-queue", null, `ยิงจริงทั้งคิว ${steps.length} รายการ`, { steps, confirm: QUEUE_PHRASE });
     }
+    case "clear-dry": {
+      const scopes = CLEAR_SCOPES.filter(([k]) => form.clearScopes[k]).map(([k]) => k);
+      if (!scopes.length) return toast("เลือกขอบเขตที่จะลบก่อน", "err");
+      try {
+        form.clearPlan = await post("/api/clear", { scopes });
+        form.clearConfirm = false;
+        render();
+        toast(`ตรวจแล้ว: ${form.clearPlan.total.files} ไฟล์ · ${fmtBytes(form.clearPlan.total.bytes)}`, "ok");
+      } catch (e) { toast(e.message, "err"); }
+      break;
+    }
+    case "clear-real":
+      if (!form.clearPlan) return toast("กด “ตรวจรายการที่จะลบ” ก่อน", "err");
+      form.clearConfirm = true; form.clearText = ""; form.clearVerified = false;
+      render();
+      break;
+    case "clear-cancel": form.clearConfirm = false; render(); break;
+    case "clear-go": {
+      if (!form.clearVerified) return toast("ต้องติ๊กยืนยันก่อน", "err");
+      if (form.clearText.trim() !== CLEAR_PHRASE) return toast(`พิมพ์ยืนยันไม่ตรง — ต้องเป็น "${CLEAR_PHRASE}"`, "err");
+      try {
+        const r = await post("/api/clear", { scopes: form.clearPlan.scopes, confirm: CLEAR_PHRASE });
+        form.clearConfirm = false; form.clearPlan = null; form.clearText = ""; form.clearVerified = false;
+        toast(`ลบแล้ว ${r.removed} รายการ · ${r.files} ไฟล์ (${fmtBytes(r.bytes)})`, "ok");
+        await load();
+        // the queue holds slugs whose people.json just went away — drop those rows
+        const alive = new Set(contentPages().map((x) => x.slug));
+        form.queue = form.queue.filter((x) => alive.has(x.slug));
+        render();
+      } catch (e) { toast(e.message, "err"); }
+      break;
+    }
     case "upload-dry": return runJob("upload", uploadOpts(slug, false), `upload dry-run ${slug}`);
     case "upload-real": form.confirmSlug = slug; form.confirmText = ""; form.iVerified = false; render(); break;
     case "cancel-upload": form.confirmSlug = null; render(); break;
@@ -783,13 +877,14 @@ async function act(name, el) {
 // Arm-before-fire: the seal button only reads as ready once the typed phrase
 // matches exactly — the same check the server makes, shown live.
 function armConfirm() {
-  for (const [action, key, want] of [
-    ["confirm-upload", "confirmText", form.confirmSlug || ""],
-    ["queue-go", "queueText", QUEUE_PHRASE],
+  for (const [action, key, want, needFlag] of [
+    ["confirm-upload", "confirmText", form.confirmSlug || "", "iVerified"],
+    ["queue-go", "queueText", QUEUE_PHRASE, "queueVerified"],
+    ["clear-go", "clearText", CLEAR_PHRASE, "clearVerified"],
   ]) {
     const btn = $(`#app [data-action="${action}"]`);
     if (!btn) continue;
-    const ok = !!want && String(form[key] ?? "").trim() === want;
+    const ok = !!want && String(form[key] ?? "").trim() === want && (!needFlag || !!form[needFlag]);
     btn.classList.toggle("armed", ok);
     const hint = $(`#app [data-match="${action}"]`);
     if (hint) hint.textContent = ok ? "คำยืนยันตรงแล้ว — กดเพื่อยิงจริง" : "ยังพิมพ์ไม่ตรง — ปุ่มจะพร้อมยิงเมื่อตรงเท่านั้น";
@@ -805,7 +900,13 @@ $("#app").addEventListener("input", (e) => {
   const t = e.target;
   if (t.dataset.form) {
     form[t.dataset.form] = t.type === "checkbox" ? t.checked : t.value;
-    if (t.dataset.form === "confirmText" || t.dataset.form === "queueText" || t.dataset.form === "iVerified" || t.dataset.form === "queueVerified") armConfirm();
+    if (["confirmText", "queueText", "iVerified", "queueVerified", "clearText", "clearVerified"].includes(t.dataset.form)) armConfirm();
+    return;
+  }
+  if (t.dataset.clear) {
+    // moving the ticks makes the checked plan stale — the card says so and refuses to fire
+    form.clearScopes[t.dataset.clear] = t.checked;
+    render();
     return;
   }
   if (t.dataset.groupUrl) {
